@@ -37,6 +37,20 @@ Certificados AFIP en produccion: `%APPDATA%/PointOfSale/afip/` (`user.crt`, `use
 
 Detalle: [`services/afip/PRODUCTION.md`](services/afip/PRODUCTION.md) y [`desktop/README.md`](desktop/README.md).
 
+## Estructura del monorepo
+
+```text
+Point_of_Sale/
+├── frontend/          # React + Vite (UI del POS)
+├── backend/           # NestJS pos-api
+├── desktop/           # Electron (instalador .exe)
+├── services/afip/     # Microservicio fiscal (Docker / sidecar)
+├── scripts/           # Verificación de microservicios
+├── docker-compose.dev.yml
+├── package.json       # Orquestación (dev:stack, dist:win, etc.)
+└── README.md
+```
+
 ## Requisitos
 
 - Node.js 20+
@@ -47,17 +61,23 @@ Detalle: [`services/afip/PRODUCTION.md`](services/afip/PRODUCTION.md) y [`deskto
 ## Setup inicial
 
 ```powershell
-# Raíz
+# Raíz (orquestación)
 npm install
+
+# Frontend
+cd frontend
+npm install
+cd ..
 
 # Backend
 cd backend
 copy .env.example .env
 npm install
 npm run db:init
+cd ..
 
 # Desktop (Electron)
-cd ../desktop
+cd desktop
 npm install
 ```
 
@@ -160,6 +180,7 @@ En la PC del cliente, colocar certificados en `%APPDATA%/PointOfSale/afip/`.
 
 ## Carpetas clave
 
+- [`frontend/`](frontend/) — React + Vite UI
 - [`backend/`](backend/) — NestJS pos-api
 - [`services/afip/`](services/afip/) — Motor fiscal (Docker build clona repo upstream)
 - [`desktop/`](desktop/) — Electron main/preload + electron-builder

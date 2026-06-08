@@ -52,7 +52,7 @@ export function resolveFrontendUrl(isDev: boolean, isPackaged: boolean) {
     return `file://${path.join(process.resourcesPath, 'frontend', 'index.html').replace(/\\/g, '/')}`;
   }
 
-  return `file://${path.resolve(__dirname, '../../dist/index.html').replace(/\\/g, '/')}`;
+  return `file://${path.resolve(__dirname, '../../frontend/dist/index.html').replace(/\\/g, '/')}`;
 }
 
 export function getApiHealthUrl(port = Number(process.env.PORT ?? 3001)) {

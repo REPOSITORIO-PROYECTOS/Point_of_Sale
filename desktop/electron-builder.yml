@@ -17,7 +17,7 @@ extraResources:
       - "**/*"
   - from: ../backend/package.json
     to: backend/package.json
-  - from: ../dist
+  - from: ../frontend/dist
     to: frontend
     filter:
       - "**/*"
