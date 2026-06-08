@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Lockfiles (local installs)
+package-lock.json
+**/package-lock.json
+
+# Env / secrets
+.env
+.env.*
+
+# Builds
+dist/
+**/dist/
+
+# Backend local storage
+backend/storage/
+backend/*.sqlite
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
