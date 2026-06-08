@@ -11,6 +11,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
 import { ControllerLoggingInterceptor } from './interceptors/controller-logging.interceptor';
+import { AfipModule } from './integrations/afip/afip.module';
 import { CashModule } from './resources/cash/cash.module';
 import { InventoryModule } from './resources/inventory/inventory.module';
 import { ProductsModule } from './resources/products/products.module';
@@ -30,6 +31,7 @@ import { EnhancedLoggerModule } from './services/enhanced-logger.module';
     AuthModule,
     AuditLogModule,
     EnhancedLoggerModule,
+    AfipModule,
     ProductsModule,
     SalesModule,
     InventoryModule,

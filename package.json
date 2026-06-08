@@ -5,7 +5,21 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "dev:web": "vite",
+    "dev:api": "npm run start:dev --prefix backend",
+    "dev:afip": "docker compose -f docker-compose.dev.yml up afip",
+    "build:afip-sidecar": "powershell -ExecutionPolicy Bypass -File services/afip/build-sidecar.ps1",
+    "dev:stack": "concurrently -n web,api,afip -c cyan,green,yellow \"npm run dev:web\" \"npm run dev:api\" \"npm run dev:afip\"",
+    "dev:desktop": "npm run dev --prefix desktop",
+    "build:web": "vite build",
+    "build:api": "npm run build --prefix backend",
+    "build:desktop": "npm run build --prefix desktop",
+    "build:all": "npm run build:web && npm run build:api && npm run build:desktop",
+    "dist:win": "npm run build:all && npm run dist:win --prefix desktop",
+    "dist:win:fiscal": "npm run build:all && npm run build:afip-sidecar && npm run dist:win:fiscal --prefix desktop",
+    "test:microservices": "node scripts/verify-microservices.mjs",
+    "test:microservices:unit": "npm run test:microservices --prefix backend"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -67,6 +81,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
+    "concurrently": "^9.2.1",
     "tailwindcss": "4.1.12",
     "vite": "6.3.5"
   },

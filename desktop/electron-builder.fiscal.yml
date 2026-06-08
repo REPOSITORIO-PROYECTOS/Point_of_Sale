@@ -1,0 +1,36 @@
+appId: com.pointofsale.desktop
+productName: Point of Sale
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - package.json
+extraResources:
+  - from: ../backend/dist
+    to: backend/dist
+    filter:
+      - "**/*"
+  - from: ../backend/node_modules
+    to: backend/node_modules
+    filter:
+      - "**/*"
+  - from: ../backend/package.json
+    to: backend/package.json
+  - from: ../dist
+    to: frontend
+    filter:
+      - "**/*"
+  - from: ../services/afip/dist/afip-service.exe
+    to: afip/afip-service.exe
+win:
+  target:
+    - nsis
+    - portable
+  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}

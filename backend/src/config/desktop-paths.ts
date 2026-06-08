@@ -38,4 +38,5 @@ export function ensureDesktopPaths(paths: ReturnType<typeof getDesktopPaths>) {
   fs.mkdirSync(paths.appDataDir, { recursive: true });
   fs.mkdirSync(paths.uploadsDir, { recursive: true });
   fs.mkdirSync(paths.logsDir, { recursive: true });
+  fs.mkdirSync(path.join(paths.appDataDir, 'afip'), { recursive: true });
 }

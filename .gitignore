@@ -2,24 +2,63 @@
 node_modules/
 **/node_modules/
 
-# Lockfiles (local installs)
-package-lock.json
-**/package-lock.json
-
-# Env / secrets
+# Env / secrets (keep .env.example templates tracked)
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
+!.env.*.example
+
+# AFIP certificates and keys
+*.pem
+*.crt
+*.key
+user.crt
+user.key
 
 # Builds
 dist/
 **/dist/
+build/
+**/build/
+.vite/
+.turbo/
+coverage/
 
-# Backend local storage
+# Electron desktop installers
+desktop/release/
+
+# Backend local data
 backend/storage/
 backend/*.sqlite
+backend/database.sqlite
+
+# AFIP sidecar (cloned source + PyInstaller output)
+services/afip/source/
+services/afip/dist/
 
 # Logs
 *.log
 npm-debug.log*
 pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# Python (AFIP service / sidecar build)
+__pycache__/
+*.py[cod]
+.venv/
+venv/

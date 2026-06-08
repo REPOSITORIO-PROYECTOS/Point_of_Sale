@@ -31,8 +31,10 @@ import {
   FileSpreadsheet,
   ClipboardList,
   Shield,
+  FileKey,
 } from "lucide-react";
 import { AppearanceSettings } from "../settings/AppearanceSettings";
+import { AfipCredentialsSettings } from "../settings/AfipCredentialsSettings";
 import { UserRolesSettings } from "../settings/UserRolesSettings";
 
 interface HeaderProps {
@@ -45,6 +47,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(false);
+  const [afipOpen, setAfipOpen] = useState(false);
 
   const navigationItems = [
     { id: "pos", label: "Mostrador", icon: ShoppingCart },
@@ -165,6 +168,10 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
                   <Shield className="size-4 mr-2" />
                   Roles y Permisos
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAfipOpen(true)}>
+                  <FileKey className="size-4 mr-2" />
+                  Certificados AFIP
+                </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Settings className="size-4 mr-2" />
                   Configuración General
@@ -236,6 +243,21 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
           </DialogHeader>
           <div className="overflow-auto max-h-[calc(85vh-8rem)]">
             <UserRolesSettings />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Certificados AFIP */}
+      <Dialog open={afipOpen} onOpenChange={setAfipOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle>Certificados AFIP</DialogTitle>
+            <DialogDescription>
+              Importá CUIT, certificado y clave privada para facturación electrónica
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-auto max-h-[calc(85vh-8rem)]">
+            <AfipCredentialsSettings />
           </div>
         </DialogContent>
       </Dialog>

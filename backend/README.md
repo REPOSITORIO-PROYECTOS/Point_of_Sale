@@ -25,3 +25,62 @@ Backend NestJS con SQLite local listo para persistir datos.
 - sales
 - inventory
 - cash
+- integrations/afip (health check + cliente HTTP al microservicio fiscal)
+
+## Integracion AFIP
+
+Variables en `.env`:
+
+```env
+AFIP_SERVICE_URL=http://127.0.0.1:5086
+AFIP_PUNTO_VENTA=1
+AFIP_PRODUCTION=false
+```
+
+Health check interno:
+
+```text
+GET /api/integrations/afip/health
+```
+
+El servicio AFIP corre aparte. Ver [`../services/afip/README.md`](../services/afip/README.md).
+
+## Arquitectura microservicio
+
+- **pos-api no contiene lógica fiscal AFIP** (sin pyafipws, sin SOAP).
+- **pos-api solo consume HTTP** al microservicio Python en `AFIP_SERVICE_URL`.
+- El contrato de facturación es multi-tenant:
+
+```json
+{
+  "credenciales": { "cuit": "...", "certificado": "...", "clave_privada": "..." },
+  "datos_factura": { "tipo_afip": 6, "punto_venta": 1, "...": "..." }
+}
+```
+
+Certificados locales guardados en `%APPDATA%/PointOfSale/afip/`:
+
+- `config.json` — CUIT, punto de venta, ambiente
+- `user.crt` — certificado PEM
+- `user.key` — clave privada PEM
+
+### API de importación
+
+```http
+GET  /api/integrations/afip/config
+POST /api/integrations/afip/credentials
+```
+
+Body de importación:
+
+```json
+{
+  "cuit": "20123456789",
+  "certificado": "-----BEGIN CERTIFICATE-----...",
+  "clavePrivada": "-----BEGIN PRIVATE KEY-----...",
+  "puntoVenta": 1,
+  "production": false
+}
+```
+
+También disponible desde la UI: **Configuración de Negocio → Certificados AFIP**.

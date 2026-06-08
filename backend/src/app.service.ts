@@ -11,6 +11,10 @@ export class AppService {
       port: env.port,
       appDataDir: env.appDataDir,
       sqliteDbPath: env.sqliteDbPath,
+      afipConfigured: Boolean(env.afipServiceUrl),
+      afipServiceUrl: env.afipServiceUrl,
+      afipProduction: env.afipProduction,
+      architecture: 'pos-api consumes AFIP as HTTP microservice',
       timestamp: new Date().toISOString(),
     };
   }
