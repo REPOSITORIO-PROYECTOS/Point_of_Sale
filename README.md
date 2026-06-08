@@ -42,14 +42,30 @@ Detalle: [`services/afip/PRODUCTION.md`](services/afip/PRODUCTION.md) y [`deskto
 ```text
 Point_of_Sale/
 ├── frontend/          # React + Vite (UI del POS)
-├── backend/           # NestJS pos-api
+├── backend/           # NestJS pos-api (cliente HTTP → AFIP)
 ├── desktop/           # Electron (instalador .exe)
-├── services/afip/     # Microservicio fiscal (Docker / sidecar)
+├── services/afip/     # Despliegue del microservicio fiscal (NO es el código Python)
 ├── scripts/           # Verificación de microservicios
 ├── docker-compose.dev.yml
 ├── package.json       # Orquestación (dev:stack, dist:win, etc.)
 └── README.md
 ```
+
+### Microservicio AFIP (importante)
+
+`servicio_afip` es un **microservicio Python aparte**. El código vive en otro repo:
+
+https://github.com/REPOSITORIO-PROYECTOS/servicio_afip
+
+En **este** repo, `services/afip/` solo tiene:
+
+- `Dockerfile` — clona `servicio_afip` al build
+- `build-sidecar.ps1` — genera `afip-service.exe` para producción
+- docs y `.env.example`
+
+**No** está mezclado con `backend/` ni con `frontend/`. pos-api solo lo consume por HTTP en `:5086`.
+
+Detalle: [`services/afip/README.md`](services/afip/README.md)
 
 ## Requisitos
 
@@ -181,14 +197,17 @@ En la PC del cliente, colocar certificados en `%APPDATA%/PointOfSale/afip/`.
 ## Carpetas clave
 
 - [`frontend/`](frontend/) — React + Vite UI
-- [`backend/`](backend/) — NestJS pos-api
-- [`services/afip/`](services/afip/) — Motor fiscal (Docker build clona repo upstream)
+- [`backend/`](backend/) — NestJS pos-api (sin lógica fiscal; proxy HTTP a AFIP)
+- [`services/`](services/) — Microservicios externos (ver [`services/README.md`](services/README.md))
+- [`services/afip/`](services/afip/) — Despliegue Docker/sidecar del motor fiscal Python
 - [`desktop/`](desktop/) — Electron main/preload + electron-builder
 
 ## Documentación adicional
 
 - Backend: [`backend/README.md`](backend/README.md)
-- AFIP service: [`services/afip/README.md`](services/afip/README.md)
+- Servicios externos: [`services/README.md`](services/README.md)
+- Microservicio AFIP: [`services/afip/README.md`](services/afip/README.md)
+- AFIP upstream (código Python): https://github.com/REPOSITORIO-PROYECTOS/servicio_afip
 
 ## Fase siguiente (no incluida aún)
 

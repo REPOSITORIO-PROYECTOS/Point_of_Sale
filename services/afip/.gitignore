@@ -3,3 +3,4 @@ user.crt
 user.key
 *.pem
 source/
+dist/

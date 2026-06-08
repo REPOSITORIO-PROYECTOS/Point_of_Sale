@@ -1,51 +1,84 @@
-# servicio_afip (motor fiscal)
+# Microservicio AFIP (`servicio_afip`)
 
-Microservicio Python/Flask para emisión de comprobantes electrónicos AFIP.
+Motor fiscal **Python/Flask** para emisión de comprobantes electrónicos AFIP/ARCA.
 
-Repositorio upstream: https://github.com/REPOSITORIO-PROYECTOS/servicio_afip
+## Qué hay en este repo (Point_of_Sale)
 
-## Setup local (opcional)
+Esta carpeta **no contiene el código del microservicio**. Solo guarda la **infraestructura de despliegue**:
 
-Si preferís trabajar sin Docker, cloná el código fuente en esta carpeta:
+| Archivo | Rol |
+|---------|-----|
+| `Dockerfile` | Clona `servicio_afip` al build y arma la imagen Docker |
+| `build-sidecar.ps1` | Clona el repo y genera `afip-service.exe` (PyInstaller) |
+| `.env.example` | Variables de entorno del contenedor |
+| `PRODUCTION.md` | Sidecar en la caja registradora (sin Docker) |
+| `.gitignore` | Excluye `source/`, certificados y `.env` |
 
-```powershell
-cd services/afip
-git clone https://github.com/REPOSITORIO-PROYECTOS/servicio_afip.git source
-# Copiar archivos del clone a esta carpeta o trabajar desde source/
+**No se versionan** (generados en build local):
+
+- `source/` — clone del repo upstream
+- `dist/afip-service.exe` — ejecutable sidecar
+- `user.crt`, `user.key` — certificados AFIP
+
+## Dónde está el código del microservicio
+
+Repositorio upstream (Python/Flask + pyafipws):
+
+**https://github.com/REPOSITORIO-PROYECTOS/servicio_afip**
+
+Se descarga automáticamente al:
+
+- `docker compose build afip` (Dockerfile)
+- `npm run build:afip-sidecar` (script PowerShell)
+
+## Cómo encaja en la arquitectura
+
+```text
+frontend (:5173)  ──HTTP──>  backend/pos-api (:3001)  ──HTTP──>  servicio_afip (:5086)  ──SOAP──>  AFIP/ARCA
+                                    │                              ▲
+                                 SQLite                    microservicio aparte
+                                                           (Python, no NestJS)
 ```
 
-## Certificados AFIP
+| Componente | Repo / carpeta | Responsabilidad |
+|------------|----------------|-----------------|
+| UI | `frontend/` | Pantallas del POS |
+| API de negocio | `backend/` | Productos, ventas, caja; **cliente HTTP** a AFIP |
+| Motor fiscal | `servicio_afip` (upstream) | pyafipws, SOAP, CAE, consultas AFIP |
+| Despliegue AFIP | `services/afip/` (este repo) | Docker, sidecar `.exe`, docs |
 
-Colocá los certificados de homologación o producción en esta carpeta:
+**pos-api no tiene lógica fiscal.** Solo llama al microservicio en `AFIP_SERVICE_URL` (default `http://127.0.0.1:5086`).
 
-- `user.crt`
-- `user.key`
+Endpoints del microservicio (upstream):
 
-**No commitear certificados ni `.env` con secretos.**
+- `GET /api/afipws/test` — health
+- `POST /api/afipws/facturador` — emisión
+- Swagger: `http://127.0.0.1:5086/swagger/`
 
-## Variables de entorno
+Integración desde pos-api:
 
-Copiá `.env.example` a `.env` y completá al menos `CUIT`:
+- `GET /api/integrations/afip/health`
+- `GET /api/integrations/afip/config`
+- `POST /api/integrations/afip/credentials`
 
-```powershell
-copy .env.example .env
-```
+Ver [`../backend/README.md`](../backend/README.md).
 
-## Docker (recomendado en desarrollo)
+## Desarrollo (Docker, recomendado)
 
 Desde la raíz del monorepo:
 
 ```powershell
-docker compose -f docker-compose.dev.yml up afip
+npm run dev:afip
+# o stack completo:
+npm run dev:stack
 ```
 
 Verificación:
 
 ```powershell
 curl http://127.0.0.1:5086/api/afipws/test
+curl http://127.0.0.1:3001/api/integrations/afip/health
 ```
-
-Swagger: http://127.0.0.1:5086/swagger/
 
 ### Certificados en Docker
 
@@ -57,17 +90,19 @@ volumes:
   - ./services/afip/user.key:/app/user.key:ro
 ```
 
-El endpoint `/api/afipws/test` puede responder sin certificados; la facturación los requiere.
+`/api/afipws/test` puede responder sin certificados; la facturación los requiere.
 
 ## Puertos
 
 | Contexto | URL |
-|---|---|
-| Host (dev) | `http://127.0.0.1:5086` |
+|----------|-----|
+| Host (dev / sidecar) | `http://127.0.0.1:5086` |
 | Red Docker (pos-api → afip) | `http://afip:8002` |
 
 Gunicorn escucha en `8002` dentro del contenedor; se expone como `5086` en el host.
 
-## Produccion (POS / .exe)
+## Producción (POS / .exe)
 
-Docker **no** se usa en la caja registradora. Ver [`PRODUCTION.md`](PRODUCTION.md).
+Docker **no** se usa en la caja registradora. Electron spawnea `afip-service.exe` localmente.
+
+Ver [`PRODUCTION.md`](PRODUCTION.md).
