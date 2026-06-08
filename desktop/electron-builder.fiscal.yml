@@ -3,6 +3,7 @@ productName: Point of Sale
 directories:
   output: release
   buildResources: resources
+forceCodeSigning: false
 files:
   - dist/**/*
   - package.json

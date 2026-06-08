@@ -71,6 +71,15 @@ export function getAfipCertDir() {
   return path.join(getDesktopAppDataDir(), 'afip');
 }
 
+export function resolveBundledNodeExecutable(isPackaged: boolean) {
+  if (!isPackaged) {
+    return null;
+  }
+
+  const bundledNode = path.join(process.resourcesPath, 'nodejs', 'node.exe');
+  return fs.existsSync(bundledNode) ? bundledNode : null;
+}
+
 export function resolveAfipSidecarExecutable(isPackaged: boolean) {
   if (process.env.AFIP_SIDECAR_PATH) {
     return path.resolve(process.env.AFIP_SIDECAR_PATH);

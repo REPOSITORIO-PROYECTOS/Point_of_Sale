@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execSync, fork, spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -9,22 +9,27 @@ import {
   resolveAfipSidecarExecutable,
   resolveBackendCwd,
   resolveBackendEntry,
+  resolveBundledNodeExecutable,
 } from './paths';
 
 type ManagedProcess = {
   name: string;
-  process: ChildProcessWithoutNullStreams;
+  process: ChildProcess;
 };
 
 const managedProcesses: ManagedProcess[] = [];
 
-function attachLogs(name: string, proc: ChildProcessWithoutNullStreams) {
-  proc.stdout.on('data', (chunk) => {
+function attachLogs(name: string, proc: ChildProcess) {
+  proc.stdout?.on('data', (chunk) => {
     console.log(`[${name}] ${chunk.toString()}`);
   });
 
-  proc.stderr.on('data', (chunk) => {
+  proc.stderr?.on('data', (chunk) => {
     console.error(`[${name}] ${chunk.toString()}`);
+  });
+
+  proc.on('exit', (code, signal) => {
+    console.error(`[${name}] process exited code=${code} signal=${signal ?? 'none'}`);
   });
 }
 
@@ -61,11 +66,38 @@ export function shouldSpawnAfipSidecar(isPackaged: boolean) {
     return true;
   }
 
-  if (isPackaged) {
+  const sidecarExecutable = resolveAfipSidecarExecutable(isPackaged);
+  return Boolean(sidecarExecutable && fs.existsSync(sidecarExecutable));
+}
+
+function hasSystemNode() {
+  try {
+    execSync('node --version', { stdio: 'ignore', windowsHide: true });
     return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveBackendRuntime(isDev: boolean, isPackaged: boolean) {
+  if (isDev) {
+    return { mode: 'spawn-node' as const, command: 'node' };
   }
 
-  return false;
+  if (process.env.POS_BACKEND_NODE) {
+    return { mode: 'spawn-node' as const, command: process.env.POS_BACKEND_NODE };
+  }
+
+  const bundledNode = resolveBundledNodeExecutable(isPackaged);
+  if (bundledNode) {
+    return { mode: 'spawn-node' as const, command: bundledNode };
+  }
+
+  if (process.env.USE_ELECTRON_NODE === 'true' || !hasSystemNode()) {
+    return { mode: 'fork-electron' as const, command: process.execPath };
+  }
+
+  return { mode: 'spawn-node' as const, command: 'node' };
 }
 
 export function startBackend(isDev: boolean, isPackaged: boolean, apiPort: number) {
@@ -77,6 +109,8 @@ export function startBackend(isDev: boolean, isPackaged: boolean, apiPort: numbe
     throw new Error(`Backend entry not found: ${backendEntry}`);
   }
 
+  const runtime = resolveBackendRuntime(isDev, isPackaged);
+
   const env = {
     ...process.env,
     NODE_ENV: isDev ? 'development' : 'production',
@@ -85,16 +119,23 @@ export function startBackend(isDev: boolean, isPackaged: boolean, apiPort: numbe
     APP_DATA_DIR: appDataDir,
     ENABLE_SWAGGER: isDev ? 'true' : 'false',
     AFIP_SERVICE_URL: process.env.AFIP_SERVICE_URL ?? 'http://127.0.0.1:5086',
-    ...(isDev ? {} : { ELECTRON_RUN_AS_NODE: '1' }),
+    ...(runtime.mode === 'fork-electron' ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
   };
 
-  const command = isDev ? 'node' : process.execPath;
-  const backendProcess = spawn(command, [backendEntry], {
-    env,
-    cwd: backendCwd,
-    stdio: 'pipe',
-    windowsHide: true,
-  });
+  const backendProcess =
+    runtime.mode === 'spawn-node'
+      ? spawn(runtime.command, [backendEntry], {
+          env,
+          cwd: backendCwd,
+          stdio: 'pipe',
+          windowsHide: true,
+        })
+      : fork(backendEntry, [], {
+          execPath: runtime.command,
+          env,
+          cwd: backendCwd,
+          silent: true,
+        });
 
   attachLogs('pos-api', backendProcess);
   managedProcesses.push({ name: 'pos-api', process: backendProcess });
@@ -148,8 +189,10 @@ export async function bootstrapLocalServices(options: {
   const { isDev, isPackaged, apiPort } = options;
 
   if (shouldSpawnAfipSidecar(isPackaged)) {
-    startAfipSidecar(isPackaged);
-    await waitForUrl(getAfipHealthUrl(), 45000, false);
+    const sidecarProcess = startAfipSidecar(isPackaged);
+    if (sidecarProcess) {
+      await waitForUrl(getAfipHealthUrl(), 45000, false);
+    }
   }
 
   startBackend(isDev, isPackaged, apiPort);

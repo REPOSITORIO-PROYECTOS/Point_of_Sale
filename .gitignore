@@ -27,6 +27,7 @@ coverage/
 
 # Electron desktop installers
 desktop/release/
+desktop/resources/nodejs/
 
 # Backend local data
 backend/storage/
