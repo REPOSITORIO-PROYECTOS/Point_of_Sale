@@ -3,6 +3,8 @@
 
 Interfaz POS (React + Vite) con backend NestJS, integración AFIP como microservicio y shell Electron para empaquetado desktop.
 
+> **Agentes IA:** leer [`AGENTS.md`](AGENTS.md) y [`docs/ai/`](docs/ai/) antes de correr dev o build.
+
 ## Arquitectura
 
 | Servicio | Puerto | Descripción |
@@ -127,7 +129,48 @@ npm run dev:stack
 npm run dev:desktop
 ```
 
-Electron abre `http://localhost:5173` y spawneará el backend NestJS localmente.
+Electron abre `http://localhost:5173`. El backend NestJS se levanta por separado (`npm run dev:api`) o lo spawneará Electron en modo desktop.
+
+## Datos y persistencia (SQLite)
+
+El POS guarda productos, ventas, caja e inventario en **SQLite local**. No hay servidor de base de datos aparte.
+
+| Entorno | Ruta de la base | Cómo se inicializa |
+|---|---|---|
+| Desarrollo (`npm run dev:api`) | `backend/storage/database.sqlite` | `cd backend && npm run db:init` |
+| Desktop / `.exe` empaquetado | `%APPDATA%\PointOfSale\database.sqlite` | Misma inicialización apuntando a AppData (ver abajo) |
+| Docker (`docker compose`) | Volumen `pos-api-storage` | Automático al primer arranque del contenedor |
+
+### Directorios de datos en producción (PC del mostrador)
+
+Electron y el backend empaquetado usan `%APPDATA%\PointOfSale\`:
+
+```text
+%APPDATA%\PointOfSale\
+├── database.sqlite      # BD principal del POS
+├── uploads/             # archivos subidos
+├── logs/                # logs locales
+└── afip/                # certificados AFIP (NO van en el instalador)
+    ├── user.crt
+    ├── user.key
+    └── config.json      # CUIT, punto de venta (vía API o importación)
+```
+
+### Inicializar la BD antes del primer uso del `.exe`
+
+```powershell
+cd backend
+$env:APP_DATA_DIR = "$env:APPDATA\PointOfSale"
+npm run db:init
+```
+
+Sin este paso, el `.exe` puede abrir la UI pero la API falla al crear tablas en caliente.
+
+### Desarrollo vs producción (datos)
+
+- **Desarrollo:** datos en `backend/storage/` (ignorado por Git). Certificados AFIP de prueba en `services/afip/` o `backend/storage/afip/`.
+- **Producción / `.exe`:** datos y certificados en `%APPDATA%\PointOfSale\`. **Nunca** commitear `.env`, certificados ni `database.sqlite`.
+- **AFIP:** el backend **no** guarda lógica fiscal; solo llama al microservicio Python en `:5086`. Ver sección AFIP más abajo.
 
 ## Health checks
 
@@ -175,24 +218,114 @@ Swagger AFIP: http://127.0.0.1:5086/swagger/
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-## Build desktop (.exe)
+## Build desktop (instalador local)
 
-Instalador POS (sin motor fiscal embebido):
+### Qué genera cada comando
+
+| Comando | Incluye | AFIP sidecar | Salida |
+|---|---|---|---|
+| `npm run dist:win` | UI + backend embebido | No | `desktop/release/` |
+| `npm run dist:win:fiscal` | UI + backend + `afip-service.exe` | Sí | `desktop/release/` |
+
+El `.exe` **no sube a Git** (está en `.gitignore`). Se genera en la máquina de build y se distribuye por USB, Release de GitHub o carpeta compartida.
+
+### Prerrequisitos del build (Windows)
 
 ```powershell
+# 1. Dependencias (una vez)
+npm install
+cd frontend && npm install && cd ..
+cd backend && npm install && cd ..
+cd desktop && npm install && cd ..
+
+# 2. Embeber Node.js para el backend empaquetado (una vez por versión de Node)
+#    El .exe no asume Node instalado en la PC del cliente.
+$node = (Get-Command node).Source
+New-Item -Force -ItemType Directory desktop\resources\nodejs | Out-Null
+Copy-Item $node desktop\resources\nodejs\node.exe -Force
+
+# 3. Build completo
 npm run build:all
-npm run dist:win
+
+# 4. Instalador (elegir uno)
+npm run dist:win          # POS sin facturación local
+npm run dist:win:fiscal   # POS con afip-service.exe (requiere Python 3.11 para build:afip-sidecar)
 ```
 
-Instalador POS **con AFIP sidecar** (para caja registradora, sin Docker):
+### Probar el `.exe` sin instalador (carpeta `win-unpacked`)
+
+Tras el build, la app runnable está en:
+
+```text
+desktop/release/win-unpacked/Point of Sale.exe
+```
+
+**Recomendado si OneDrive bloquea el build:** output fuera del repo:
 
 ```powershell
-npm run dist:win:fiscal
+cd desktop
+$env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+npx electron-builder --dir --win --config electron-builder.yml --config.directories.output=C:/Temp/pos-build
+# Ejecutable: C:\Temp\pos-build\win-unpacked\Point of Sale.exe
 ```
 
-Instaladores en `desktop/release/`.
+### Problemas conocidos del build (y solución)
 
-En la PC del cliente, colocar certificados en `%APPDATA%/PointOfSale/afip/`.
+| Síntoma | Causa | Solución |
+|---|---|---|
+| Ventana en blanco al abrir el `.exe` | Vite generaba rutas `/assets/...` inválidas en `file://` | Corregido: `base: './'` en `frontend/vite.config.ts` |
+| App se cierra sola / no se ve nada | Backend no levantaba a tiempo | Electron abre la UI aunque la API tarde; inicializar BD con `db:init` |
+| `EBUSY` / `EPERM` al buildear | OneDrive bloquea `backend/dist` o `desktop/release` | Build a `C:\Temp\...` o pausar sync de OneDrive en el repo |
+| Instalador NSIS colgado | Firma de código (`signtool`) | `forceCodeSigning: false` en `electron-builder.yml` |
+| API no responde en `.exe` | Falta `node.exe` embebido o BD no inicializada | Copiar `node.exe` a `desktop/resources/nodejs/` y correr `db:init` con `APP_DATA_DIR` |
+
+### Qué hace el `.exe` al abrirse
+
+1. Carga la UI React desde `resources/frontend/` (rutas relativas `./assets/...`).
+2. Spawnea **pos-api** con `resources/nodejs/node.exe` → `127.0.0.1:3001`.
+3. Spawnea **afip-service.exe** solo si fue empaquetado (`dist:win:fiscal`) → `127.0.0.1:5086`.
+4. Lee/escribe datos en `%APPDATA%\PointOfSale\`.
+
+## Despliegue: desarrollo, instalador local y producción
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│ DESARROLLO (programadores)                                              │
+│   npm run dev:stack  →  Vite :5173 + Nest :3001 + AFIP Docker :5086     │
+│   npm run dev:desktop  →  Electron apuntando a localhost:5173           │
+│   Datos: backend/storage/                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ INSTALADOR LOCAL (probar en tu PC antes de llevar a caja)               │
+│   npm run dist:win  o  dist:win:fiscal                                  │
+│   Ejecutar: desktop/release/win-unpacked/Point of Sale.exe              │
+│   Datos: %APPDATA%\PointOfSale\  (inicializar con db:init)              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PRODUCCIÓN (caja registradora / mostrador)                              │
+│   Instalar .exe generado con dist:win:fiscal                            │
+│   Copiar certificados AFIP a %APPDATA%\PointOfSale\afip\                │
+│   Sin Docker — Electron levanta pos-api + afip-service.exe localmente   │
+│   Datos: %APPDATA%\PointOfSale\ (persisten entre reinicios)             │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### AFIP: sidecar en cada entorno
+
+| Entorno | Motor AFIP | Comando / acción |
+|---|---|---|
+| Dev | Docker | `npm run dev:afip` |
+| Dev (sin Docker) | Sidecar `.exe` local | `npm run build:afip-sidecar` + `$env:SPAWN_AFIP_SIDECAR='true'` + `npm run dev:desktop` |
+| Instalador local sin fiscal | Ninguno (POS mock / sin CAE) | `npm run dist:win` |
+| Producción caja | Sidecar embebido | `npm run dist:win:fiscal` + certificados en AppData |
+
+Detalle sidecar y certificados: [`services/afip/PRODUCTION.md`](services/afip/PRODUCTION.md)
+
+Código Python del microservicio (repo aparte): https://github.com/REPOSITORIO-PROYECTOS/servicio_afip
+
+En la PC del cliente, colocar certificados en `%APPDATA%/PointOfSale/afip/` (`user.crt`, `user.key`).
 
 ## Carpetas clave
 
@@ -204,13 +337,15 @@ En la PC del cliente, colocar certificados en `%APPDATA%/PointOfSale/afip/`.
 
 ## Documentación adicional
 
+- **Agentes IA / runbook dev:** [`AGENTS.md`](AGENTS.md) · [`docs/ai/`](docs/ai/)
 - Backend: [`backend/README.md`](backend/README.md)
 - Servicios externos: [`services/README.md`](services/README.md)
 - Microservicio AFIP: [`services/afip/README.md`](services/afip/README.md)
 - AFIP upstream (código Python): https://github.com/REPOSITORIO-PROYECTOS/servicio_afip
 
-## Fase siguiente (no incluida aún)
+## Fase siguiente (roadmap)
 
 - Conectar frontend al backend REST (reemplazar mocks de `wails-bridge.ts`)
-- Checkout con emisión fiscal CAE
-- Sidecar Python AFIP empaquetado en el instalador
+- Checkout con emisión fiscal CAE end-to-end
+- Script `npm run prepare:desktop-node` para copiar `node.exe` automáticamente
+- GitHub Release con `.exe` versionado (no en el repo)

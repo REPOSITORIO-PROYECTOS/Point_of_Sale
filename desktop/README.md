@@ -1,38 +1,92 @@
 # Electron desktop shell
 
-## Que corre en el POS (sin Docker)
+Shell de escritorio que empaqueta UI + backend NestJS (+ AFIP sidecar opcional) en un `.exe` para Windows.
 
-El instalador `.exe` **no incluye Docker**. Al abrir la app:
+Documentación general del monorepo: [`../README.md`](../README.md)
 
-1. Electron spawnea **pos-api** (NestJS) en `127.0.0.1:3001`
-2. Electron spawnea **afip-service.exe** (si fue empaquetado) en `127.0.0.1:5086`
-3. Carga la UI React
+## Qué corre al abrir el `.exe` (sin Docker)
 
-Si el sidecar AFIP no esta empaquetado, el POS sigue funcionando; la facturacion fiscal requiere AFIP accesible en `:5086`.
+1. Electron carga la UI React desde `resources/frontend/`
+2. Spawnea **pos-api** con `resources/nodejs/node.exe` → `127.0.0.1:3001`
+3. Spawnea **afip-service.exe** solo si el build fue `dist:win:fiscal` → `127.0.0.1:5086`
+4. Persiste datos en `%APPDATA%\PointOfSale\` (SQLite, uploads, logs, certificados AFIP)
+
+Si el sidecar AFIP no está empaquetado, el POS sigue funcionando con datos mock; la facturación fiscal requiere AFIP en `:5086`.
+
+## Datos antes del primer arranque
+
+```powershell
+cd ..\backend
+$env:APP_DATA_DIR = "$env:APPDATA\PointOfSale"
+npm run db:init
+```
+
+Sin esto la UI puede abrir pero la API no tiene tablas creadas.
 
 ## Modo desarrollo
 
 ```powershell
-# Stack web (Docker solo para AFIP en dev)
+# Terminal 1 — stack web (Vite + API + AFIP Docker)
 npm run dev:stack
 
-# Electron (spawn backend + sidecar si existe)
+# Terminal 2 — Electron apuntando a localhost:5173
 npm run dev:desktop
 ```
 
-Probar sidecar local sin Docker:
+Probar sidecar AFIP local sin Docker:
 
 ```powershell
 npm run build:afip-sidecar
-$env:SPAWN_AFIP_SIDECAR='true'
+$env:SPAWN_AFIP_SIDECAR = 'true'
 npm run dev:desktop
 ```
 
 ## Builds
 
-| Comando | Resultado |
+| Comando (desde raíz) | Resultado |
 |---|---|
-| `npm run dist:win` | Instalador POS sin sidecar AFIP |
-| `npm run dist:win:fiscal` | Instalador POS + `afip-service.exe` embebido |
+| `npm run dist:win` | POS sin sidecar AFIP |
+| `npm run dist:win:fiscal` | POS + `afip-service.exe` embebido |
 
-Ver [`../services/afip/PRODUCTION.md`](../services/afip/PRODUCTION.md) para certificados y sidecar.
+Salida por defecto: `desktop/release/` (`win-unpacked/` + instalador NSIS/portable).
+
+### Prerrequisito: embeber Node.js
+
+Antes del primer `dist:win`, copiar Node al bundle:
+
+```powershell
+$node = (Get-Command node).Source
+New-Item -Force -ItemType Directory resources\nodejs | Out-Null
+Copy-Item $node resources\nodejs\node.exe -Force
+```
+
+`resources/nodejs/` está en `.gitignore` (~70 MB). Hay que repetirlo al cambiar versión de Node.
+
+### Build fuera de OneDrive (recomendado)
+
+Si el build falla con `EBUSY` o `EPERM`:
+
+```powershell
+cd desktop
+npm run build
+$env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+npx electron-builder --dir --win --config electron-builder.yml --config.directories.output=C:/Temp/pos-build
+```
+
+Ejecutable: `C:\Temp\pos-build\win-unpacked\Point of Sale.exe`
+
+## Variables útiles
+
+| Variable | Default | Uso |
+|---|---|---|
+| `SPAWN_AFIP_SIDECAR` | auto (solo si existe `.exe`) | Forzar/no spawn del sidecar |
+| `AFIP_SIDECAR_PATH` | auto | Ruta manual al sidecar |
+| `POS_BACKEND_NODE` | `resources/nodejs/node.exe` | Override del Node embebido |
+| `APP_DATA_DIR` | `%APPDATA%\PointOfSale` | Override de datos |
+| `PORT` | `3001` | Puerto de pos-api |
+
+## Documentación relacionada
+
+- AFIP sidecar producción: [`../services/afip/PRODUCTION.md`](../services/afip/PRODUCTION.md)
+- Microservicio AFIP (Docker/dev): [`../services/afip/README.md`](../services/afip/README.md)
+- Backend / SQLite: [`../backend/README.md`](../backend/README.md)

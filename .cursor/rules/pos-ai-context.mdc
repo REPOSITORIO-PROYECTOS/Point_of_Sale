@@ -1,0 +1,31 @@
+---
+description: Contexto POS — leer AGENTS.md y docs/ai antes de correr dev o build
+alwaysApply: true
+---
+
+# Point of Sale — contexto para agentes
+
+Antes de ejecutar comandos o modificar arquitectura, consultar:
+
+- [`AGENTS.md`](../../AGENTS.md) — resumen y comando dev principal
+- [`docs/ai/dev-runbook.md`](../../docs/ai/dev-runbook.md) — pasos exactos desarrollo
+
+## Dev (default)
+
+Desde raíz del repo:
+
+```powershell
+npm run dev:stack
+```
+
+Requiere: Node 20+, Docker Desktop (AFIP). BD dev: `backend/storage/` (`cd backend && npm run db:init` primera vez).
+
+## No confundir
+
+- `services/afip/` = deploy wrapper; código Python en repo `servicio_afip` externo
+- `backend/` = NestJS + SQLite; **no** lógica fiscal AFIP
+- Build `.exe` ≠ dev; usar `dist:win` solo si el usuario pide instalador
+
+## Puertos
+
+5173 frontend | 3001 api | 5086 afip

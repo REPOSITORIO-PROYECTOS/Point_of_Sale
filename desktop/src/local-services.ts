@@ -196,7 +196,10 @@ export async function bootstrapLocalServices(options: {
   }
 
   startBackend(isDev, isPackaged, apiPort);
-  await waitForUrl(getApiHealthUrl(apiPort), 30000, true);
+  const apiReady = await waitForUrl(getApiHealthUrl(apiPort), 60000, false);
+  if (!apiReady) {
+    console.warn('[local-services] pos-api not ready; UI will open in offline/mock mode.');
+  }
 }
 
 export function stopLocalServices() {

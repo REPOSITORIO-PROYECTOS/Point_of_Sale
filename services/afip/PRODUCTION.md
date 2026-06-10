@@ -1,62 +1,96 @@
-# AFIP sidecar para produccion (sin Docker)
+# AFIP sidecar — producción e instalador local
 
 En el POS de mostrador **no se usa Docker**. El `.exe` de Electron levanta procesos locales en `127.0.0.1`:
 
 ```text
-PointOfSale.exe (Electron)
-  |-- spawnea pos-api (NestJS embebido)     -> :3001
-  |-- spawnea afip-service.exe (sidecar)    -> :5086
-  '-- carga la UI React
+Point of Sale.exe (Electron)
+  |-- spawnea pos-api (NestJS + node.exe embebido)  -> :3001
+  |-- spawnea afip-service.exe (solo build fiscal)  -> :5086
+  '-- carga UI React embebida
 
-pos-api --HTTP--> http://127.0.0.1:5086/api/afipws/facturador
+pos-api --HTTP--> http://127.0.0.1:5086/api/afipws/facturador --> AFIP/ARCA
 ```
 
-## Desarrollo vs produccion
+Guía completa del monorepo (datos, build, despliegue): [`../../README.md`](../../README.md)
 
-| Entorno | AFIP | Como |
+## Desarrollo vs instalador local vs producción
+
+| Escenario | AFIP | Comando |
 |---|---|---|
 | Dev (programadores) | Docker | `npm run dev:afip` |
-| Dev (probar sidecar) | `.exe` local | `npm run build:afip-sidecar` + `SPAWN_AFIP_SIDECAR=true` |
-| Produccion (caja) | Sidecar empaquetado | Electron spawnea `afip-service.exe` automaticamente |
+| Dev (probar sidecar) | `.exe` local | `npm run build:afip-sidecar` + `$env:SPAWN_AFIP_SIDECAR='true'` |
+| Instalador local (probar en tu PC) | Opcional | `npm run dist:win` (sin AFIP) o `dist:win:fiscal` (con AFIP) |
+| Producción (caja registradora) | Sidecar embebido | Instalar `.exe` de `dist:win:fiscal` |
 
-## Certificados en el POS
+## Datos y certificados (no van en el instalador)
 
-Colocar en `%APPDATA%/PointOfSale/afip/`:
+Todo lo sensible vive en `%APPDATA%\PointOfSale\`:
 
-- `user.crt`
-- `user.key`
+```text
+%APPDATA%\PointOfSale\
+├── database.sqlite       # datos del POS (ver backend db:init)
+├── afip/
+│   ├── user.crt          # certificado AFIP (PEM)
+│   ├── user.key          # clave privada (PEM)
+│   └── config.json       # CUIT, punto de venta (opcional, vía API)
+├── uploads/
+└── logs/
+```
 
-El sidecar los lee al iniciar. No van dentro del instalador.
+El sidecar lee `user.crt` y `user.key` al iniciar. **No** se empaquetan dentro del `.exe` por seguridad.
+
+Inicializar BD del POS antes del primer uso del instalador:
+
+```powershell
+cd backend
+$env:APP_DATA_DIR = "$env:APPDATA\PointOfSale"
+npm run db:init
+```
+
+Importar credenciales vía API (alternativa a copiar archivos):
+
+```http
+POST /api/integrations/afip/credentials
+```
 
 ## Build del sidecar (Windows)
 
-Requisitos: Python 3.11, repo clonado, PyInstaller.
+Requisitos: Python 3.11, Git, PyInstaller (el script lo instala).
 
 ```powershell
-cd services/afip
-./build-sidecar.ps1
+npm run build:afip-sidecar
+# Genera: services/afip/dist/afip-service.exe
+# (clona https://github.com/REPOSITORIO-PROYECTOS/servicio_afip en source/)
 ```
 
-Genera: `services/afip/dist/afip-service.exe`
+## Build del instalador
 
-## Build del instalador con fiscal
+POS **con** facturación local (producción / caja):
 
 ```powershell
 npm run build:afip-sidecar
 npm run dist:win:fiscal
 ```
 
-Sin sidecar (POS sin facturacion local):
+POS **sin** facturación local (solo UI + API, AFIP externo o mock):
 
 ```powershell
 npm run dist:win
 ```
 
-## Variables utiles (Electron)
+Salida: `desktop/release/` (o carpeta custom si OneDrive bloquea — ver README raíz).
+
+## Código fuente del microservicio
+
+Este repo **no contiene** el código Python. Solo Dockerfile, script de sidecar y docs.
+
+Código upstream: https://github.com/REPOSITORIO-PROYECTOS/servicio_afip
+
+## Variables útiles (Electron / sidecar)
 
 | Variable | Default | Uso |
 |---|---|---|
-| `SPAWN_AFIP_SIDECAR` | `true` empaquetado | Forzar/no spawn del sidecar |
-| `AFIP_SIDECAR_PATH` | auto | Ruta manual al `.exe` |
+| `SPAWN_AFIP_SIDECAR` | auto | `true` / `false` para forzar spawn |
+| `AFIP_SIDECAR_PATH` | auto | Ruta manual a `afip-service.exe` |
 | `AFIP_PORT` | `5086` | Puerto local del motor AFIP |
-| `AFIP_PRODUCTION` | `FALSE` | Homologacion / produccion |
+| `AFIP_PRODUCTION` | `FALSE` | `TRUE` para ambiente producción AFIP |
