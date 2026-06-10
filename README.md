@@ -3,7 +3,7 @@
 
 Interfaz POS (React + Vite) con backend NestJS, integración AFIP como microservicio y shell Electron para empaquetado desktop.
 
-> **Agentes IA:** leer [`AGENTS.md`](AGENTS.md) y [`docs/ai/`](docs/ai/) antes de correr dev o build.
+> **Documentación:** [`docs/`](docs/) · **Agentes IA:** [`AGENTS.md`](AGENTS.md)
 
 ## Arquitectura
 
@@ -337,7 +337,8 @@ En la PC del cliente, colocar certificados en `%APPDATA%/PointOfSale/afip/` (`us
 
 ## Documentación adicional
 
-- **Agentes IA / runbook dev:** [`AGENTS.md`](AGENTS.md) · [`docs/ai/`](docs/ai/)
+- **Documentación:** [`docs/`](docs/) · [`docs/casos-de-uso/`](docs/casos-de-uso/)
+- **Agentes IA:** [`AGENTS.md`](AGENTS.md) · [`docs/ai/`](docs/ai/)
 - Backend: [`backend/README.md`](backend/README.md)
 - Servicios externos: [`services/README.md`](services/README.md)
 - Microservicio AFIP: [`services/afip/README.md`](services/afip/README.md)

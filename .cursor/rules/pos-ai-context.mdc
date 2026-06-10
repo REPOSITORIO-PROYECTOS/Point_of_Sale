@@ -7,8 +7,10 @@ alwaysApply: true
 
 Antes de ejecutar comandos o modificar arquitectura, consultar:
 
-- [`AGENTS.md`](../../AGENTS.md) — resumen y comando dev principal
-- [`docs/ai/dev-runbook.md`](../../docs/ai/dev-runbook.md) — pasos exactos desarrollo
+- [`AGENTS.md`](../../AGENTS.md) — resumen agentes
+- [`docs/README.md`](../../docs/README.md) — índice documentación
+- [`docs/ai/dev-runbook.md`](../../docs/ai/dev-runbook.md) — runbook dev
+- [`docs/casos-de-uso/01-desarrollo-diario.md`](../../docs/casos-de-uso/01-desarrollo-diario.md) — dev humano
 
 ## Dev (default)
 

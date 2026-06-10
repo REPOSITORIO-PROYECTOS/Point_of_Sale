@@ -2,7 +2,7 @@
 
 **Leer esto antes de correr, buildear o modificar el proyecto.**
 
-Base de conocimiento detallada: [`docs/ai/`](docs/ai/)
+Base de conocimiento detallada: [`docs/`](docs/) · [`docs/ai/`](docs/ai/) · [`docs/casos-de-uso/`](docs/casos-de-uso/)
 
 ## Qué es este repo
 
@@ -88,13 +88,15 @@ Ver [`docs/ai/build-and-deploy.md`](docs/ai/build-and-deploy.md). Resumen:
 4. Cambios en UI → `frontend/`. API → `backend/`. Electron → `desktop/`. Deploy AFIP → `services/afip/`.
 5. Si el usuario pide "probar el POS", preferir `npm run dev:stack` antes que build `.exe`.
 
-## Índice docs/ai
+## Índice docs
 
-| Archivo | Contenido |
+| Carpeta | Contenido |
 |---------|-----------|
-| [dev-runbook.md](docs/ai/dev-runbook.md) | Pasos exactos dev, health checks, troubleshooting |
-| [architecture.md](docs/ai/architecture.md) | Diagrama, puertos, responsabilidades |
-| [data-and-paths.md](docs/ai/data-and-paths.md) | SQLite, AppData, certificados AFIP |
-| [build-and-deploy.md](docs/ai/build-and-deploy.md) | `.exe`, sidecar, producción caja |
+| [docs/README.md](docs/README.md) | **Índice maestro** |
+| [docs/casos-de-uso/](docs/casos-de-uso/) | Guías por escenario (humanos) |
+| [docs/ai/dev-runbook.md](docs/ai/dev-runbook.md) | Runbook dev (agentes) |
+| [docs/ai/architecture.md](docs/ai/architecture.md) | Diagrama, puertos |
+| [docs/ai/data-and-paths.md](docs/ai/data-and-paths.md) | SQLite, AppData |
+| [docs/ai/build-and-deploy.md](docs/ai/build-and-deploy.md) | `.exe`, sidecar |
 
 Humans: [`README.md`](README.md)
