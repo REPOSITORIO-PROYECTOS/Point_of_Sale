@@ -37,7 +37,7 @@ const systemColumns = [
   { value: "id", label: "ID / Código de Barras" },
   { value: "name", label: "Nombre del Producto" },
   { value: "price", label: "Precio" },
-  { value: "category", label: "Categoría" },
+  { value: "categories", label: "Categorías (separadas por coma)" },
   { value: "stock", label: "Stock Disponible" },
   { value: "skip", label: "Ignorar Columna" },
 ];
@@ -114,7 +114,7 @@ export function ImportExportView() {
         } else if (headerLower.includes("precio")) {
           autoMapping[index] = "price";
         } else if (headerLower.includes("categoría") || headerLower.includes("categoria")) {
-          autoMapping[index] = "category";
+          autoMapping[index] = "categories";
         } else if (headerLower.includes("stock")) {
           autoMapping[index] = "stock";
         } else {
@@ -185,7 +185,7 @@ export function ImportExportView() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <div className="p-6 border-b bg-background">
         <div className="flex items-center gap-3">
           <Package className="size-6" />
@@ -198,19 +198,22 @@ export function ImportExportView() {
         </div>
       </div>
 
-      <Tabs defaultValue="products" className="flex-1 flex flex-col">
-        <div className="px-6 pt-4">
+      <Tabs defaultValue="products" className="flex-1 flex flex-col min-h-0">
+        <div className="px-6 pt-4 shrink-0">
           <TabsList>
             <TabsTrigger value="products">Productos</TabsTrigger>
             <TabsTrigger value="import-export">Importar / Exportar</TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="products" className="flex-1 overflow-hidden m-0">
+        <TabsContent
+          value="products"
+          className="flex-1 min-h-0 overflow-hidden m-0 data-[state=active]:flex data-[state=active]:flex-col"
+        >
           <ProductsManagementView />
         </TabsContent>
 
-        <TabsContent value="import-export" className="flex-1 overflow-auto p-6 m-0">
+        <TabsContent value="import-export" className="flex-1 min-h-0 overflow-auto p-6 m-0">
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Acciones rápidas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

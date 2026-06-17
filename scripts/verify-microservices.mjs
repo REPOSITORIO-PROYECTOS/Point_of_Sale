@@ -73,25 +73,45 @@ async function testPosApiAfipIntegration() {
   }
 }
 
+function isAfipHealthBody(body) {
+  return (
+    body?.test === 'ok' ||
+    body?.mensaje ||
+    body?.success !== undefined ||
+    (typeof body === 'object' && body !== null && !Array.isArray(body))
+  );
+}
+
 async function testAfipDirect() {
+  const attempts = [];
+
   for (const testPath of AFIP_TEST_PATHS) {
     const url = `${AFIP_URL.replace(/\/$/, '')}${testPath}`;
 
     try {
       const { response, body } = await fetchJson(url);
-      const ok = response.ok && (body?.test === 'ok' || body?.mensaje || body?.success !== undefined || typeof body === 'object');
-      record('AFIP microservice direct health', ok, `${url} status=${response.status}`);
-      return ok;
+      const ok = response.ok && isAfipHealthBody(body);
+      attempts.push({ url, ok, status: response.status });
+
+      if (ok) {
+        record('AFIP microservice direct health', true, `${url} status=${response.status}`);
+        return true;
+      }
     } catch (error) {
-      record('AFIP microservice direct health', false, `${url} — ${error instanceof Error ? error.message : String(error)}`);
+      attempts.push({
+        url,
+        ok: false,
+        detail: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
-  record(
-    'AFIP microservice direct health',
-    false,
-    'Levanta Docker Desktop y ejecuta: npm run dev:afip',
-  );
+  const detail =
+    attempts.length > 0
+      ? attempts.map((item) => `${item.url} → ${item.ok ? 'ok' : item.detail ?? `status=${item.status}`}`).join('; ')
+      : 'Levanta Docker Desktop y ejecuta: npm run dev:afip';
+
+  record('AFIP microservice direct health', false, detail);
   return false;
 }
 
@@ -138,15 +158,40 @@ async function testAfipCredentialsImport() {
   }
 }
 
-async function testPosApiModules() {
+async function testPosApiModule(name, path, postPayload) {
   try {
-    const { response, body } = await fetchJson(`${POS_API_URL}/products`);
-    record('pos-api products module', response.ok, `items=${Array.isArray(body) ? body.length : 'n/a'}`);
-    return response.ok;
+    const list = await fetchJson(`${POS_API_URL}${path}`);
+    const listOk = list.response.ok && Array.isArray(list.body);
+    record(`pos-api ${name} GET`, listOk, `items=${Array.isArray(list.body) ? list.body.length : 'n/a'}`);
+
+    if (!postPayload) {
+      return listOk;
+    }
+
+    const created = await fetchJson(`${POS_API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(postPayload),
+    });
+    const postOk = created.response.ok && created.response.status === 201;
+    record(`pos-api ${name} POST`, postOk, `status=${created.response.status}`);
+    return listOk && postOk;
   } catch (error) {
-    record('pos-api products module', false, error instanceof Error ? error.message : String(error));
+    record(`pos-api ${name} module`, false, error instanceof Error ? error.message : String(error));
     return false;
   }
+}
+
+async function testPosApiModules() {
+  const stamp = Date.now();
+  const results = await Promise.all([
+    testPosApiModule('products', '/products', { name: `verify-product-${stamp}` }),
+    testPosApiModule('sales', '/sales', { productId: 'verify-product-1', quantity: 1 }),
+    testPosApiModule('cash', '/cash', { description: 'verify smoke', amount: 50 }),
+    testPosApiModule('inventory', '/inventory', { name: `verify-inventory-${stamp}` }),
+  ]);
+
+  return results.every(Boolean);
 }
 
 console.log('Verificando microservicios POS...\n');

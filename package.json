@@ -16,7 +16,8 @@
     "dist:win": "npm run build:all && npm run dist:win --prefix desktop",
     "dist:win:fiscal": "npm run build:all && npm run build:afip-sidecar && npm run dist:win:fiscal --prefix desktop",
     "test:microservices": "node scripts/verify-microservices.mjs",
-    "test:microservices:unit": "npm run test:microservices --prefix backend"
+    "test:microservices:unit": "npm run test:microservices --prefix backend",
+    "test:api:smoke": "npm run test:smoke --prefix backend"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

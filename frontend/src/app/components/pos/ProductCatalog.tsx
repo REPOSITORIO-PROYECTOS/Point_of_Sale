@@ -1,5 +1,10 @@
 import { useState, useMemo } from "react";
 import { Product } from "../../../lib/wails-bridge";
+import {
+  getAllCategoriesFromProducts,
+  getProductCategories,
+  productInCategory,
+} from "../../../lib/product-categories";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
@@ -42,15 +47,14 @@ export function ProductCatalog({
     return products.filter(
       (product) =>
         product.name.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query) ||
+        getProductCategories(product).some((category) =>
+          category.toLowerCase().includes(query),
+        ) ||
         (product.barcodes && product.barcodes.some((b) => b.includes(query)))
     );
   }, [products, searchQuery]);
 
-  const categories = useMemo(() => {
-    const cats = new Set(products.map((p) => p.category));
-    return Array.from(cats);
-  }, [products]);
+  const categories = useMemo(() => getAllCategoriesFromProducts(products), [products]);
 
   const handleProductClick = (product: Product) => {
     if (product.unit === "kilogramos" || product.unit === "gramos") {
@@ -148,8 +152,8 @@ export function ProductCatalog({
 
       <div className="flex-1 overflow-auto p-4">
         {categories.map((category) => {
-          const categoryProducts = filteredProducts.filter(
-            (p) => p.category === category
+          const categoryProducts = filteredProducts.filter((p) =>
+            productInCategory(p, category)
           );
           if (categoryProducts.length === 0) return null;
 

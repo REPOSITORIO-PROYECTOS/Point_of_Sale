@@ -31,6 +31,12 @@ import { Package, Plus, Edit, Trash2, AlertTriangle, Search, X, Barcode, Trendin
 import { toast } from "sonner";
 import { WailsAPI, type Product } from "../../../lib/wails-bridge";
 import { Checkbox } from "../ui/checkbox";
+import {
+  formatCategoriesLabel,
+  getAllCategoriesFromProducts,
+  getProductCategories,
+  productInCategory,
+} from "../../../lib/product-categories";
 
 export function ProductsManagementView() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -48,7 +54,7 @@ export function ProductsManagementView() {
     name: "",
     price: "",
     cost: "",
-    category: "",
+    categories: [] as string[],
     stock: "",
     minStock: "",
     unit: "unidad" as "unidad" | "gramos" | "kilogramos" | "litros" | "mililitros",
@@ -56,6 +62,7 @@ export function ProductsManagementView() {
   });
   const [barcodes, setBarcodes] = useState<string[]>([]);
   const [newBarcode, setNewBarcode] = useState("");
+  const [newCategory, setNewCategory] = useState("");
 
   useEffect(() => {
     loadProducts();
@@ -80,7 +87,7 @@ export function ProductsManagementView() {
       name: "",
       price: "",
       cost: "",
-      category: "",
+      categories: [],
       stock: "",
       minStock: "",
       unit: "unidad",
@@ -88,6 +95,7 @@ export function ProductsManagementView() {
     });
     setBarcodes([]);
     setNewBarcode("");
+    setNewCategory("");
     setEditDialogOpen(true);
   };
 
@@ -98,7 +106,7 @@ export function ProductsManagementView() {
       name: product.name,
       price: product.price.toString(),
       cost: product.cost?.toString() || "",
-      category: product.category,
+      categories: getProductCategories(product),
       stock: product.stock?.toString() || "",
       minStock: product.minStock?.toString() || "",
       unit: product.unit || "unidad",
@@ -106,11 +114,12 @@ export function ProductsManagementView() {
     });
     setBarcodes(product.barcodes || []);
     setNewBarcode("");
+    setNewCategory("");
     setEditDialogOpen(true);
   };
 
-  const handleSave = () => {
-    if (!formData.id || !formData.name || !formData.price || !formData.category) {
+  const handleSave = async () => {
+    if (!formData.id || !formData.name || !formData.price || formData.categories.length === 0) {
       toast.error("Completa los campos obligatorios");
       return;
     }
@@ -120,7 +129,7 @@ export function ProductsManagementView() {
       name: formData.name,
       price: parseFloat(formData.price),
       cost: formData.cost ? parseFloat(formData.cost) : undefined,
-      category: formData.category,
+      categories: formData.categories,
       stock: formData.stock ? parseInt(formData.stock) : undefined,
       minStock: formData.minStock ? parseInt(formData.minStock) : undefined,
       barcodes: barcodes.length > 0 ? barcodes : undefined,
@@ -128,15 +137,20 @@ export function ProductsManagementView() {
       quantity: formData.quantity ? parseFloat(formData.quantity) : undefined,
     };
 
-    if (selectedProduct) {
-      setProducts(products.map((p) => (p.id === selectedProduct.id ? newProduct : p)));
-      toast.success("Producto actualizado");
-    } else {
-      setProducts([...products, newProduct]);
-      toast.success("Producto agregado");
+    try {
+      await WailsAPI.saveProduct(newProduct);
+      if (selectedProduct) {
+        setProducts(products.map((p) => (p.id === selectedProduct.id ? newProduct : p)));
+        toast.success("Producto actualizado");
+      } else {
+        setProducts([...products, newProduct]);
+        toast.success("Producto agregado");
+      }
+      setEditDialogOpen(false);
+    } catch (error) {
+      console.error("Failed to save product:", error);
+      toast.error("Error al guardar el producto");
     }
-
-    setEditDialogOpen(false);
   };
 
   const handleAddBarcode = () => {
@@ -150,6 +164,30 @@ export function ProductsManagementView() {
     setBarcodes(barcodes.filter((b) => b !== barcode));
   };
 
+  const toggleCategory = (category: string) => {
+    setFormData((current) => {
+      const hasCategory = current.categories.includes(category);
+      return {
+        ...current,
+        categories: hasCategory
+          ? current.categories.filter((item) => item !== category)
+          : [...current.categories, category],
+      };
+    });
+  };
+
+  const handleAddCategory = () => {
+    const trimmed = newCategory.trim();
+    if (!trimmed) return;
+    setFormData((current) => ({
+      ...current,
+      categories: current.categories.includes(trimmed)
+        ? current.categories
+        : [...current.categories, trimmed],
+    }));
+    setNewCategory("");
+  };
+
   const formatQuantity = (value: number, unit: string) => {
     if (unit === "gramos" && value >= 1000) {
       return `${(value / 1000).toFixed(2)} kg`;
@@ -160,7 +198,7 @@ export function ProductsManagementView() {
     return `${value} ${unit}`;
   };
 
-  const handleApplyPriceIncrease = () => {
+  const handleApplyPriceIncrease = async () => {
     if (!increasePercentage || parseFloat(increasePercentage) <= 0) {
       toast.error("Ingresa un porcentaje válido");
       return;
@@ -183,7 +221,7 @@ export function ProductsManagementView() {
         return;
       }
       updatedProducts = updatedProducts.map((p) => {
-        if (p.category === selectedCategory) {
+        if (productInCategory(p, selectedCategory)) {
           affectedCount++;
           return {
             ...p,
@@ -211,14 +249,20 @@ export function ProductsManagementView() {
       });
     }
 
-    setProducts(updatedProducts);
-    setPriceIncreaseDialogOpen(false);
-    setIncreasePercentage("");
-    setSelectedCategory("");
-    setSelectedProducts(new Set());
-    toast.success(
-      `Precios actualizados: ${affectedCount} producto(s) con ${increasePercentage}% de aumento`
-    );
+    try {
+      const savedProducts = await WailsAPI.replaceProducts(updatedProducts);
+      setProducts(savedProducts);
+      setPriceIncreaseDialogOpen(false);
+      setIncreasePercentage("");
+      setSelectedCategory("");
+      setSelectedProducts(new Set());
+      toast.success(
+        `Precios actualizados: ${affectedCount} producto(s) con ${increasePercentage}% de aumento`
+      );
+    } catch (error) {
+      console.error("Failed to update prices:", error);
+      toast.error("Error al actualizar precios");
+    }
   };
 
   const toggleProductSelection = (productId: string) => {
@@ -231,21 +275,26 @@ export function ProductsManagementView() {
     setSelectedProducts(newSelection);
   };
 
-  const getUniqueCategories = () => {
-    const categories = new Set(products.map((p) => p.category));
-    return Array.from(categories).sort();
-  };
+  const getUniqueCategories = () => getAllCategoriesFromProducts(products);
 
-  const handleDelete = (productId: string) => {
-    setProducts(products.filter((p) => p.id !== productId));
-    toast.success("Producto eliminado");
+  const handleDelete = async (productId: string) => {
+    try {
+      await WailsAPI.deleteProduct(productId);
+      setProducts(products.filter((p) => p.id !== productId));
+      toast.success("Producto dado de baja");
+    } catch (error) {
+      console.error("Failed to delete product:", error);
+      toast.error("Error al dar de baja el producto");
+    }
   };
 
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getProductCategories(p).some((category) =>
+        category.toLowerCase().includes(searchTerm.toLowerCase()),
+      ) ||
       (p.barcodes && p.barcodes.some((b) => b.toLowerCase().includes(searchTerm.toLowerCase())))
   );
 
@@ -264,8 +313,8 @@ export function ProductsManagementView() {
 
   return (
     <>
-      <div className="flex flex-col h-full">
-        <div className="p-6 border-b bg-background">
+      <div className="flex flex-col h-full min-h-0">
+        <div className="p-6 border-b bg-background shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Package className="size-6" />
@@ -294,8 +343,14 @@ export function ProductsManagementView() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 min-h-0 overflow-auto p-6">
           <div className="max-w-7xl mx-auto space-y-6">
+            {loading ? (
+              <div className="py-16 text-center text-muted-foreground">
+                Cargando productos...
+              </div>
+            ) : (
+              <>
             {/* Búsqueda */}
             <div className="flex items-center gap-4">
               <div className="relative flex-1 max-w-md">
@@ -327,7 +382,7 @@ export function ProductsManagementView() {
                       <TableRow>
                         <TableHead className="w-[120px]">Código</TableHead>
                         <TableHead>Nombre</TableHead>
-                        <TableHead className="w-[140px]">Categoría</TableHead>
+                        <TableHead className="w-[180px]">Categorías</TableHead>
                         <TableHead className="w-[110px]">Cantidad</TableHead>
                         <TableHead className="w-[100px]">Precio</TableHead>
                         <TableHead className="w-[100px]">Costo</TableHead>
@@ -336,7 +391,16 @@ export function ProductsManagementView() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredProducts.map((product) => (
+                      {filteredProducts.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                            {searchTerm
+                              ? "No hay productos que coincidan con la búsqueda"
+                              : "No hay productos cargados. Usá «Agregar Producto» para empezar."}
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                      filteredProducts.map((product) => (
                         <TableRow key={product.id}>
                           <TableCell className="font-mono font-medium">
                             <div>{product.id}</div>
@@ -351,7 +415,13 @@ export function ProductsManagementView() {
                             {product.name}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{product.category}</Badge>
+                            <div className="flex flex-wrap gap-1">
+                              {getProductCategories(product).map((category) => (
+                                <Badge key={category} variant="outline">
+                                  {category}
+                                </Badge>
+                              ))}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {product.quantity && product.unit
@@ -387,12 +457,15 @@ export function ProductsManagementView() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
               </CardContent>
             </Card>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -437,26 +510,61 @@ export function ProductsManagementView() {
               />
             </div>
 
-            <div>
-              <Label htmlFor="category">Categoría *</Label>
-              <Select
-                value={formData.category}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, category: value })
-                }
-              >
-                <SelectTrigger id="category" className="mt-1">
-                  <SelectValue placeholder="Selecciona categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Cafetería">Cafetería</SelectItem>
-                  <SelectItem value="Panadería">Panadería</SelectItem>
-                  <SelectItem value="Bebidas">Bebidas</SelectItem>
-                  <SelectItem value="Comida">Comida</SelectItem>
-                  <SelectItem value="Snacks">Snacks</SelectItem>
-                  <SelectItem value="Otros">Otros</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="col-span-2">
+              <Label>Categorías *</Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-2">
+                Un producto puede pertenecer a varias categorías
+              </p>
+              <div className="grid grid-cols-2 gap-2 border rounded-lg p-3 max-h-40 overflow-y-auto">
+                {getAllCategoriesFromProducts(products).map((category) => (
+                  <label
+                    key={category}
+                    htmlFor={`category-${category}`}
+                    className="flex items-center gap-2 text-sm cursor-pointer"
+                  >
+                    <Checkbox
+                      id={`category-${category}`}
+                      checked={formData.categories.includes(category)}
+                      onCheckedChange={() => toggleCategory(category)}
+                    />
+                    <span>{category}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddCategory();
+                    }
+                  }}
+                  placeholder="Nueva categoría"
+                />
+                <Button type="button" variant="outline" onClick={handleAddCategory}>
+                  Agregar
+                </Button>
+              </div>
+              {formData.categories.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.categories.map((category) => (
+                    <Badge key={category} variant="secondary" className="gap-1 pl-2 pr-1">
+                      {category}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleCategory(category)}
+                        className="h-auto p-0.5 hover:bg-destructive/20"
+                      >
+                        <X className="size-3" />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -700,7 +808,7 @@ export function ProductsManagementView() {
                   <SelectContent>
                     {getUniqueCategories().map((cat) => (
                       <SelectItem key={cat} value={cat}>
-                        {cat} ({products.filter((p) => p.category === cat).length}{" "}
+                        {cat} ({products.filter((p) => productInCategory(p, cat)).length}{" "}
                         productos)
                       </SelectItem>
                     ))}
@@ -729,7 +837,7 @@ export function ProductsManagementView() {
                       <div className="flex-1">
                         <p className="font-medium">{product.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {product.category} - ${product.price.toFixed(2)}
+                          {formatCategoriesLabel(getProductCategories(product))} - ${product.price.toFixed(2)}
                         </p>
                       </div>
                       {increasePercentage && parseFloat(increasePercentage) > 0 && (
@@ -790,7 +898,7 @@ export function ProductsManagementView() {
                     <p className="text-sm">
                       Productos afectados:{" "}
                       <span className="font-bold">
-                        {products.filter((p) => p.category === selectedCategory).length}
+                        {products.filter((p) => productInCategory(p, selectedCategory)).length}
                       </span>
                     </p>
                     <p className="text-sm">
@@ -799,9 +907,9 @@ export function ProductsManagementView() {
                         $
                         {(
                           products
-                            .filter((p) => p.category === selectedCategory)
+                            .filter((p) => productInCategory(p, selectedCategory))
                             .reduce((acc, p) => acc + p.price, 0) /
-                          products.filter((p) => p.category === selectedCategory)
+                          products.filter((p) => productInCategory(p, selectedCategory))
                             .length *
                           (parseFloat(increasePercentage) / 100)
                         ).toFixed(2)}

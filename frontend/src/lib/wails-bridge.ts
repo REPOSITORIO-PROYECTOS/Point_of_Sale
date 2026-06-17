@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { normalizeProduct } from "./product-categories";
 
 declare global {
   interface Window {
@@ -28,7 +29,7 @@ export interface Product {
   name: string;
   price: number;
   cost?: number;
-  category: string;
+  categories: string[];
   stock?: number;
   minStock?: number;
   image?: string;
@@ -91,20 +92,22 @@ const isWailsEnvironment = (): boolean => {
 let mockCashSession: CashSession | null = null;
 
 const mockProducts: Product[] = [
-  { id: "1", name: "Café Espresso", price: 2.5, cost: 1.2, category: "Cafetería", stock: 50, minStock: 10, unit: "unidad" },
-  { id: "2", name: "Capuchino", price: 3.5, cost: 1.8, category: "Cafetería", stock: 45, minStock: 10, unit: "unidad" },
-  { id: "3", name: "Café con Leche", price: 4.0, cost: 2.0, category: "Cafetería", stock: 40, minStock: 10, unit: "unidad" },
-  { id: "4", name: "Café Americano", price: 2.8, cost: 1.5, category: "Cafetería", stock: 55, minStock: 10, unit: "unidad" },
-  { id: "5", name: "Croissant", price: 3.0, cost: 1.5, category: "Panadería", stock: 25, minStock: 5, unit: "unidad" },
-  { id: "6", name: "Muffin", price: 2.5, cost: 1.2, category: "Panadería", stock: 30, minStock: 5, unit: "unidad" },
-  { id: "7", name: "Galleta", price: 1.5, cost: 0.7, category: "Panadería", stock: 8, minStock: 10, unit: "unidad" },
-  { id: "8", name: "Jugo de Naranja", price: 3.5, cost: 1.5, category: "Bebidas", stock: 35, minStock: 10, unit: "unidad" },
-  { id: "9", name: "Agua Mineral", price: 1.0, cost: 0.5, category: "Bebidas", stock: 60, minStock: 15, unit: "unidad" },
-  { id: "10", name: "Sándwich", price: 6.5, cost: 3.0, category: "Comida", stock: 20, minStock: 5, unit: "unidad" },
-  { id: "11", name: "Jamón", price: 12.5, cost: 8.0, category: "Fiambrería", stock: 15, minStock: 3, unit: "kilogramos", barcodes: ["7891234567890"] },
-  { id: "12", name: "Queso", price: 15.0, cost: 10.0, category: "Fiambrería", stock: 10, minStock: 2, unit: "kilogramos", barcodes: ["7891234567891"] },
-  { id: "13", name: "Salame", price: 18.0, cost: 12.0, category: "Fiambrería", stock: 8, minStock: 2, unit: "kilogramos", barcodes: ["7891234567892"] },
+  { id: "1", name: "Café Espresso", price: 2.5, cost: 1.2, categories: ["Cafetería", "Bebidas"], stock: 50, minStock: 10, unit: "unidad" },
+  { id: "2", name: "Capuchino", price: 3.5, cost: 1.8, categories: ["Cafetería", "Bebidas"], stock: 45, minStock: 10, unit: "unidad" },
+  { id: "3", name: "Café con Leche", price: 4.0, cost: 2.0, categories: ["Cafetería"], stock: 40, minStock: 10, unit: "unidad" },
+  { id: "4", name: "Café Americano", price: 2.8, cost: 1.5, categories: ["Cafetería", "Bebidas"], stock: 55, minStock: 10, unit: "unidad" },
+  { id: "5", name: "Croissant", price: 3.0, cost: 1.5, categories: ["Panadería", "Comida"], stock: 25, minStock: 5, unit: "unidad" },
+  { id: "6", name: "Muffin", price: 2.5, cost: 1.2, categories: ["Panadería", "Snacks"], stock: 30, minStock: 5, unit: "unidad" },
+  { id: "7", name: "Galleta", price: 1.5, cost: 0.7, categories: ["Panadería", "Snacks"], stock: 8, minStock: 10, unit: "unidad" },
+  { id: "8", name: "Jugo de Naranja", price: 3.5, cost: 1.5, categories: ["Bebidas"], stock: 35, minStock: 10, unit: "unidad" },
+  { id: "9", name: "Agua Mineral", price: 1.0, cost: 0.5, categories: ["Bebidas"], stock: 60, minStock: 15, unit: "unidad" },
+  { id: "10", name: "Sándwich", price: 6.5, cost: 3.0, categories: ["Comida"], stock: 20, minStock: 5, unit: "unidad" },
+  { id: "11", name: "Jamón", price: 12.5, cost: 8.0, categories: ["Fiambrería", "Comida"], stock: 15, minStock: 3, unit: "kilogramos", barcodes: ["7891234567890"] },
+  { id: "12", name: "Queso", price: 15.0, cost: 10.0, categories: ["Fiambrería"], stock: 10, minStock: 2, unit: "kilogramos", barcodes: ["7891234567891"] },
+  { id: "13", name: "Salame", price: 18.0, cost: 12.0, categories: ["Fiambrería"], stock: 8, minStock: 2, unit: "kilogramos", barcodes: ["7891234567892"] },
 ];
+
+let mockProductsStore: Product[] = mockProducts.map((product) => normalizeProduct(product));
 
 const mockParcels: Parcel[] = [
   {
@@ -138,12 +141,47 @@ export const WailsAPI = {
 
   async getProducts(): Promise<Product[]> {
     if (isWailsEnvironment()) {
-      return await window.go!.main!.App!.GetProducts();
-    } else {
-      return new Promise((resolve) => {
-        setTimeout(() => resolve(mockProducts), 100);
-      });
+      const products = await window.go!.main!.App!.GetProducts();
+      return products.map((product) => normalizeProduct(product));
     }
+    return new Promise((resolve) => {
+      setTimeout(() => resolve([...mockProductsStore]), 100);
+    });
+  },
+
+  async saveProduct(product: Product): Promise<Product> {
+    const normalized = normalizeProduct(product);
+    if (isWailsEnvironment()) {
+      // Desktop persistence is handled by the Electron shell (not yet exposed).
+      const index = mockProductsStore.findIndex((item) => item.id === normalized.id);
+      if (index >= 0) {
+        mockProductsStore[index] = normalized;
+      } else {
+        mockProductsStore.push(normalized);
+      }
+      return normalized;
+    }
+    const index = mockProductsStore.findIndex((item) => item.id === normalized.id);
+    if (index >= 0) {
+      mockProductsStore[index] = normalized;
+    } else {
+      mockProductsStore.push(normalized);
+    }
+    return normalized;
+  },
+
+  async deleteProduct(productId: string): Promise<void> {
+    if (isWailsEnvironment()) {
+      mockProductsStore = mockProductsStore.filter((item) => item.id !== productId);
+      return;
+    }
+    mockProductsStore = mockProductsStore.filter((item) => item.id !== productId);
+  },
+
+  async replaceProducts(products: Product[]): Promise<Product[]> {
+    const normalized = products.map((product) => normalizeProduct(product));
+    mockProductsStore = normalized;
+    return [...mockProductsStore];
   },
 
   async saveTransaction(transaction: Transaction): Promise<void> {

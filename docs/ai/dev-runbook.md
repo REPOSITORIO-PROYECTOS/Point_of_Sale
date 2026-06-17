@@ -77,8 +77,10 @@ Electron carga `http://localhost:5173`. El backend ya corre vía `dev:stack` (no
 ```powershell
 Invoke-RestMethod http://127.0.0.1:3001/api
 Invoke-RestMethod http://127.0.0.1:3001/api/integrations/afip/health
-Invoke-RestMethod http://127.0.0.1:5086/api/afipws/test
+Invoke-RestMethod http://127.0.0.1:5086/afipws/test
 ```
+
+> AFIP puede responder en `/afipws/test` aunque `/api/afipws/test` devuelva 404 según la versión del sidecar.
 
 Swagger API: http://127.0.0.1:3001/api/docs  
 Swagger AFIP: http://127.0.0.1:5086/swagger/
@@ -86,10 +88,19 @@ Swagger AFIP: http://127.0.0.1:5086/swagger/
 ## 5. Tests
 
 ```powershell
+# Unitarios (sin stack levantado)
 npm run test:microservices:unit
-# Con stack levantado:
+
+# Smoke REST (requiere pos-api en :3001)
+npm run dev:api
+npm run test:api:smoke
+
+# Integración pos-api + AFIP (stack recomendado)
+npm run dev:stack
 npm run test:microservices
 ```
+
+Plan de sprints: [`sprint-revision.md`](sprint-revision.md)
 
 ## 6. Troubleshooting dev
 
