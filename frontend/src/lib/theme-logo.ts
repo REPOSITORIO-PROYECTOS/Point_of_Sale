@@ -1,10 +1,11 @@
-const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+const viteEnv = import.meta.env ?? {};
+const DEFAULT_BASE_URL = viteEnv.VITE_API_BASE_URL ?? '/api';
 const DEFAULT_API_ORIGIN =
-  import.meta.env.VITE_API_ORIGIN ??
+  viteEnv.VITE_API_ORIGIN ??
   (typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3001');
 
 /** Vite static asset — works in dev and production (base `./`). */
-export const DEFAULT_SYSTEM_LOGO_PATH = `${import.meta.env.BASE_URL}branding/default-logo.png`;
+export const DEFAULT_SYSTEM_LOGO_PATH = `${viteEnv.BASE_URL ?? '/'}branding/default-logo.png`;
 
 export function getDefaultLogoUrl(): string {
   if (typeof window !== 'undefined') {

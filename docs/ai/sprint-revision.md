@@ -36,7 +36,7 @@ Plan por fases para validar backend, integraciones y cableado front-back.
 | 4.9.4 | UI `LicenseRequiredView` (machine-id + paste) + footer cliente | ✅ | `frontend/src/app/components/license/` |
 | 4.9.5 | UI recovery oculta (5 clics / Ctrl+Shift+Alt+R) | ✅ | `SupportRecoveryDialog`, `AppVersionFooter` |
 | 4.9.6 | Docs + `.env.example` | ✅ | `licensing.md`, claves en `keys/` |
-| 4.9.7 | Unit tests license + recovery | ✅ | `license-crypto.test.ts`, `support-recovery.service.test.ts` |
+| 4.9.7 | Unit tests license + recovery | ✅ | `license-crypto.test.ts`, `support-recovery.service.test.ts`, smoke recovery adaptativo |
 | 4.9.8 | `POST /support/recovery/generate-license` | ✅ | Firma remota con `X-Support-Recovery-Key` |
 
 ### Variables de entorno
@@ -210,7 +210,7 @@ npm run test:microservices
 | 4.5 | `JwtAuthGuard` validar token; rutas protegidas | ✅ | Bearer JWT salvo `@PublicRoute()` |
 | 4.6 | UI login + sesión + selector cajero | ✅ | `LoginView`, `AuthProvider`, roles en Header |
 | 4.7 | Roles (`admin`, `cashier`) en guards y UI | ✅ | `RolesGuard`, tabs admin-only |
-| 4.8 | Tests auth + barcode (smoke/unit) | ✅ | `auth.service.test.ts`, smoke JWT + barcode |
+| 4.8 | Tests auth + barcode (smoke/unit) | ✅ | `auth.service.test.ts`, `roles.guard.test.ts`, smoke JWT + barcode + setup 409 |
 
 ### Criterios de aceptación Sprint 4
 
@@ -225,7 +225,7 @@ npm run test:microservices
 
 | ID | Tarea | Estado |
 |----|-------|--------|
-| 5.1 | Encomiendas: backend o quitar del UI | 🔄 | `GET/POST /parcels` MVP backend |
+| 5.1 | Encomiendas: backend o quitar del UI | 🔄 | `GET/POST /parcels` MVP backend + `parcels.service.test.ts` + smoke CRUD |
 | 5.2 | Tema/logo: persistencia en disco + API | ✅ | `POST/GET/DELETE /api/settings/theme/logo`; SQLite solo referencia; migración data-URL |
 | 5.2b | Ticket térmico 55/80 mm | ✅ | `receipt-template.ts` + `receiptWidthMm` en tema |
 | 5.3 | `WailsAPI` como facade sobre `PosAPI` o eliminar | ⬜ |
@@ -350,10 +350,13 @@ Auditoría POS: tests, escáner, impresión, auth. **CodeGraph MCP:** `user-code
 
 | Área | Estado | Evidencia |
 |------|--------|-----------|
-| Smoke API | ✅ | `api.smoke.test.ts` (9 tests, requiere API) |
+| Smoke API | ✅ | `api.smoke.test.ts` (18 tests, requiere API) |
 | Unit AFIP | ✅ | 7 pass |
-| Auth unit + smoke | ✅ | `auth.service.test.ts` + smoke login |
-| Barcode smoke | ⚠️ | Skip hasta 4.2 |
+| Auth unit + smoke | ✅ | `auth.service.test.ts`, `roles.guard.test.ts`, `users.service.test.ts` + smoke |
+| Barcode smoke | ✅ | `GET /products/by-barcode/:code` |
+| Theme/logo smoke | ✅ | GET/PUT tema, POST/GET/DELETE logo |
+| License + recovery unit | ✅ | `license-crypto.test.ts`, `support-recovery.service.test.ts` |
+| Parcels unit + smoke | ✅ | `parcels.service.test.ts` + smoke CRUD |
 | Frontend/Electron/print tests | ❌ | Sin runner |
 
 **Ejecución 2026-06-18:** unit 9 pass; smoke skipped (API off).
@@ -381,7 +384,12 @@ Auditoría POS: tests, escáner, impresión, auth. **CodeGraph MCP:** `user-code
 | Test | Estado |
 |------|--------|
 | Auth JWT smoke/unit | ✅ |
+| Auth setup 409 smoke | ✅ |
+| Users PATCH isActive (admin) | ✅ unit + smoke |
 | Barcode lookup smoke | ✅ |
+| Theme/logo smoke | ✅ |
+| Parcels CRUD smoke/unit | ✅ |
+| Support recovery 503/401 | ✅ unit + smoke adaptativo |
 | Enter → cart e2e | ❌ (manual / futuro Playwright) |
 | printReceipt IPC | ✅ (manual en `.exe`) |
 | JWT guard | ✅ |
@@ -413,3 +421,4 @@ Frontend :5173
 | 2026-06-18 | 7 | Diseño conectividad remota → `remote-connectivity-architecture.md` |
 | 2026-06-18 | 4.9 | Soporte recovery + licenciamiento (API, UI, docs, tests) |
 | 2026-06-18 | 4.9 | Refino licencias: Ed25519, machine-id, `generate-license`, tests crypto |
+| 2026-06-18 | tests | Suite ampliada: users, parcels, roles guard, logo, smoke auth/logo/recovery |
