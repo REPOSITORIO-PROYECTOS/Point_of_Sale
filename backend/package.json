@@ -10,15 +10,17 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "db:init": "tsx src/database/init-db.ts",
-    "test:microservices": "tsx --test src/integrations/afip/afip.microservice.test.ts src/integrations/afip/afip-config.storage.test.ts",
+    "test:microservices": "tsx --test src/integrations/afip/afip.microservice.test.ts src/integrations/afip/afip-config.storage.test.ts src/integrations/afip/afip-config.service.test.ts src/auth/auth.service.test.ts",
     "test:smoke": "tsx --test src/api.smoke.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.4.3",
     "@nestjs/typeorm": "^11.0.0",
+    "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "dotenv": "^17.4.2",
@@ -32,9 +34,9 @@
     "@nestjs/schematics": "^11.1.0",
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.15.33",
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^22.19.19",
     "tsx": "^4.20.3",
     "typescript": "^5.9.3"
   }
 }
-

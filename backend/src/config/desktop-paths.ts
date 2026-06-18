@@ -29,6 +29,7 @@ export function getDesktopPaths() {
   return {
     appDataDir,
     uploadsDir: path.join(appDataDir, 'uploads'),
+    brandingDir: path.join(appDataDir, 'branding'),
     logsDir: path.join(appDataDir, 'logs'),
     sqliteDbPath: path.join(appDataDir, 'database.sqlite'),
   };
@@ -37,6 +38,7 @@ export function getDesktopPaths() {
 export function ensureDesktopPaths(paths: ReturnType<typeof getDesktopPaths>) {
   fs.mkdirSync(paths.appDataDir, { recursive: true });
   fs.mkdirSync(paths.uploadsDir, { recursive: true });
+  fs.mkdirSync(paths.brandingDir, { recursive: true });
   fs.mkdirSync(paths.logsDir, { recursive: true });
   fs.mkdirSync(path.join(paths.appDataDir, 'afip'), { recursive: true });
 }

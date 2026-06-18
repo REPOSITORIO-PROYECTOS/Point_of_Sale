@@ -25,4 +25,6 @@ export const env = {
   afipServiceUrl: process.env.AFIP_SERVICE_URL ?? 'http://127.0.0.1:5086',
   afipPuntoVenta: toNumber(process.env.AFIP_PUNTO_VENTA, 1),
   afipProduction: process.env.AFIP_PRODUCTION === 'true',
+  jwtSecret: process.env.JWT_SECRET ?? 'dev-pos-jwt-secret-change-in-production',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
 };
