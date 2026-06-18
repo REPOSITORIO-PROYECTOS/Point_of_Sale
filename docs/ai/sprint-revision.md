@@ -16,8 +16,8 @@ Plan por fases para validar backend, integraciones y cableado front-back.
 | 3 | AFIP en flujo de venta | ✅ Completado (cambios locales en merge) |
 | 4 | Hardware POS + auth (barcode, print, login) | ✅ Completado (2026-06-18) |
 | **4A** | Tema/logo persistencia API | ✅ Completado |
-| 5 | Secundarios + desktop | 🔄 En progreso (5.1 parcels backend) |
-| **7** | Conectividad remota + PWA | 📋 Diseño (2026-06-18) |
+| 5 | Secundarios + desktop | 🔄 En progreso (5.1 ✅ UI cableada) |
+| **7** | Conectividad remota + PWA | 🟡 MVP scaffold (2026-06-18) |
 | **4.9** | Soporte recovery + licenciamiento | ✅ Completado (2026-06-18) |
 
 ---
@@ -225,11 +225,11 @@ npm run test:microservices
 
 | ID | Tarea | Estado |
 |----|-------|--------|
-| 5.1 | Encomiendas: backend o quitar del UI | 🔄 | `GET/POST /parcels` MVP backend + `parcels.service.test.ts` + smoke CRUD |
+| 5.1 | Encomiendas: backend o quitar del UI | ✅ | `GET/POST /parcels` + `ParcelsView` → `PosAPI` |
 | 5.2 | Tema/logo: persistencia en disco + API | ✅ | `POST/GET/DELETE /api/settings/theme/logo`; SQLite solo referencia; migración data-URL |
 | 5.2b | Ticket térmico 55/80 mm | ✅ | `receipt-template.ts` + `receiptWidthMm` en tema |
-| 5.3 | `WailsAPI` como facade sobre `PosAPI` o eliminar | ⬜ |
-| 5.4 | Tests Electron bootstrap | ⬜ |
+| 5.3 | `WailsAPI` como facade sobre `PosAPI` o eliminar | 🔄 | Parcels + tema en PosAPI; print/drawer quedan en Wails/Electron |
+| 5.4 | Tests Electron bootstrap | ✅ | `desktop/src/bootstrap.smoke.test.ts` |
 | 5.5 | Auditoría UI: cablear `AuditView` a API (hoy mock) | ⬜ |
 | 5.6 | Movimientos caja: persistir + imprimir comprobante | ⬜ |
 
@@ -243,8 +243,8 @@ npm run test:microservices
 
 | ID | Tarea | Esfuerzo | Estado |
 |----|-------|----------|--------|
-| 6.1 | Versionado unificado monorepo | 0.5 d | ⬜ |
-| 6.2 | `GET /api/version` | 0.5 d | ⬜ |
+| 6.1 | Versionado unificado monorepo | 0.5 d | 🔄 |
+| 6.2 | `GET /api/version` | 0.5 d | ✅ |
 | 6.3 | Migraciones SQLite formales (sin `synchronize` prod) | 2–3 d | ⬜ |
 | 6.4 | electron-updater + publish GitHub | 2 d | ⬜ |
 | 6.5 | Check al boot + menú “Buscar actualizaciones” | 1 d | ⬜ |
@@ -276,14 +276,14 @@ npm run test:microservices
 
 | ID | Fase | Tarea | Esfuerzo | Estado |
 |----|------|-------|----------|--------|
-| **7.0** | Emparejamiento | Relay: modelo tenant/location/register + `POST /devices/pair` + código QR TTL | 3 d | ⬜ |
-| 7.0 | Emparejamiento | Backend: módulo `remote-agent`, `POST /api/remote/pair`, persistir `device.json` en AppData | 2 d | ⬜ |
+| **7.0** | Emparejamiento | Relay: modelo tenant/location/register + `POST /devices/pair` + código QR TTL | 3 d | 🟡 MVP |
+| 7.0 | Emparejamiento | Backend: módulo `remote-agent`, `POST /api/remote/pair`, persistir `device.json` en AppData | 2 d | 🟡 MVP |
 | 7.0 | Emparejamiento | UI POS: pantalla Ajustes → Remoto (QR scanner / código manual) | 1.5 d | ⬜ |
-| **7.1** | Heartbeat | Agente: WSS saliente, heartbeat 30 s, reconexión backoff | 2 d | ⬜ |
-| 7.1 | Heartbeat | Relay: presencia online/offline, `last_seen`, revocación device | 1.5 d | ⬜ |
+| **7.1** | Heartbeat | Agente: WSS saliente, heartbeat 30 s, reconexión backoff | 2 d | 🟡 MVP (mock snapshot) |
+| 7.1 | Heartbeat | Relay: presencia online/offline, `last_seen`, revocación device | 1.5 d | 🟡 MVP |
 | 7.1 | Heartbeat | Tabla `remote_outbox` + reintentos offline | 2 d | ⬜ |
-| **7.2** | PWA shell | `apps/remote-portal/`: Vite + vite-plugin-pwa + login + layout | 3 d | ⬜ |
-| 7.2 | PWA shell | Deploy estático (Cloudflare Pages / Vercel) + env `VITE_RELAY_URL` | 1 d | ⬜ |
+| **7.2** | PWA shell | `apps/remote-portal/`: Vite + vite-plugin-pwa + login + layout | 3 d | 🟡 MVP |
+| 7.2 | PWA shell | Deploy estático (Cloudflare Pages / Vercel) + env `VITE_RELAY_URL` | 1 d | 🟡 local dev |
 | **7.3** | Multi-local | Portal: selector tenant → local → caja; lista con estado 🟢🟡🔴 | 2.5 d | ⬜ |
 | 7.3 | Multi-local | Relay: agregación snapshots por `location_id` | 2 d | ⬜ |
 | **7.4** | Resúmenes API | Agente: push snapshot precios + ventas día + estado caja | 2.5 d | ⬜ |
@@ -292,7 +292,7 @@ npm run test:microservices
 | **7.5** | Usuarios remotos | Relay: comando `disable_user` + cola si offline + audit log | 2 d | ⬜ |
 | 7.5 | Usuarios remotos | Backend: `PATCH users/:id` con `active`; guard último admin | 1 d | ⬜ |
 | 7.5 | Usuarios remotos | Portal: pantalla usuarios por local, habilitar/deshabilitar | 2 d | ⬜ |
-| — | Infra | `services/remote/` Docker + `docker-compose.dev.yml` + scripts npm raíz | 2 d | ⬜ |
+| — | Infra | `services/remote/` Docker + `docker-compose.dev.yml` + scripts npm raíz | 2 d | 🟡 scripts `dev:remote` |
 | — | Tests | Smoke pairing mock + unit outbox + contract snapshot DTOs | 2 d | ⬜ |
 
 **Esfuerzo total estimado:** ~32 d-persona (MVP 7.0–7.4 ≈ 22 d; 7.5 + infra + tests ≈ 10 d adicionales).
@@ -422,3 +422,6 @@ Frontend :5173
 | 2026-06-18 | 4.9 | Soporte recovery + licenciamiento (API, UI, docs, tests) |
 | 2026-06-18 | 4.9 | Refino licencias: Ed25519, machine-id, `generate-license`, tests crypto |
 | 2026-06-18 | tests | Suite ampliada: users, parcels, roles guard, logo, smoke auth/logo/recovery |
+| 2026-06-18 | 7 | MVP scaffold: relay :5090, PWA portal :5174, remote-agent stub backend |
+| 2026-06-18 | 5/6 | Encomiendas UI→PosAPI; `GET /api/version`; Electron bootstrap smoke |
+| 2026-06-18 | 7 | Commit MVP remoto + push; deps `ws`, scripts `dev:remote`/`dev:portal` |
