@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { isElectronEnvironment, printReceiptElectron, printReceiptInBrowser } from "./desktop-api";
+import { PosAPI } from "./pos-api";
 import { normalizeProduct } from "./product-categories";
 import { buildReceiptHtml } from "./receipt-template";
 import { resolveReceiptLogoUrl } from "./theme-logo";
@@ -121,25 +122,6 @@ const mockProducts: Product[] = [
 
 let mockProductsStore: Product[] = mockProducts.map((product) => normalizeProduct(product));
 
-const mockParcels: Parcel[] = [
-  {
-    id: "1",
-    customerName: "Juan Pérez",
-    description: "Entrega de paquete",
-    amount: 25.0,
-    status: "pending",
-    date: "2026-05-23",
-  },
-  {
-    id: "2",
-    customerName: "María García",
-    description: "Pedido especial",
-    amount: 50.0,
-    status: "picked-up",
-    date: "2026-05-22",
-  },
-];
-
 export const WailsAPI = {
   async printReceipt(
     cartItems: CartItem[],
@@ -244,20 +226,16 @@ export const WailsAPI = {
   async getParcels(): Promise<Parcel[]> {
     if (isWailsEnvironment()) {
       return await window.go!.main!.App!.GetParcels();
-    } else {
-      return new Promise((resolve) => {
-        setTimeout(() => resolve(mockParcels), 100);
-      });
     }
+    return PosAPI.getParcels();
   },
 
   async saveParcel(parcel: Parcel): Promise<void> {
     if (isWailsEnvironment()) {
       await window.go!.main!.App!.SaveParcel(parcel);
-    } else {
-      toast.success("Encomienda guardada (modo demostración)");
-      console.log("Mock parcel:", parcel);
+      return;
     }
+    await PosAPI.createParcel(parcel);
   },
 
   async openCashDrawer(): Promise<void> {

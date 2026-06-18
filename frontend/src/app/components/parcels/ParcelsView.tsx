@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Parcel, WailsAPI } from "../../../lib/wails-bridge";
+import { Parcel } from "../../../lib/wails-bridge";
+import { PosAPI } from "../../../lib/pos-api";
 import { Button } from "../ui/button";
 import {
   Table,
@@ -47,7 +48,7 @@ export function ParcelsView() {
 
   const loadParcels = async () => {
     try {
-      const data = await WailsAPI.getParcels();
+      const data = await PosAPI.getParcels();
       setParcels(data);
     } catch (error) {
       console.error("Failed to load parcels:", error);
@@ -70,8 +71,8 @@ export function ParcelsView() {
     };
 
     try {
-      await WailsAPI.saveParcel(newParcel);
-      setParcels((prev) => [...prev, newParcel]);
+      const saved = await PosAPI.createParcel(newParcel);
+      setParcels((prev) => [...prev, saved]);
       toast.success("Encomienda guardada exitosamente");
       setDialogOpen(false);
       setFormData({

@@ -364,6 +364,14 @@ export const PosAPI = {
     request<Record<string, unknown>>("/support/recovery/export", {
       headers: { "X-Support-Recovery-Token": recoveryToken },
     }),
+
+  getParcels: () => request<Parcel[]>("/parcels"),
+
+  createParcel: (parcel: Parcel) =>
+    request<Parcel>("/parcels", {
+      method: "POST",
+      body: JSON.stringify(parcel),
+    }),
 };
 
 export function readFileAsText(file: File): Promise<string> {
