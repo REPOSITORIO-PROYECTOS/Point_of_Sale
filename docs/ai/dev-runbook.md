@@ -20,7 +20,7 @@ npm run db:init
 Set-Location ..
 ```
 
-**Resultado esperado:** existe `backend/storage/database.sqlite` y la carpeta `backend/storage/branding/` (logo del negocio en disco).
+**Resultado esperado:** existe `backend/storage/database.sqlite` y la carpeta `backend/storage/branding/` (logo del negocio en disco). El logo por defecto del sistema vive en `frontend/public/branding/default-logo.png` (servido como `/branding/default-logo.png` en dev).
 
 Variables opcionales de soporte/licencia en `backend/.env` (ver [`support-recovery.md`](support-recovery.md) y [`licensing.md`](licensing.md)):
 
@@ -111,6 +111,13 @@ Swagger AFIP: http://127.0.0.1:5086/swagger/
 
 ## 5. Tests
 
+| Comando | Requiere API | Qué cubre |
+|---------|--------------|-----------|
+| `npm run test:microservices:unit` | No | Auth, AFIP, license, recovery, logo, receipt, users, parcels, roles guard |
+| `npm run test:api:smoke` | Sí (`:3001`) | CRUD productos, ventas/caja, auth JWT, barcode, tema/logo, parcels, recovery |
+| `npm run test:all` | Sí para smoke | Unit + smoke en secuencia |
+| `npm run test:microservices` | Stack opcional | Script integración `verify-microservices.mjs` |
+
 ```powershell
 # Unitarios (sin stack levantado)
 npm run test:microservices:unit
@@ -118,6 +125,10 @@ npm run test:microservices:unit
 # Smoke REST (requiere pos-api en :3001)
 npm run dev:api
 npm run test:api:smoke
+
+# Unit + smoke (levantar API antes del smoke)
+npm run dev:api
+npm run test:all
 
 # AFIP import real (opcional, credenciales en env)
 # $env:RUN_AFIP_IMPORT_TEST='true'
@@ -128,6 +139,8 @@ npm run test:api:smoke
 npm run dev:stack
 npm run test:microservices
 ```
+
+Credenciales smoke opcionales: `POS_TEST_USERNAME`, `POS_TEST_PASSWORD` (default `smoke-admin` / `smoke-test-pass-123` si la BD necesita setup).
 
 Plan de sprints: [`sprint-revision.md`](sprint-revision.md)
 
