@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { env } from '@/config/env.config';
@@ -14,7 +14,7 @@ import { UserEntity } from './user.entity';
       secret: env.jwtSecret,
       signOptions: { expiresIn: env.jwtExpiresIn },
     }),
-    forwardRef(() => LicenseModule),
+    LicenseModule,
   ],
   controllers: [AuthController],
   providers: [AuthService],

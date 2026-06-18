@@ -1,34 +1,46 @@
 import {
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
+  OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { KeyObject } from 'node:crypto';
 import { Repository } from 'typeorm';
 import { env } from '@/config/env.config';
+import { AuditLogService } from '@/services/audit-log.service';
 import { LicenseSettingsEntity } from './license-settings.entity';
 import { loadPublicKey, maskClientNumber, verifyLicenseKey } from './license-crypto';
+import { LoginAttemptTracker } from './login-attempt-tracker';
 import type { LicensePayload } from './license-payload';
 import { LICENSE_FEATURES } from './license-payload';
 import type { LicenseActivationResponse, LicenseStatus, LicenseStatusResponse } from './license.types';
 import { MachineIdentityService } from './machine-identity.service';
 
 const REVALIDATE_INTERVAL_MS = 60 * 60 * 1000;
+const DAILY_REVALIDATE_MS = 24 * 60 * 60 * 1000;
+const GRACE_DAYS = 7;
+const EXPIRY_WARNING_DAYS = 7;
 const SETTINGS_ID = 'default';
 
 @Injectable()
-export class LicenseService implements OnModuleInit {
+export class LicenseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LicenseService.name);
   private readonly publicKey: KeyObject;
+  private readonly loginAttempts = new LoginAttemptTracker();
   private cachedValidation: { checkedAt: number; allowed: boolean; message: string | null } | null =
     null;
+  private validationTimer: NodeJS.Timeout | null = null;
 
   constructor(
     @InjectRepository(LicenseSettingsEntity)
     private readonly settingsRepository: Repository<LicenseSettingsEntity>,
+    @Inject(MachineIdentityService)
     private readonly machineIdentityService: MachineIdentityService,
+    @Inject(AuditLogService)
+    private readonly auditLog: AuditLogService,
   ) {
     this.publicKey = loadPublicKey(env.licensePublicKeyPath);
   }
@@ -36,6 +48,15 @@ export class LicenseService implements OnModuleInit {
   async onModuleInit() {
     await this.ensureSettingsRow();
     await this.revalidateCached();
+    this.validationTimer = setInterval(() => {
+      void this.revalidateCached();
+    }, DAILY_REVALIDATE_MS);
+  }
+
+  onModuleDestroy() {
+    if (this.validationTimer) {
+      clearInterval(this.validationTimer);
+    }
   }
 
   async getMachineId(): Promise<string> {
@@ -46,6 +67,15 @@ export class LicenseService implements OnModuleInit {
     const settings = await this.getSettings();
     const machineId = await this.getMachineId();
     const validation = await this.evaluateStoredLicense(settings, machineId);
+    const grace = this.computeGrace(settings);
+
+    let daysUntilExpiry: number | null = null;
+    let showExpiryWarning = false;
+    if (settings.expiresAt && validation.status === 'active') {
+      const now = Date.now();
+      daysUntilExpiry = Math.ceil((settings.expiresAt.getTime() - now) / (24 * 60 * 60 * 1000));
+      showExpiryWarning = daysUntilExpiry <= EXPIRY_WARNING_DAYS && daysUntilExpiry >= 0;
+    }
 
     return {
       status: validation.status,
@@ -55,6 +85,12 @@ export class LicenseService implements OnModuleInit {
       licenseId: settings.licenseId,
       activatedAt: settings.activatedAt?.toISOString() ?? null,
       expiresAt: settings.expiresAt?.toISOString() ?? null,
+      firstBootAt: settings.firstBootAt.toISOString(),
+      graceEndsAt: grace.graceEndsAt.toISOString(),
+      inGracePeriod: grace.inGracePeriod,
+      daysUntilExpiry,
+      showExpiryWarning,
+      cautionFlag: settings.cautionFlag,
       machineId,
       message: validation.message,
     };
@@ -84,12 +120,45 @@ export class LicenseService implements OnModuleInit {
     await this.settingsRepository.save(settings);
     this.cachedValidation = { checkedAt: Date.now(), allowed: true, message: null };
 
+    this.auditLog.record({
+      action: 'license.activate',
+      licenseId: verification.payload.licenseId,
+      clientNumber: verification.payload.clientNumber,
+    });
+
     return {
       status: 'active',
       clientNumber: verification.payload.clientNumber,
       licenseId: verification.payload.licenseId,
       expiresAt: verification.payload.expiresAt,
     };
+  }
+
+  async recordFailedLogin(ip: string) {
+    const result = this.loginAttempts.recordFailure(ip);
+    if (!result.caution) {
+      return;
+    }
+
+    const settings = await this.getSettings();
+    if (settings.cautionFlag) {
+      return;
+    }
+
+    settings.cautionFlag = true;
+    await this.settingsRepository.save(settings);
+    this.cachedValidation = null;
+
+    this.auditLog.record({
+      action: 'license.misuse.caution',
+      ip,
+      failedAttempts: result.count,
+    });
+    this.logger.warn(`Caution flag activado por intentos de login desde ${ip}`);
+  }
+
+  clearLoginAttempts(ip: string) {
+    this.loginAttempts.reset(ip);
   }
 
   async assertLicensed(): Promise<void> {
@@ -139,6 +208,15 @@ export class LicenseService implements OnModuleInit {
     }
 
     if (!settings.licenseKey) {
+      const grace = this.computeGrace(settings);
+      if (grace.inGracePeriod) {
+        return {
+          allowed: true,
+          status: 'missing',
+          message: `Período de gracia: activar licencia antes del ${grace.graceEndsAt.toISOString().slice(0, 10)}`,
+        };
+      }
+
       return {
         allowed: false,
         status: 'missing',
@@ -197,6 +275,14 @@ export class LicenseService implements OnModuleInit {
 
   private getSettings() {
     return this.settingsRepository.findOneOrFail({ where: { id: SETTINGS_ID } });
+  }
+
+  private computeGrace(settings: LicenseSettingsEntity) {
+    const graceEndsAt = new Date(
+      settings.firstBootAt.getTime() + GRACE_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const inGracePeriod = !settings.licenseKey && Date.now() < graceEndsAt.getTime();
+    return { graceEndsAt, inGracePeriod };
   }
 }
 

@@ -16,6 +16,12 @@ export type LicenseStatusResponse = {
   licenseId: string | null;
   activatedAt: string | null;
   expiresAt: string | null;
+  firstBootAt: string;
+  graceEndsAt: string;
+  inGracePeriod: boolean;
+  daysUntilExpiry: number | null;
+  showExpiryWarning: boolean;
+  cautionFlag: boolean;
   machineId: string;
   message: string | null;
 };
