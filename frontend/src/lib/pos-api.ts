@@ -1,6 +1,6 @@
 import type { CashSession, PaymentMethod, Parcel, Product, ThemeConfig, Transaction } from "./wails-bridge";
 import { normalizeProduct } from "./product-categories";
-import { resolveThemeLogoUrl } from "./theme-logo";
+import { mapThemeConfigFromApi } from "./theme-logo";
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 const AUTH_TOKEN_KEY = "pos.auth.token";
@@ -28,6 +28,12 @@ export type LicenseStatusResponse = {
   licenseId: string | null;
   activatedAt: string | null;
   expiresAt: string | null;
+  firstBootAt: string;
+  graceEndsAt: string;
+  inGracePeriod: boolean;
+  daysUntilExpiry: number | null;
+  showExpiryWarning: boolean;
+  cautionFlag: boolean;
   machineId: string;
   message: string | null;
 };
@@ -285,10 +291,7 @@ export const PosAPI = {
 
   getThemeConfig: async () => {
     const theme = await request<ThemeConfig>("/settings/theme");
-    return {
-      ...theme,
-      ...(theme.logoUrl ? { logoUrl: resolveThemeLogoUrl(theme.logoUrl) } : {}),
-    };
+    return mapThemeConfigFromApi(theme);
   },
 
   saveThemeConfig: (config: ThemeConfig) =>
@@ -298,10 +301,7 @@ export const PosAPI = {
         primaryColor: config.primaryColor,
         receiptWidthMm: config.receiptWidthMm ?? 80,
       }),
-    }).then((theme) => ({
-      ...theme,
-      ...(theme.logoUrl ? { logoUrl: resolveThemeLogoUrl(theme.logoUrl) } : {}),
-    })),
+    }).then((theme) => mapThemeConfigFromApi(theme)),
 
   uploadThemeLogo: async (file: File) => {
     if (file.size > 2 * 1024 * 1024) {
@@ -331,19 +331,13 @@ export const PosAPI = {
       throw new Error(message ?? `Request failed (${response.status})`);
     }
 
-    return {
-      ...data,
-      ...(data.logoUrl ? { logoUrl: resolveThemeLogoUrl(data.logoUrl) } : {}),
-    };
+    return mapThemeConfigFromApi(data);
   },
 
   deleteThemeLogo: () =>
     request<ThemeConfig>("/settings/theme/logo", {
       method: "DELETE",
-    }).then((theme) => ({
-      ...theme,
-      ...(theme.logoUrl ? { logoUrl: resolveThemeLogoUrl(theme.logoUrl) } : {}),
-    })),
+    }).then((theme) => mapThemeConfigFromApi(theme)),
 
   getLicenseStatus: () => request<LicenseStatusResponse>("/license/status"),
 

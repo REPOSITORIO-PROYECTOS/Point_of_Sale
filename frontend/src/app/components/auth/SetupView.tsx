@@ -1,13 +1,14 @@
 import { FormEvent, useState } from "react";
 import { useAuth } from "../../../lib/auth-context";
+import { useTheme } from "../../../lib/theme-context";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { ShieldCheck } from "lucide-react";
 
 export function SetupView() {
   const { setupAdmin } = useAuth();
+  const { themeConfig } = useTheme();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -40,9 +41,11 @@ export function SetupView() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-3">
-          <div className="mx-auto size-14 rounded-xl bg-primary/10 flex items-center justify-center">
-            <ShieldCheck className="size-8 text-primary" />
-          </div>
+          <img
+            src={themeConfig.logoUrl}
+            alt="Logo del sistema"
+            className="mx-auto h-16 w-auto max-w-[200px] object-contain"
+          />
           <CardTitle className="text-2xl">Configuración inicial</CardTitle>
           <CardDescription>
             Es la primera vez que se inicia el sistema. Creá la cuenta de administrador. Este paso

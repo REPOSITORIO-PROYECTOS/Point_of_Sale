@@ -83,7 +83,10 @@ export interface PaymentMethod {
 
 export interface ThemeConfig {
   primaryColor: string;
+  /** Effective logo for display (custom or system default). */
   logoUrl?: string;
+  /** Set only when the store uploaded a custom logo via theme settings. */
+  customLogoUrl?: string;
   receiptWidthMm?: 55 | 80;
 }
 
