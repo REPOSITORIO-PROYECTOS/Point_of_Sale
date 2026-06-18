@@ -3,6 +3,64 @@ const DEFAULT_API_ORIGIN =
   import.meta.env.VITE_API_ORIGIN ??
   (typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3001');
 
+/** Vite static asset — works in dev and production (base `./`). */
+export const DEFAULT_SYSTEM_LOGO_PATH = `${import.meta.env.BASE_URL}branding/default-logo.png`;
+
+export function getDefaultLogoUrl(): string {
+  if (typeof window !== 'undefined') {
+    try {
+      return new URL(DEFAULT_SYSTEM_LOGO_PATH, window.location.href).href;
+    } catch {
+      // fall through
+    }
+  }
+
+  return DEFAULT_SYSTEM_LOGO_PATH;
+}
+
+export function hasCustomLogo(customLogoUrl?: string | null): boolean {
+  return Boolean(customLogoUrl?.trim());
+}
+
+/** Display URL: custom theme logo when set, otherwise the bundled system default. */
+export function getEffectiveLogoUrl(customLogoUrl?: string | null): string {
+  if (hasCustomLogo(customLogoUrl)) {
+    return resolveThemeLogoUrl(customLogoUrl!)!;
+  }
+
+  return getDefaultLogoUrl();
+}
+
+function isFrontendStaticLogoPath(path: string): boolean {
+  return path.includes('/branding/default-logo') || path.includes('branding/default-logo');
+}
+
+/** Maps raw API theme payload to UI theme with effective default logo. */
+export function mapThemeConfigFromApi(theme: {
+  primaryColor: string;
+  receiptWidthMm?: 55 | 80;
+  logoUrl?: string;
+  customLogoUrl?: string;
+}): {
+  primaryColor: string;
+  receiptWidthMm: 55 | 80;
+  logoUrl: string;
+  customLogoUrl?: string;
+} {
+  const rawCustom = theme.customLogoUrl ?? theme.logoUrl;
+  const customLogoUrl =
+    rawCustom && !isFrontendStaticLogoPath(rawCustom)
+      ? resolveThemeLogoUrl(rawCustom)
+      : undefined;
+
+  return {
+    primaryColor: theme.primaryColor,
+    receiptWidthMm: theme.receiptWidthMm ?? 80,
+    customLogoUrl,
+    logoUrl: getEffectiveLogoUrl(customLogoUrl),
+  };
+}
+
 /** Resolves theme logo path from API to a browser-loadable URL. */
 export function resolveThemeLogoUrl(logoUrl?: string): string | undefined {
   if (!logoUrl) {
@@ -11,6 +69,10 @@ export function resolveThemeLogoUrl(logoUrl?: string): string | undefined {
 
   if (logoUrl.startsWith('data:') || logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
     return logoUrl;
+  }
+
+  if (isFrontendStaticLogoPath(logoUrl)) {
+    return getDefaultLogoUrl();
   }
 
   const normalizedPath = logoUrl.startsWith('/') ? logoUrl : `/${logoUrl}`;
@@ -30,11 +92,15 @@ export function resolveThemeLogoUrl(logoUrl?: string): string | undefined {
 /** Absolute URL for printing (Electron hidden window / data: HTML). */
 export function resolveReceiptLogoUrl(logoUrl?: string): string | undefined {
   if (!logoUrl) {
-    return undefined;
+    return getDefaultLogoUrl();
   }
 
   if (logoUrl.startsWith('data:') || logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
     return logoUrl;
+  }
+
+  if (isFrontendStaticLogoPath(logoUrl)) {
+    return getDefaultLogoUrl();
   }
 
   const normalizedPath = logoUrl.startsWith('/') ? logoUrl : `/${logoUrl}`;

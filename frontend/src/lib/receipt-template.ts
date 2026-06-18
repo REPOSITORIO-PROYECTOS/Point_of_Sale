@@ -1,3 +1,5 @@
+import { getDefaultLogoUrl } from "./theme-logo";
+
 export type ReceiptWidthMm = 55 | 80;
 
 export type ReceiptLineItem = {
@@ -89,9 +91,8 @@ export function buildReceiptHtml(
     })
     .join("");
 
-  const logoBlock = options.logoUrl
-    ? `<img src="${escapeHtml(options.logoUrl)}" alt="Logo" class="logo" />`
-    : "";
+  const receiptLogoUrl = options.logoUrl ?? getDefaultLogoUrl();
+  const logoBlock = `<img src="${escapeHtml(receiptLogoUrl)}" alt="Logo" class="logo" />`;
 
   return `<!DOCTYPE html>
 <html lang="es">

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { WailsAPI, ThemeConfig } from "./wails-bridge";
 import { PosAPI } from "./pos-api";
-import { resolveThemeLogoUrl } from "./theme-logo";
+import { getDefaultLogoUrl, mapThemeConfigFromApi } from "./theme-logo";
 
 const isWailsEnvironment = (): boolean =>
   typeof window !== "undefined" && !!window.go?.main?.App;
@@ -18,14 +18,11 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const defaultTheme: ThemeConfig = {
   primaryColor: "#030213",
   receiptWidthMm: 80,
+  logoUrl: getDefaultLogoUrl(),
 };
 
 function withResolvedLogo(config: ThemeConfig): ThemeConfig {
-  return {
-    ...config,
-    receiptWidthMm: config.receiptWidthMm ?? 80,
-    ...(config.logoUrl ? { logoUrl: resolveThemeLogoUrl(config.logoUrl) } : {}),
-  };
+  return mapThemeConfigFromApi(config);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -60,7 +57,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   };
 
   const updateTheme = async (config: Partial<ThemeConfig>) => {
-    const newConfig = { ...themeConfig, ...config };
+    const newConfig = withResolvedLogo({ ...themeConfig, ...config });
     setThemeConfig(newConfig);
 
     try {
@@ -94,7 +91,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const removeLogo = async () => {
     if (isWailsEnvironment()) {
-      await updateTheme({ logoUrl: undefined });
+      await updateTheme({ logoUrl: undefined, customLogoUrl: undefined });
       return;
     }
 

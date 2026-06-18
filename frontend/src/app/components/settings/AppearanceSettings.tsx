@@ -65,15 +65,16 @@ export function AppearanceSettings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {themeConfig.logoUrl && (
-                <div className="flex justify-center p-4 bg-muted rounded-lg">
-                  <img
-                    src={themeConfig.logoUrl}
-                    alt="Logo"
-                    className="max-h-24 object-contain"
-                  />
-                </div>
-              )}
+              <div className="flex flex-col items-center gap-2 p-4 bg-muted rounded-lg">
+                <img
+                  src={themeConfig.logoUrl}
+                  alt="Logo"
+                  className="max-h-24 object-contain"
+                />
+                {!themeConfig.customLogoUrl && (
+                  <p className="text-sm text-muted-foreground">Logo por defecto del sistema</p>
+                )}
+              </div>
 
               <div className="flex items-center gap-3">
                 <input
@@ -88,9 +89,9 @@ export function AppearanceSettings() {
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload className="size-4 mr-2" />
-                  {themeConfig.logoUrl ? "Cambiar Logo" : "Subir Logo"}
+                  {themeConfig.customLogoUrl ? "Cambiar Logo" : "Subir Logo"}
                 </Button>
-                {themeConfig.logoUrl && (
+                {themeConfig.customLogoUrl && (
                   <Button
                     variant="ghost"
                     onClick={async () => {

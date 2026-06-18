@@ -45,7 +45,7 @@ interface HeaderProps {
 
 export function Header({ activeTab, onTabChange }: HeaderProps) {
   const { user, logout, isAdmin } = useAuth();
-  const { themeConfig = { primaryColor: "#030213" } } = useTheme() || {};
+  const { themeConfig } = useTheme();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(false);
@@ -62,21 +62,12 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
         <div className="px-6 py-3 flex items-center justify-between gap-4">
           {/* Logo y nombre */}
           <div className="flex items-center gap-4">
-            {themeConfig.logoUrl ? (
-              <img
-                src={themeConfig.logoUrl}
-                alt="Logo"
-                className="h-12 object-contain cursor-pointer"
-                onClick={() => onTabChange("pos")}
-              />
-            ) : (
-              <div
-                className="size-12 rounded-lg bg-primary-foreground/10 flex items-center justify-center cursor-pointer"
-                onClick={() => onTabChange("pos")}
-              >
-                <ShoppingCart className="size-7" />
-              </div>
-            )}
+            <img
+              src={themeConfig.logoUrl}
+              alt="Logo"
+              className="h-12 object-contain cursor-pointer"
+              onClick={() => onTabChange("pos")}
+            />
             <div>
               <h1 className="text-xl font-bold">Sistema Punto de Venta</h1>
               <p className="text-xs opacity-75">Gestión de Ventas</p>
