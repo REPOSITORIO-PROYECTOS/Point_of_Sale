@@ -82,6 +82,7 @@ Ver [`docs/ai/build-and-deploy.md`](docs/ai/build-and-deploy.md). Resumen:
 
 ## Reglas para el agente
 
+0. **Cierre de sprint:** al terminar un lote de tareas, seguir [`.cursor/rules/sprint-revision-git.mdc`](.cursor/rules/sprint-revision-git.mdc) — revisar `git diff`, actualizar [`docs/ai/sprint-revision.md`](docs/ai/sprint-revision.md) y commitear por dominio.
 1. **Dev:** usar scripts de la raíz (`npm run dev:stack`), no inventar orquestadores.
 2. **No** mezclar código AFIP Python en `backend/` o `frontend/`.
 3. **No** commitear secretos, `.exe`, `node_modules`, builds.

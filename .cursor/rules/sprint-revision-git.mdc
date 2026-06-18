@@ -1,0 +1,55 @@
+---
+description: Revisar cambios del sprint, actualizar bitácora y commitear por lotes coherentes
+alwaysApply: true
+---
+
+# Sprint — revisión, registro y commits
+
+Al cerrar un slice de sprint, un lote de features, o **antes de terminar una sesión larga con trabajo sin commitear**, ejecutar esta rutina.
+
+Referencias: [`AGENTS.md`](../../AGENTS.md) · [`docs/ai/sprint-revision.md`](../../docs/ai/sprint-revision.md)
+
+## Cuándo
+
+- Tareas del sprint marcadas ✅ en `sprint-revision.md`
+- El usuario pide registrar / commitear / “que quede todo documentado”
+- El usuario pide seguir desarrollando y dejar el repo al día (“registrar todo”)
+- Fin de sesión con cambios locales pendientes
+
+## Qué hacer (en orden)
+
+1. **Inventario git** — en paralelo:
+   ```powershell
+   git status
+   git diff
+   git diff --staged
+   git log -5 --oneline
+   ```
+2. **Cruzar con sprint** — abrir `docs/ai/sprint-revision.md`:
+   - Marcar ítems completados (tablas + criterios)
+   - Añadir fila en **Bitácora** con fecha (YYYY-MM-DD), sprint y acción breve
+3. **Excluir del stage** — nunca commitear: `.env`, `*.pem`/`*.crt`/`*.key`, `database.sqlite`, `backend/storage/`, `backend/dist/`, `node_modules/`, `desktop/release/`
+4. **Commits lógicos** — agrupar por dominio (ej. `feat(products)`, `feat(cash)`, `docs(sprint)`), no un dump gigante salvo que el usuario lo pida
+5. **Mensajes** — estilo del repo (`feat:`, `docs:`, `fix:`); español OK si describe el cambio con claridad
+6. **Commit** — ver regla de commits abajo
+
+## Regla de commits (autorización del proyecto)
+
+- **Siempre** commitear cuando el usuario lo pide explícitamente.
+- **También** commitear al completar una **unidad coherente** de sprint (slice terminado + `sprint-revision.md` actualizado), sin esperar otro prompt — el dueño del repo autorizó registrar el trabajo en lotes.
+- Si hay duda sobre agrupar o el scope es enorme: resumir `git status` y **ofrecer** el plan de commits antes de ejecutar.
+- **No** hacer `push` ni tocar `git config` salvo pedido explícito.
+
+## Ejemplo de bitácora
+
+```markdown
+| 2026-06-18 | 2 | Ventas y caja cableadas a PosAPI |
+```
+
+## Checklist rápido
+
+- [ ] `git status` / `git diff` revisados
+- [ ] `sprint-revision.md` actualizado (estado + bitácora)
+- [ ] Sin secretos ni artefactos de build en stage
+- [ ] Commits por dominio con mensaje claro
+- [ ] Resumen al usuario: archivos, hashes, lo que quedó fuera
