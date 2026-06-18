@@ -20,7 +20,7 @@ npm run db:init
 Set-Location ..
 ```
 
-**Resultado esperado:** existe `backend/storage/database.sqlite`.
+**Resultado esperado:** existe `backend/storage/database.sqlite` y la carpeta `backend/storage/branding/` (logo del negocio en disco).
 
 ## 2. Levantar stack de desarrollo
 
@@ -95,6 +95,11 @@ npm run test:microservices:unit
 npm run dev:api
 npm run test:api:smoke
 
+# AFIP import real (opcional, credenciales en env)
+# $env:RUN_AFIP_IMPORT_TEST='true'
+# $env:AFIP_TEST_CUIT='...'; $env:AFIP_TEST_CERT='...'; $env:AFIP_TEST_KEY='...'
+# npm run test:api:smoke
+
 # Integración pos-api + AFIP (stack recomendado)
 npm run dev:stack
 npm run test:microservices
@@ -107,9 +112,10 @@ Plan de sprints: [`sprint-revision.md`](sprint-revision.md)
 | Problema | Acción |
 |----------|--------|
 | Puerto 3001 ocupado | `$env:PORT=3010` en backend; ajustar proxy en `frontend/vite.config.ts` si hace falta |
+| Error migración tabla `sales` | `cd backend && npm run db:init` (dropea schema legacy y recrea) |
 | AFIP no responde | Verificar Docker; `npm run dev:afip` solo |
 | `EPERM` en `backend/dist` al build | OneDrive: pausar sync o build fuera del repo |
-| UI sin datos reales | Normal: frontend usa mocks en `frontend/src/lib/wails-bridge.ts` (REST pendiente) |
+| UI sin datos reales | Verificar que `npm run dev:api` esté levantado; productos ya usan `PosAPI` |
 | Falta React en frontend | `npm install --prefix frontend react@18.3.1 react-dom@18.3.1` |
 
 ## 7. Lo que NO hacer en dev
