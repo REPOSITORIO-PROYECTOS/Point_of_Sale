@@ -1,10 +1,18 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'node:crypto';
 import { Repository } from 'typeorm';
+import { LicenseService } from '@/license/license.service';
 import type { AuthUser, JwtPayload } from './auth.types';
 import { LoginDto } from './dto/login.dto';
+import { SetupAdminDto } from './dto/setup-admin.dto';
 import { UserEntity } from './user.entity';
 
 @Injectable()
@@ -13,21 +21,58 @@ export class AuthService {
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
     private readonly jwtService: JwtService,
+    private readonly licenseService: LicenseService,
   ) {}
 
-  async login(payload: LoginDto) {
+  async getSetupStatus() {
+    const userCount = await this.usersRepository.count();
+    return { needsSetup: userCount === 0 };
+  }
+
+  // One-shot first-run admin creation. Rate limiting recommended for production hardening.
+  async setupAdmin(payload: SetupAdminDto) {
+    if (payload.password !== payload.confirmPassword) {
+      throw new BadRequestException('Las contraseñas no coinciden');
+    }
+
+    return this.usersRepository.manager.transaction(async (manager) => {
+      const userCount = await manager.count(UserEntity);
+      if (userCount > 0) {
+        throw new ConflictException('La configuración inicial ya fue completada');
+      }
+
+      const passwordHash = await bcrypt.hash(payload.password, 10);
+      const user = await manager.save(UserEntity, {
+        id: randomUUID(),
+        username: payload.username.trim(),
+        passwordHash,
+        role: 'admin',
+        isActive: true,
+      });
+
+      const authUser = toAuthUser(user);
+      const accessToken = await this.jwtService.signAsync(toJwtPayload(authUser));
+      return { accessToken, user: authUser };
+    });
+  }
+
+  async login(payload: LoginDto, clientIp = 'unknown') {
     const user = await this.usersRepository.findOne({
       where: { username: payload.username },
     });
 
     if (!user || !user.isActive) {
+      await this.licenseService.recordFailedLogin(clientIp);
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
     const passwordMatches = await bcrypt.compare(payload.password, user.passwordHash);
     if (!passwordMatches) {
+      await this.licenseService.recordFailedLogin(clientIp);
       throw new UnauthorizedException('Credenciales inválidas');
     }
+
+    this.licenseService.clearLoginAttempts(clientIp);
 
     const authUser = toAuthUser(user);
     const accessToken = await this.jwtService.signAsync(toJwtPayload(authUser));

@@ -1,5 +1,6 @@
-import { useState, useMemo, type KeyboardEvent } from "react";
+import { useState, useMemo, useRef, type KeyboardEvent } from "react";
 import { Product } from "../../../lib/wails-bridge";
+import { PosAPI } from "../../../lib/pos-api";
 import {
   getAllCategoriesFromProducts,
   getProductCategories,
@@ -40,6 +41,7 @@ export function ProductCatalog({
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [weight, setWeight] = useState("");
+  const barcodeLookupRef = useRef(false);
 
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return products;
@@ -84,15 +86,29 @@ export function ProductCatalog({
     );
   };
 
-  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter") return;
-    const match = findProductByBarcode(searchQuery);
-    if (!match) return;
+  const handleSearchKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter" || barcodeLookupRef.current) return;
+
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+
+    let match = findProductByBarcode(trimmed);
+
+    if (!match) {
+      barcodeLookupRef.current = true;
+      try {
+        match = await PosAPI.getProductByBarcode(trimmed);
+      } catch {
+        return;
+      } finally {
+        barcodeLookupRef.current = false;
+      }
+    }
+
     event.preventDefault();
     setSearchQuery("");
     handleProductClick(match);
   };
-
   const isCashOpen = cashSession && !cashSession.endTime;
 
   return (

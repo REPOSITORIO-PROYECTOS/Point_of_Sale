@@ -14,10 +14,47 @@ Plan por fases para validar backend, integraciones y cableado front-back.
 | **1** | Contrato productos (backend ↔ UI) | ✅ Completado |
 | **2** | Ventas y caja | ✅ Completado |
 | 3 | AFIP en flujo de venta | ✅ Completado (cambios locales en merge) |
-| 4 | Hardware POS + auth (barcode, print, login) | 🔄 En progreso (4.1–4.6 implementados 2026-06-18) |
+| 4 | Hardware POS + auth (barcode, print, login) | ✅ Completado (2026-06-18) |
 | **4A** | Tema/logo persistencia API | ✅ Completado |
-| 5 | Secundarios + desktop | ⬜ Pendiente |
+| 5 | Secundarios + desktop | 🔄 En progreso (5.1 parcels backend) |
 | **7** | Conectividad remota + PWA | 📋 Diseño (2026-06-18) |
+| **4.9** | Soporte recovery + licenciamiento | ✅ Completado (2026-06-18) |
+
+---
+
+## Sprint 4.9 — Soporte recovery + licenciamiento
+
+**Objetivo:** acceso controlado de soporte para export/diagnóstico y enforcement de licencia sin backdoors en código.
+
+### Tareas
+
+| ID | Tarea | Estado | Notas |
+|----|-------|--------|-------|
+| 4.9.1 | `SupportModule` — unlock/export/diagnostics/reset-admin | ✅ | `backend/src/support/` |
+| 4.9.2 | CLI `support-export.ts` offline | ✅ | `npm run support:export --prefix backend` |
+| 4.9.3 | `LicenseModule` — Ed25519, machine-id, guard 402 | ✅ | `backend/src/license/`, `tools/generate-license.mjs` |
+| 4.9.4 | UI `LicenseRequiredView` (machine-id + paste) + footer cliente | ✅ | `frontend/src/app/components/license/` |
+| 4.9.5 | UI recovery oculta (5 clics / Ctrl+Shift+Alt+R) | ✅ | `SupportRecoveryDialog`, `AppVersionFooter` |
+| 4.9.6 | Docs + `.env.example` | ✅ | `licensing.md`, claves en `keys/` |
+| 4.9.7 | Unit tests license + recovery | ✅ | `license-crypto.test.ts`, `support-recovery.service.test.ts` |
+| 4.9.8 | `POST /support/recovery/generate-license` | ✅ | Firma remota con `X-Support-Recovery-Key` |
+
+### Variables de entorno
+
+| Variable | Uso |
+|----------|-----|
+| `SUPPORT_RECOVERY_SECRET` | Mín. 32 chars; unlock + generate-license remoto |
+| `DEV_SKIP_LICENSE` | Solo `NODE_ENV=development`: omite validación |
+| `LICENSE_PUBLIC_KEY_PATH` | PEM público (default embebido en repo) |
+| `LICENSE_PRIVATE_KEY_PATH` | PEM privado para generación remota en backend |
+
+### Criterios de aceptación
+
+- [x] Sin secretos hardcodeados en source (privada en `tools/keys/`, gitignored)
+- [x] Recovery audit-logged (`support.recovery.*`)
+- [x] Licencia bloquea API (402) salvo rutas exentas
+- [x] Firma Ed25519 + vínculo `machineId` en activación y runtime
+- [x] Script CLI `tools/generate-license.mjs` para el equipo
 
 ---
 
@@ -169,7 +206,7 @@ npm run test:microservices
 | 4.1 | Escáner código de barras → agregar al carrito sin clic | ✅ | `ProductCatalog` Enter + match exacto |
 | 4.2 | `GET /products/by-barcode/:code` (lookup exacto) | ✅ | `products.controller.ts` |
 | 4.3 | Impresión térmica real vía Electron IPC | ✅ | IPC `print-receipt` (diálogo sistema; no ESC/POS) |
-| 4.4 | Entidad `User` + hash password + JWT real | ✅ | `user.entity.ts`, bcrypt, seed admin |
+| 4.4 | Entidad `User` + hash password + JWT real | ✅ | `user.entity.ts`, bcrypt, setup inicial one-shot |
 | 4.5 | `JwtAuthGuard` validar token; rutas protegidas | ✅ | Bearer JWT salvo `@PublicRoute()` |
 | 4.6 | UI login + sesión + selector cajero | ✅ | `LoginView`, `AuthProvider`, roles en Header |
 | 4.7 | Roles (`admin`, `cashier`) en guards y UI | ✅ | `RolesGuard`, tabs admin-only |
@@ -180,7 +217,7 @@ npm run test:microservices
 - [x] Escanear código + Enter agrega producto al carrito (caja abierta)
 - [x] Ticket se imprime desde `.exe` vía diálogo del sistema (MVP; sin driver ESC/POS)
 - [x] Login con usuario distinto bloquea rutas según rol
-- [ ] Ventas registran `userId` / cajero en backend
+- [x] Ventas registran `userId` / cajero en backend
 
 ---
 
@@ -188,8 +225,9 @@ npm run test:microservices
 
 | ID | Tarea | Estado |
 |----|-------|--------|
-| 5.1 | Encomiendas: backend o quitar del UI | ⬜ |
-| 5.2 | Tema/logo: persistencia | ✅ | `GET/PUT /api/settings/theme` — ver [`sprint-proximo-analisis.md`](./sprint-proximo-analisis.md) |
+| 5.1 | Encomiendas: backend o quitar del UI | 🔄 | `GET/POST /parcels` MVP backend |
+| 5.2 | Tema/logo: persistencia en disco + API | ✅ | `POST/GET/DELETE /api/settings/theme/logo`; SQLite solo referencia; migración data-URL |
+| 5.2b | Ticket térmico 55/80 mm | ✅ | `receipt-template.ts` + `receiptWidthMm` en tema |
 | 5.3 | `WailsAPI` como facade sobre `PosAPI` o eliminar | ⬜ |
 | 5.4 | Tests Electron bootstrap | ⬜ |
 | 5.5 | Auditoría UI: cablear `AuditView` a API (hoy mock) | ⬜ |
@@ -334,9 +372,9 @@ Auditoría POS: tests, escáner, impresión, auth. **CodeGraph MCP:** `user-code
 
 ### 4. Auth — ✅ MVP
 
-- ✅ `User` entity, bcrypt, JWT real, seed `admin` / `admin123` (solo dev)
-- ✅ `JwtAuthGuard` + `RolesGuard`; `POST /auth/login`, `GET /auth/me`
-- ✅ `LoginView`, token en `PosAPI`, `PATCH /users/:id` (admin)
+- ✅ `User` entity, bcrypt, JWT real, `POST /auth/setup` one-shot (sin credenciales por defecto)
+- ✅ `JwtAuthGuard` + `RolesGuard`; `GET /auth/setup-status`, `POST /auth/login`, `GET /auth/me`
+- ✅ `SetupView` + `LoginView`, token en `PosAPI`, `PATCH /users/:id` (admin)
 
 ### 5. Tests pendientes
 
@@ -368,8 +406,10 @@ Frontend :5173
 |-------|--------|--------|
 | 2026-06-17 | 0 | Auditoría inicial: front desconectado del back salvo AFIP |
 | 2026-06-18 | 3 | AFIP: clave temporal, facturar, checkout con factura opcional |
-| 2026-06-18 | 4 | Auditoría extendida: escáner, print mock, auth scaffold |
+| 2026-06-18 | 4 | Setup inicial one-shot: sin seed `admin`/`admin123`; `SetupView` en primera ejecución |
 | 2026-06-18 | 5 | Auditoría arquitectura actualizaciones → `update-architecture-audit.md` |
 | 2026-06-18 | 4A | Logo en disco + API `/settings/theme/logo`; ticket térmico 55/80 mm |
 | 2026-06-18 | 6 | Backlog actualizaciones auto (Sprint 6) documentado |
 | 2026-06-18 | 7 | Diseño conectividad remota → `remote-connectivity-architecture.md` |
+| 2026-06-18 | 4.9 | Soporte recovery + licenciamiento (API, UI, docs, tests) |
+| 2026-06-18 | 4.9 | Refino licencias: Ed25519, machine-id, `generate-license`, tests crypto |

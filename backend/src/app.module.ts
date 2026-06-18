@@ -19,6 +19,9 @@ import { ProductsModule } from './resources/products/products.module';
 import { SalesModule } from './resources/sales/sales.module';
 import { SettingsModule } from './resources/settings/settings.module';
 import { UsersModule } from './resources/users/users.module';
+import { LicenseModule } from './license/license.module';
+import { LicenseGuard } from './license/license.guard';
+import { SupportModule } from './support/support.module';
 import { AuditLogModule } from './services/audit-log.module';
 import { EnhancedLoggerModule } from './services/enhanced-logger.module';
 
@@ -42,11 +45,14 @@ import { EnhancedLoggerModule } from './services/enhanced-logger.module';
     ParcelsModule,
     SettingsModule,
     UsersModule,
+    LicenseModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
     SqliteBootstrapService,
+    { provide: APP_GUARD, useClass: LicenseGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_INTERCEPTOR, useClass: ControllerLoggingInterceptor },

@@ -27,4 +27,13 @@ export const env = {
   afipProduction: process.env.AFIP_PRODUCTION === 'true',
   jwtSecret: process.env.JWT_SECRET ?? 'dev-pos-jwt-secret-change-in-production',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
+  devSkipLicense:
+    process.env.NODE_ENV === 'development' && process.env.DEV_SKIP_LICENSE === 'true',
+  licensePublicKeyPath: process.env.LICENSE_PUBLIC_KEY_PATH
+    ? path.resolve(process.env.LICENSE_PUBLIC_KEY_PATH)
+    : path.join(__dirname, '..', 'license', 'keys', 'license-public.pem'),
+  licensePrivateKeyPath: process.env.LICENSE_PRIVATE_KEY_PATH
+    ? path.resolve(process.env.LICENSE_PRIVATE_KEY_PATH)
+    : path.resolve(process.cwd(), '..', 'tools', 'keys', 'license-private.pem'),
+  supportRecoverySecret: process.env.SUPPORT_RECOVERY_SECRET,
 };

@@ -7,7 +7,7 @@ import { Upload } from "lucide-react";
 import { toast } from "sonner";
 
 export function AppearanceSettings() {
-  const { themeConfig, updateTheme, uploadLogo } = useTheme();
+  const { themeConfig, updateTheme, uploadLogo, removeLogo } = useTheme();
   const [selectedColor, setSelectedColor] = useState(themeConfig.primaryColor);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -23,6 +23,17 @@ export function AppearanceSettings() {
 
     if (!file.type.startsWith("image/")) {
       toast.error("Por favor selecciona un archivo de imagen");
+      return;
+    }
+
+    const allowed = ["image/png", "image/jpeg", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      toast.error("Formato no permitido. Use PNG, JPEG o WebP.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("El logo no puede superar 2 MB");
       return;
     }
 
@@ -68,7 +79,7 @@ export function AppearanceSettings() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/webp"
                   onChange={handleLogoUpload}
                   className="hidden"
                 />
@@ -82,12 +93,42 @@ export function AppearanceSettings() {
                 {themeConfig.logoUrl && (
                   <Button
                     variant="ghost"
-                    onClick={() => updateTheme({ logoUrl: undefined })}
+                    onClick={async () => {
+                      try {
+                        await removeLogo();
+                        toast.success("Logo eliminado");
+                      } catch {
+                        toast.error("No se pudo eliminar el logo");
+                      }
+                    }}
                   >
                     Quitar Logo
                   </Button>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Impresión de tickets</CardTitle>
+              <CardDescription>
+                Ancho del papel térmico para el comprobante de venta (55 mm o 80 mm)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3">
+              {([55, 80] as const).map((width) => (
+                <Button
+                  key={width}
+                  variant={themeConfig.receiptWidthMm === width ? "default" : "outline"}
+                  onClick={() => {
+                    updateTheme({ receiptWidthMm: width });
+                    toast.success(`Ancho de ticket: ${width} mm`);
+                  }}
+                >
+                  {width} mm
+                </Button>
+              ))}
             </CardContent>
           </Card>
 

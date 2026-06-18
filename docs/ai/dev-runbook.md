@@ -22,6 +22,27 @@ Set-Location ..
 
 **Resultado esperado:** existe `backend/storage/database.sqlite` y la carpeta `backend/storage/branding/` (logo del negocio en disco).
 
+Variables opcionales de soporte/licencia en `backend/.env` (ver [`support-recovery.md`](support-recovery.md) y [`licensing.md`](licensing.md)):
+
+```powershell
+# Solo equipo interno — NUNCA commitear valores reales
+# SUPPORT_RECOVERY_SECRET=minimo-32-caracteres-secreto-interno
+# LICENSE_SIGNING_SECRET=secreto-hmac-licencias
+```
+
+En desarrollo, licencia de prueba: `DEV-LICENSE-UNLIMITED` con cliente `DEV`.
+
+### Primera ejecución de la app
+
+Si la BD no tiene usuarios, la UI muestra **Configuración inicial** (`SetupView`) para crear el administrador una sola vez. No hay contraseña por defecto.
+
+Para repetir el flujo en dev:
+
+```powershell
+Remove-Item backend/storage/database.sqlite -ErrorAction SilentlyContinue
+cd backend; npm run db:init; cd ..
+```
+
 ## 2. Levantar stack de desarrollo
 
 ### Opción A — Todo junto (recomendado)
@@ -74,8 +95,11 @@ Electron carga `http://localhost:5173`. El backend ya corre vía `dev:stack` (no
 
 ## 4. Verificación (health checks)
 
+En la **primera apertura** de http://localhost:5173 con BD vacía, la UI pide crear el administrador (no hay usuario por defecto).
+
 ```powershell
 Invoke-RestMethod http://127.0.0.1:3001/api
+Invoke-RestMethod http://127.0.0.1:3001/api/auth/setup-status
 Invoke-RestMethod http://127.0.0.1:3001/api/integrations/afip/health
 Invoke-RestMethod http://127.0.0.1:5086/afipws/test
 ```

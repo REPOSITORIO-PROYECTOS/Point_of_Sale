@@ -29,21 +29,49 @@ async function request(path: string, init?: RequestInit): Promise<{ response: Re
 
 let adminToken: string | null = null;
 
+const SMOKE_ADMIN_USERNAME = process.env.POS_TEST_USERNAME ?? 'smoke-admin';
+const SMOKE_ADMIN_PASSWORD = process.env.POS_TEST_PASSWORD ?? 'smoke-test-pass-123';
+
 async function ensureAdminToken(): Promise<string> {
   if (adminToken) {
     return adminToken;
   }
 
-  const { response, body } = await request('/auth/login', {
+  const loginAttempt = await request('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+    body: JSON.stringify({ username: SMOKE_ADMIN_USERNAME, password: SMOKE_ADMIN_PASSWORD }),
   });
-  assert.equal(response.status, 201);
-  const token = (body as Record<string, unknown>).accessToken;
-  assert.equal(typeof token, 'string');
-  assert.notEqual(token, 'scaffold-token');
-  adminToken = token as string;
-  return adminToken;
+
+  if (loginAttempt.response.status === 201) {
+    const token = (loginAttempt.body as Record<string, unknown>).accessToken;
+    assert.equal(typeof token, 'string');
+    adminToken = token as string;
+    return adminToken;
+  }
+
+  const { response: statusResponse, body: statusBody } = await request('/auth/setup-status');
+  assert.equal(statusResponse.status, 200);
+  const needsSetup = (statusBody as Record<string, unknown>).needsSetup;
+
+  if (needsSetup === true) {
+    const setup = await request('/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: SMOKE_ADMIN_USERNAME,
+        password: SMOKE_ADMIN_PASSWORD,
+        confirmPassword: SMOKE_ADMIN_PASSWORD,
+      }),
+    });
+    assert.equal(setup.response.status, 201);
+    const token = (setup.body as Record<string, unknown>).accessToken;
+    assert.equal(typeof token, 'string');
+    adminToken = token as string;
+    return adminToken;
+  }
+
+  throw new Error(
+    'No se pudo obtener token admin. Definí POS_TEST_USERNAME y POS_TEST_PASSWORD con credenciales válidas.',
+  );
 }
 
 async function authedRequest(path: string, init?: RequestInit) {
@@ -223,24 +251,22 @@ test('AFIP integration health', async (t) => {
   assert.equal(typeof status.configured, 'boolean');
 });
 
-test('auth login returns JWT', async (t) => {
+test('auth setup-status and login returns JWT', async (t) => {
   skipIfOffline(t);
-  const { response, body } = await request('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ username: 'admin', password: 'admin123' }),
-  });
-  assert.equal(response.status, 201);
-  const payload = body as Record<string, unknown>;
-  assert.equal(typeof payload.accessToken, 'string');
-  assert.notEqual(payload.accessToken, 'scaffold-token');
-  assert.equal((payload.user as Record<string, unknown>).username, 'admin');
-  assert.equal((payload.user as Record<string, unknown>).role, 'admin');
+
+  const status = await request('/auth/setup-status');
+  assert.equal(status.response.status, 200);
+  assert.equal(typeof (status.body as Record<string, unknown>).needsSetup, 'boolean');
+
+  const token = await ensureAdminToken();
+  assert.equal(typeof token, 'string');
+  assert.notEqual(token, 'scaffold-token');
 
   const me = await request('/auth/me', {
-    headers: { Authorization: `Bearer ${payload.accessToken as string}` },
+    headers: { Authorization: `Bearer ${token}` },
   });
   assert.equal(me.response.status, 200);
-  assert.equal((me.body as Record<string, unknown>).username, 'admin');
+  assert.equal(typeof (me.body as Record<string, unknown>).username, 'string');
 });
 
 test('products lookup by barcode exact match', async (t) => {
@@ -393,4 +419,30 @@ test('settings theme persistence', async (t) => {
   });
   assert.equal(restored.response.status, 200);
   assert.equal((restored.body as Record<string, unknown>).primaryColor, '#030213');
+});
+
+test('parcels CRUD contract', async (t) => {
+  skipIfOffline(t);
+
+  const parcelId = `smoke-parcel-${Date.now()}`;
+  const created = await authedRequest('/parcels', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: parcelId,
+      customerName: 'Cliente smoke',
+      description: 'Paquete test',
+      amount: 150,
+      status: 'pending',
+    }),
+  });
+  assert.equal(created.response.status, 201);
+  assert.equal((created.body as Record<string, unknown>).id, parcelId);
+
+  const fetched = await authedRequest(`/parcels/${parcelId}`);
+  assert.equal(fetched.response.status, 200);
+  assert.equal((fetched.body as Record<string, unknown>).customerName, 'Cliente smoke');
+
+  const list = await authedRequest('/parcels');
+  assert.ok(Array.isArray(list.body));
+  assert.ok((list.body as Array<Record<string, unknown>>).some((parcel) => parcel.id === parcelId));
 });

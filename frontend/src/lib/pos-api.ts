@@ -1,4 +1,4 @@
-import type { CashSession, PaymentMethod, Product, ThemeConfig, Transaction } from "./wails-bridge";
+import type { CashSession, PaymentMethod, Parcel, Product, ThemeConfig, Transaction } from "./wails-bridge";
 import { normalizeProduct } from "./product-categories";
 import { resolveThemeLogoUrl } from "./theme-logo";
 
@@ -16,6 +16,57 @@ export type AuthUser = {
 export type LoginResponse = {
   accessToken: string;
   user: AuthUser;
+};
+
+export type LicenseStatus = "active" | "expired" | "blocked" | "missing";
+
+export type LicenseStatusResponse = {
+  status: LicenseStatus;
+  allowed: boolean;
+  clientNumber: string | null;
+  clientNumberMasked: string | null;
+  licenseId: string | null;
+  activatedAt: string | null;
+  expiresAt: string | null;
+  machineId: string;
+  message: string | null;
+};
+
+export type LicenseActivationResponse = {
+  status: "active";
+  clientNumber: string;
+  licenseId: string;
+  expiresAt: string | null;
+};
+
+export type MachineIdResponse = {
+  machineId: string;
+};
+
+export type SupportRecoveryUnlockResponse = {
+  recoveryToken: string;
+  expiresAt: string;
+};
+
+export type SupportRecoveryDiagnostics = {
+  dbPath: string;
+  schemaVersion: string;
+  licenseStatus: string;
+  licenseAllowed: boolean;
+  userCount: number;
+  nodeEnv: string;
+  appDataDir: string;
+  lastSync: string | null;
+};
+
+export type SetupStatusResponse = {
+  needsSetup: boolean;
+};
+
+export type SetupAdminPayload = {
+  username: string;
+  password: string;
+  confirmPassword: string;
 };
 
 function getAuthToken(): string | null {
@@ -116,6 +167,14 @@ export type AfipFacturaPayload = {
 };
 
 export const PosAPI = {
+  getSetupStatus: () => request<SetupStatusResponse>("/auth/setup-status"),
+
+  setupAdmin: (payload: SetupAdminPayload) =>
+    request<LoginResponse>("/auth/setup", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   login: (username: string, password: string) =>
     request<LoginResponse>("/auth/login", {
       method: "POST",
@@ -257,8 +316,12 @@ export const PosAPI = {
     const formData = new FormData();
     formData.append("file", file);
 
+    const token = getAuthToken();
     const response = await fetch(`${DEFAULT_BASE_URL}/settings/theme/logo`, {
       method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: formData,
     });
 
@@ -281,6 +344,32 @@ export const PosAPI = {
       ...theme,
       ...(theme.logoUrl ? { logoUrl: resolveThemeLogoUrl(theme.logoUrl) } : {}),
     })),
+
+  getLicenseStatus: () => request<LicenseStatusResponse>("/license/status"),
+
+  getMachineId: () => request<MachineIdResponse>("/license/machine-id"),
+
+  activateLicense: (licenseKey: string) =>
+    request<LicenseActivationResponse>("/license/activate", {
+      method: "POST",
+      body: JSON.stringify({ licenseKey }),
+    }),
+
+  supportRecoveryUnlock: (recoveryKey: string) =>
+    request<SupportRecoveryUnlockResponse>("/support/recovery/unlock", {
+      method: "POST",
+      headers: { "X-Support-Recovery-Key": recoveryKey },
+    }),
+
+  supportRecoveryDiagnostics: (recoveryToken: string) =>
+    request<SupportRecoveryDiagnostics>("/support/recovery/diagnostics", {
+      headers: { "X-Support-Recovery-Token": recoveryToken },
+    }),
+
+  supportRecoveryExportJson: (recoveryToken: string) =>
+    request<Record<string, unknown>>("/support/recovery/export", {
+      headers: { "X-Support-Recovery-Token": recoveryToken },
+    }),
 };
 
 export function readFileAsText(file: File): Promise<string> {

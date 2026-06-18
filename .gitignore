@@ -63,3 +63,6 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# License signing keys (team only)
+tools/keys/
