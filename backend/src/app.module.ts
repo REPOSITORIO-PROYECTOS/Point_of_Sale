@@ -14,8 +14,11 @@ import { ControllerLoggingInterceptor } from './interceptors/controller-logging.
 import { AfipModule } from './integrations/afip/afip.module';
 import { CashModule } from './resources/cash/cash.module';
 import { InventoryModule } from './resources/inventory/inventory.module';
+import { ParcelsModule } from './resources/parcels/parcels.module';
 import { ProductsModule } from './resources/products/products.module';
 import { SalesModule } from './resources/sales/sales.module';
+import { SettingsModule } from './resources/settings/settings.module';
+import { UsersModule } from './resources/users/users.module';
 import { AuditLogModule } from './services/audit-log.module';
 import { EnhancedLoggerModule } from './services/enhanced-logger.module';
 
@@ -36,6 +39,9 @@ import { EnhancedLoggerModule } from './services/enhanced-logger.module';
     SalesModule,
     InventoryModule,
     CashModule,
+    ParcelsModule,
+    SettingsModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

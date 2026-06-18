@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { env } from './config/env.config';
+import { runSqliteLegacyMigrations } from './database/sqlite-legacy-migrations';
 
 function isAllowedDesktopOrigin(origin: string) {
   if (origin === 'null' || origin.startsWith('file://')) {
@@ -14,6 +15,8 @@ function isAllowedDesktopOrigin(origin: string) {
 }
 
 async function bootstrap() {
+  await runSqliteLegacyMigrations(env.sqliteDbPath);
+
   const app = await NestFactory.create(AppModule, {
     cors: {
       origin: (origin, callback) => {

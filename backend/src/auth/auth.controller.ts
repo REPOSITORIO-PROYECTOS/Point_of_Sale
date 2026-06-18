@@ -1,8 +1,12 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { PublicRoute } from '@/decorators/public-routes.decorator';
+import type { AuthUser } from './auth.types';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+
+type AuthenticatedRequest = Request & { user?: AuthUser };
 
 @ApiTags('auth')
 @Controller('auth')
@@ -16,8 +20,7 @@ export class AuthController {
   }
 
   @Get('me')
-  me() {
-    return this.authService.profile();
+  me(@Req() request: AuthenticatedRequest) {
+    return this.authService.profile(request.user!);
   }
 }
-
