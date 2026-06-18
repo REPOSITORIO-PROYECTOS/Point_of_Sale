@@ -182,16 +182,55 @@ async function testPosApiModule(name, path, postPayload) {
   }
 }
 
+async function ensureOpenCashSession() {
+  try {
+    const { response, body } = await fetchJson(`${POS_API_URL}/cash/session`);
+    if (response.ok && body && !body.endTime) {
+      record('pos-api cash session ready', true, `session=${body.id}`);
+      return true;
+    }
+
+    const started = await fetchJson(`${POS_API_URL}/cash/session/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initialBalance: 100 }),
+    });
+    const ok = started.response.ok;
+    record('pos-api cash session start', ok, `status=${started.response.status}`);
+    return ok;
+  } catch (error) {
+    record('pos-api cash session', false, error instanceof Error ? error.message : String(error));
+    return false;
+  }
+}
+
 async function testPosApiModules() {
   const stamp = Date.now();
-  const results = await Promise.all([
-    testPosApiModule('products', '/products', { name: `verify-product-${stamp}` }),
-    testPosApiModule('sales', '/sales', { productId: 'verify-product-1', quantity: 1 }),
+  const productId = `verify-product-${stamp}`;
+
+  const productOk = await testPosApiModule('products', '/products', {
+    id: productId,
+    name: `verify-product-${stamp}`,
+    price: 10,
+    categories: ['Otros'],
+    stock: 10,
+  });
+
+  const sessionOk = await ensureOpenCashSession();
+
+  const salesOk = await testPosApiModule('sales', '/sales', {
+    id: `verify-sale-${stamp}`,
+    items: [{ id: productId, name: `verify-product-${stamp}`, price: 10, quantity: 1 }],
+    total: 10,
+    payments: [{ type: 'cash', amount: 10, label: 'Efectivo' }],
+  });
+
+  const [cashOk, inventoryOk] = await Promise.all([
     testPosApiModule('cash', '/cash', { description: 'verify smoke', amount: 50 }),
     testPosApiModule('inventory', '/inventory', { name: `verify-inventory-${stamp}` }),
   ]);
 
-  return results.every(Boolean);
+  return productOk && sessionOk && salesOk && cashOk && inventoryOk;
 }
 
 console.log('Verificando microservicios POS...\n');

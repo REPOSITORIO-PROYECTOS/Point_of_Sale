@@ -27,6 +27,36 @@ async function request(path: string, init?: RequestInit): Promise<{ response: Re
   return { response, body };
 }
 
+let adminToken: string | null = null;
+
+async function ensureAdminToken(): Promise<string> {
+  if (adminToken) {
+    return adminToken;
+  }
+
+  const { response, body } = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+  });
+  assert.equal(response.status, 201);
+  const token = (body as Record<string, unknown>).accessToken;
+  assert.equal(typeof token, 'string');
+  assert.notEqual(token, 'scaffold-token');
+  adminToken = token as string;
+  return adminToken;
+}
+
+async function authedRequest(path: string, init?: RequestInit) {
+  const token = await ensureAdminToken();
+  return request(path, {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
 function skipIfOffline(t: { skip: (message?: string) => void }) {
   if (!apiLive) {
     t.skip('pos-api no responde — levantar con: npm run dev:api');
@@ -45,74 +75,140 @@ test('pos-api health', async (t) => {
   assert.equal((body as Record<string, unknown>)?.service, 'point-of-sale-backend');
 });
 
-test('products GET and POST', async (t) => {
+test('products CRUD contract', async (t) => {
   skipIfOffline(t);
-  const listBefore = await request('/products');
-  assert.equal(listBefore.response.status, 200);
-  assert.ok(Array.isArray(listBefore.body));
 
-  const uniqueName = `smoke-product-${Date.now()}`;
-  const created = await request('/products', {
+  const productId = `smoke-${Date.now()}`;
+  const payload = {
+    id: productId,
+    name: 'Cafe smoke test',
+    price: 2500,
+    cost: 1200,
+    categories: ['Cafetería', 'Bebidas'],
+    stock: 10,
+    minStock: 2,
+    unit: 'unidad',
+    barcodes: ['1234567890123'],
+  };
+
+  const created = await authedRequest('/products', {
     method: 'POST',
-    body: JSON.stringify({ name: uniqueName }),
+    body: JSON.stringify(payload),
   });
   assert.equal(created.response.status, 201);
-  assert.equal((created.body as Record<string, unknown>)?.name, uniqueName);
+  const createdBody = created.body as Record<string, unknown>;
+  assert.equal(createdBody.id, productId);
+  assert.equal(createdBody.name, payload.name);
+  assert.equal(createdBody.price, payload.price);
+  assert.deepEqual(createdBody.categories, payload.categories);
+  assert.equal(createdBody.stock, payload.stock);
+  assert.equal(createdBody.unit, payload.unit);
 
-  const listAfter = await request('/products');
-  const items = listAfter.body as Array<Record<string, unknown>>;
-  assert.ok(items.some((item) => item.name === uniqueName));
+  const updated = await authedRequest(`/products/${productId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ price: 2700, categories: payload.categories }),
+  });
+  assert.equal(updated.response.status, 200);
+  assert.equal((updated.body as Record<string, unknown>).price, 2700);
+
+  const fetched = await authedRequest(`/products/${productId}`);
+  assert.equal(fetched.response.status, 200);
+  assert.equal((fetched.body as Record<string, unknown>).price, 2700);
+
+  const removed = await authedRequest(`/products/${productId}`, { method: 'DELETE' });
+  assert.equal(removed.response.status, 200);
+  assert.equal((removed.body as Record<string, unknown>).deleted, true);
 });
 
-test('sales GET and POST', async (t) => {
+test('cash session and sale flow', async (t) => {
   skipIfOffline(t);
-  const listBefore = await request('/sales');
-  assert.equal(listBefore.response.status, 200);
-  assert.ok(Array.isArray(listBefore.body));
 
-  const created = await request('/sales', {
+  const stamp = Date.now();
+  const productId = `smoke-sale-prod-${stamp}`;
+
+  await authedRequest('/products', {
     method: 'POST',
-    body: JSON.stringify({ productId: 'smoke-product-1', quantity: 1 }),
+    body: JSON.stringify({
+      id: productId,
+      name: 'Producto venta smoke',
+      price: 100,
+      categories: ['Otros'],
+      stock: 5,
+      unit: 'unidad',
+    }),
+  });
+
+  const sessionState = await authedRequest('/cash/session');
+  const currentSession = sessionState.body as Record<string, unknown> | null;
+
+  if (!currentSession || currentSession.endTime) {
+    const started = await authedRequest('/cash/session/start', {
+      method: 'POST',
+      body: JSON.stringify({ initialBalance: 1000 }),
+    });
+    assert.equal(started.response.status, 201);
+  }
+
+  const sessionBefore = await authedRequest('/cash/session');
+  const totalBefore = Number((sessionBefore.body as Record<string, unknown>)?.totalSales ?? 0);
+
+  const saleId = `smoke-sale-${stamp}`;
+  const created = await authedRequest('/sales', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: saleId,
+      items: [{ id: productId, name: 'Producto venta smoke', price: 100, quantity: 2 }],
+      total: 200,
+      payments: [{ type: 'cash', amount: 200, label: 'Efectivo' }],
+      timestamp: new Date().toISOString(),
+    }),
   });
   assert.equal(created.response.status, 201);
-  assert.equal((created.body as Record<string, unknown>)?.productId, 'smoke-product-1');
+  assert.equal((created.body as Record<string, unknown>).total, 200);
 
-  const listAfter = await request('/sales');
-  assert.ok((listAfter.body as unknown[]).length >= (listBefore.body as unknown[]).length);
+  const productAfter = await authedRequest(`/products/${productId}`);
+  assert.equal((productAfter.body as Record<string, unknown>).stock, 3);
+
+  const sessionAfter = await authedRequest('/cash/session');
+  assert.equal((sessionAfter.body as Record<string, unknown>).totalSales, totalBefore + 200);
+
+  const list = await authedRequest('/sales');
+  assert.ok(Array.isArray(list.body));
+  assert.ok((list.body as Array<Record<string, unknown>>).some((sale) => sale.id === saleId));
 });
 
 test('cash GET and POST', async (t) => {
   skipIfOffline(t);
-  const listBefore = await request('/cash');
+  const listBefore = await authedRequest('/cash');
   assert.equal(listBefore.response.status, 200);
   assert.ok(Array.isArray(listBefore.body));
 
-  const created = await request('/cash', {
+  const created = await authedRequest('/cash', {
     method: 'POST',
     body: JSON.stringify({ description: 'Smoke test ingreso', amount: 100 }),
   });
   assert.equal(created.response.status, 201);
   assert.equal((created.body as Record<string, unknown>)?.description, 'Smoke test ingreso');
 
-  const listAfter = await request('/cash');
+  const listAfter = await authedRequest('/cash');
   assert.ok((listAfter.body as unknown[]).length >= (listBefore.body as unknown[]).length);
 });
 
 test('inventory GET and POST', async (t) => {
   skipIfOffline(t);
-  const listBefore = await request('/inventory');
+  const listBefore = await authedRequest('/inventory');
   assert.equal(listBefore.response.status, 200);
   assert.ok(Array.isArray(listBefore.body));
 
   const uniqueName = `smoke-inventory-${Date.now()}`;
-  const created = await request('/inventory', {
+  const created = await authedRequest('/inventory', {
     method: 'POST',
     body: JSON.stringify({ name: uniqueName }),
   });
   assert.equal(created.response.status, 201);
   assert.equal((created.body as Record<string, unknown>)?.name, uniqueName);
 
-  const listAfter = await request('/inventory');
+  const listAfter = await authedRequest('/inventory');
   const items = listAfter.body as Array<Record<string, unknown>>;
   assert.ok(items.some((item) => item.name === uniqueName));
 });
@@ -125,4 +221,176 @@ test('AFIP integration health', async (t) => {
   assert.equal(status.microservice, true);
   assert.equal(typeof status.afipReachable, 'boolean');
   assert.equal(typeof status.configured, 'boolean');
+});
+
+test('auth login returns JWT', async (t) => {
+  skipIfOffline(t);
+  const { response, body } = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+  });
+  assert.equal(response.status, 201);
+  const payload = body as Record<string, unknown>;
+  assert.equal(typeof payload.accessToken, 'string');
+  assert.notEqual(payload.accessToken, 'scaffold-token');
+  assert.equal((payload.user as Record<string, unknown>).username, 'admin');
+  assert.equal((payload.user as Record<string, unknown>).role, 'admin');
+
+  const me = await request('/auth/me', {
+    headers: { Authorization: `Bearer ${payload.accessToken as string}` },
+  });
+  assert.equal(me.response.status, 200);
+  assert.equal((me.body as Record<string, unknown>).username, 'admin');
+});
+
+test('products lookup by barcode exact match', async (t) => {
+  skipIfOffline(t);
+
+  const barcode = `smoke-bc-${Date.now()}`;
+  const productId = `smoke-bc-prod-${Date.now()}`;
+  await authedRequest('/products', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: productId,
+      name: 'Producto barcode smoke',
+      price: 50,
+      categories: ['Otros'],
+      stock: 1,
+      unit: 'unidad',
+      barcodes: [barcode],
+    }),
+  });
+
+  const lookup = await authedRequest(`/products/by-barcode/${barcode}`);
+  assert.equal(lookup.response.status, 200);
+  assert.equal((lookup.body as Record<string, unknown>).id, productId);
+});
+
+const SAMPLE_AFIP_CERT = `-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAKexample
+-----END CERTIFICATE-----`;
+
+const SAMPLE_AFIP_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCexample
+-----END PRIVATE KEY-----`;
+
+test('AFIP facturar requires full credentials', async (t) => {
+  skipIfOffline(t);
+
+  const config = await request('/integrations/afip/config');
+  assert.equal(config.response.status, 200);
+  const configBody = config.body as Record<string, unknown>;
+
+  if (configBody.configured) {
+    return t.skip('AFIP ya está configurado en este entorno');
+  }
+
+  const result = await request('/integrations/afip/facturar', {
+    method: 'POST',
+    body: JSON.stringify({
+      tipo_afip: 6,
+      tipo_documento: 99,
+      documento: '0',
+      total: 100,
+      id_condicion_iva: 5,
+    }),
+  });
+
+  assert.equal(result.response.status, 400);
+});
+
+test('AFIP credentials partial then complete flow', async (t) => {
+  skipIfOffline(t);
+
+  const configBefore = await request('/integrations/afip/config');
+  assert.equal(configBefore.response.status, 200);
+
+  if ((configBefore.body as Record<string, unknown>).hasCertificate) {
+    return t.skip('Entorno ya tiene certificado AFIP; omitiendo flujo parcial destructivo');
+  }
+
+  const stamp = Date.now();
+  const cuit = `20${String(stamp).slice(-9)}`;
+
+  const keySaved = await request('/integrations/afip/private-key', {
+    method: 'POST',
+    body: JSON.stringify({
+      cuit,
+      clavePrivada: SAMPLE_AFIP_KEY,
+      puntoVenta: 1,
+      production: false,
+    }),
+  });
+  assert.equal(keySaved.response.status, 201);
+
+  const partialStatus = (keySaved.body as { status: Record<string, unknown> }).status;
+  assert.equal(partialStatus.configured, false);
+  assert.equal(partialStatus.pendingCertificate, true);
+  assert.equal(partialStatus.hasPrivateKey, true);
+  assert.equal(partialStatus.hasCertificate, false);
+
+  const certSaved = await request('/integrations/afip/certificate', {
+    method: 'POST',
+    body: JSON.stringify({ certificado: SAMPLE_AFIP_CERT }),
+  });
+  assert.equal(certSaved.response.status, 201);
+
+  const completeStatus = (certSaved.body as { status: Record<string, unknown> }).status;
+  assert.equal(completeStatus.configured, true);
+  assert.equal(completeStatus.pendingCertificate, false);
+  assert.equal(completeStatus.hasCertificate, true);
+});
+
+test('AFIP real import test', async (t) => {
+  if (process.env.RUN_AFIP_IMPORT_TEST !== 'true') {
+    return t.skip('Set RUN_AFIP_IMPORT_TEST=true with real PEM env vars to run');
+  }
+
+  skipIfOffline(t);
+
+  const cuit = process.env.AFIP_TEST_CUIT;
+  const certificado = process.env.AFIP_TEST_CERT;
+  const clavePrivada = process.env.AFIP_TEST_KEY;
+
+  if (!cuit || !certificado || !clavePrivada) {
+    return t.skip('Missing AFIP_TEST_CUIT, AFIP_TEST_CERT, or AFIP_TEST_KEY');
+  }
+
+  const imported = await request('/integrations/afip/credentials', {
+    method: 'POST',
+    body: JSON.stringify({
+      cuit,
+      certificado,
+      clavePrivada,
+      puntoVenta: Number(process.env.AFIP_TEST_PUNTO_VENTA ?? 1),
+      production: process.env.AFIP_TEST_PRODUCTION === 'true',
+    }),
+  });
+
+  assert.equal(imported.response.status, 201);
+  assert.equal((imported.body as { status: Record<string, unknown> }).status.configured, true);
+});
+
+test('settings theme persistence', async (t) => {
+  skipIfOffline(t);
+
+  const initial = await authedRequest('/settings/theme');
+  assert.equal(initial.response.status, 200);
+  assert.equal((initial.body as Record<string, unknown>).primaryColor, '#030213');
+  assert.equal((initial.body as Record<string, unknown>).receiptWidthMm, 80);
+
+  const updated = await authedRequest('/settings/theme', {
+    method: 'PUT',
+    body: JSON.stringify({ primaryColor: '#1a2b3c', receiptWidthMm: 55 }),
+  });
+  assert.equal(updated.response.status, 200);
+  assert.equal((updated.body as Record<string, unknown>).primaryColor, '#1a2b3c');
+  assert.equal((updated.body as Record<string, unknown>).receiptWidthMm, 55);
+
+  const restored = await authedRequest('/settings/theme', {
+    method: 'PUT',
+    body: JSON.stringify({ primaryColor: '#030213', receiptWidthMm: 80 }),
+  });
+  assert.equal(restored.response.status, 200);
+  assert.equal((restored.body as Record<string, unknown>).primaryColor, '#030213');
 });
