@@ -1,9 +1,12 @@
 import { customAlphabet } from 'nanoid';
+import { buildDefaultSnapshot, normalizeSnapshot, snapshotSummary } from '../snapshot.js';
 import type {
   PairingCode,
   Register,
   RegisterSnapshot,
+  RegisterSummary,
   Tenant,
+  TenantDetail,
 } from '../types.js';
 
 const generateId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 12);
@@ -16,8 +19,9 @@ export class MemoryStore {
   private registersByTenant = new Map<string, Set<string>>();
   private pairingCodes = new Map<string, PairingCode>();
   private snapshots = new Map<string, RegisterSnapshot>();
+  private heartbeatHistory = new Map<string, string[]>();
 
-  createTenant(clientNumber: string, name: string): Tenant {
+  createTenant(clientNumber: string, name: string, contactEmail?: string): Tenant {
     const normalized = clientNumber.trim().toUpperCase();
     if (this.tenantsByClientNumber.has(normalized)) {
       throw new Error(`Tenant ${normalized} already exists`);
@@ -27,6 +31,7 @@ export class MemoryStore {
       id: generateId(),
       clientNumber: normalized,
       name: name.trim(),
+      ...(contactEmail?.trim() ? { contactEmail: contactEmail.trim() } : {}),
       createdAt: new Date().toISOString(),
     };
 
@@ -36,12 +41,33 @@ export class MemoryStore {
     return tenant;
   }
 
+  listTenants(): Tenant[] {
+    return [...this.tenants.values()].sort((left, right) =>
+      left.clientNumber.localeCompare(right.clientNumber),
+    );
+  }
+
   getTenantByClientNumber(clientNumber: string): Tenant | undefined {
     return this.tenantsByClientNumber.get(clientNumber.trim().toUpperCase());
   }
 
   getTenantById(tenantId: string): Tenant | undefined {
     return this.tenants.get(tenantId);
+  }
+
+  getTenantDetail(clientNumber: string): TenantDetail | undefined {
+    const tenant = this.getTenantByClientNumber(clientNumber);
+    if (!tenant) {
+      return undefined;
+    }
+
+    return {
+      clientNumber: tenant.clientNumber,
+      name: tenant.name,
+      contactEmail: tenant.contactEmail,
+      createdAt: tenant.createdAt,
+      registers: this.listRegisters(clientNumber).map((register) => this.toRegisterSummary(register, clientNumber)),
+    };
   }
 
   getRegisterById(registerId: string): Register | undefined {
@@ -214,19 +240,42 @@ export class MemoryStore {
     return register;
   }
 
-  touchRegister(registerId: string): Register | undefined {
+  recordHeartbeat(registerId: string, at?: string): string[] {
+    const timestamp = at ?? new Date().toISOString();
+    const history = this.heartbeatHistory.get(registerId) ?? [];
+    const next = [timestamp, ...history].slice(0, 5);
+    this.heartbeatHistory.set(registerId, next);
+    return next;
+  }
+
+  getHeartbeatHistory(registerId: string): string[] {
+    return this.heartbeatHistory.get(registerId) ?? [];
+  }
+
+  touchRegister(registerId: string, at?: string): Register | undefined {
     const register = this.registers.get(registerId);
     if (!register) {
       return undefined;
     }
 
-    register.lastSeen = new Date().toISOString();
+    const timestamp = at ?? new Date().toISOString();
+    register.lastSeen = timestamp;
     register.online = true;
+    this.recordHeartbeat(registerId, timestamp);
     return register;
   }
 
-  setSnapshot(snapshot: RegisterSnapshot): void {
-    this.snapshots.set(snapshot.registerId, snapshot);
+  setSnapshot(snapshot: RegisterSnapshot): RegisterSnapshot {
+    const register = this.registers.get(snapshot.registerId);
+    if (!register) {
+      return snapshot;
+    }
+
+    const tenant = this.tenants.get(register.tenantId);
+    const clientNumber = tenant?.clientNumber ?? snapshot.clientNumber;
+    const normalized = normalizeSnapshot(snapshot, register, this.getHeartbeatHistory(register.id));
+    this.snapshots.set(snapshot.registerId, normalized);
+    return normalized;
   }
 
   getSnapshot(clientNumber: string, registerId: string): RegisterSnapshot | undefined {
@@ -237,18 +286,25 @@ export class MemoryStore {
 
     const existing = this.snapshots.get(registerId);
     if (existing) {
-      return existing;
+      return {
+        ...existing,
+        online: register.online,
+        heartbeatHistory: this.getHeartbeatHistory(registerId),
+      };
     }
 
+    return buildDefaultSnapshot(register, clientNumber, this.getHeartbeatHistory(registerId));
+  }
+
+  private toRegisterSummary(register: Register, clientNumber: string): RegisterSummary {
+    const snapshot = this.getSnapshot(clientNumber, register.id);
     return {
-      registerId,
-      clientNumber,
+      id: register.id,
       label: register.label,
-      salesToday: 0,
-      ticketCount: 0,
-      cashSessionOpen: false,
-      lastSync: register.lastSeen ?? new Date().toISOString(),
-      currency: 'ARS',
+      online: register.online,
+      lastSeen: register.lastSeen,
+      paired: Boolean(register.deviceToken),
+      ...(snapshot ? { snapshot: snapshotSummary(snapshot) } : {}),
     };
   }
 }

@@ -16,10 +16,19 @@ function seedDemoData(): void {
       registerId: register.id,
       clientNumber: tenant.clientNumber,
       label: register.label,
-      salesToday: 125_400,
-      ticketCount: 42,
-      cashSessionOpen: true,
-      lastSync: new Date().toISOString(),
+      online: false,
+      lastSyncAt: new Date().toISOString(),
+      cashSession: {
+        open: true,
+        openedAt: new Date().toISOString(),
+        openingBalance: 10_000,
+        salesTotal: 125_400,
+        expectedBalance: 135_400,
+      },
+      salesToday: { count: 42, total: 125_400 },
+      stockAlerts: 3,
+      licenseStatus: 'active',
+      agentVersion: '0.0.1-demo',
       currency: 'ARS',
     });
   } catch {

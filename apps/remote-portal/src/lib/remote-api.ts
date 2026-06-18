@@ -1,5 +1,34 @@
 const apiBase = import.meta.env.VITE_REMOTE_API_URL ?? '/api';
 
+export type Tenant = {
+  id: string;
+  clientNumber: string;
+  name: string;
+  contactEmail?: string;
+  createdAt: string;
+};
+
+export type CashSessionSnapshot = {
+  open: boolean;
+  openedAt?: string;
+  openingBalance?: number;
+  salesTotal?: number;
+  expectedBalance?: number;
+};
+
+export type SalesTodaySnapshot = {
+  count: number;
+  total: number;
+};
+
+export type RegisterSnapshotSummary = {
+  salesToday: SalesTodaySnapshot;
+  cashSession: CashSessionSnapshot;
+  stockAlerts: number;
+  licenseStatus?: 'active' | 'grace' | 'invalid';
+  lastSyncAt: string;
+};
+
 export type TenantRegister = {
   id: string;
   label: string;
@@ -8,17 +37,31 @@ export type TenantRegister = {
   lastSeen?: string;
   assignedPortalUserIds: string[];
   paired: boolean;
+  snapshot?: RegisterSnapshotSummary;
 };
 
 export type RegisterSnapshot = {
   registerId: string;
   clientNumber: string;
   label: string;
-  salesToday: number;
-  ticketCount: number;
-  cashSessionOpen: boolean;
-  lastSync: string;
+  online: boolean;
+  lastHeartbeatAt?: string;
+  lastSyncAt: string;
+  cashSession: CashSessionSnapshot;
+  salesToday: SalesTodaySnapshot;
+  stockAlerts: number;
+  licenseStatus?: 'active' | 'grace' | 'invalid';
+  agentVersion?: string;
   currency: string;
+  heartbeatHistory?: string[];
+};
+
+export type TenantDetail = {
+  clientNumber: string;
+  name: string;
+  contactEmail?: string;
+  createdAt: string;
+  registers: TenantRegister[];
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -42,10 +85,21 @@ export function getHealth() {
   return request<{ status: string; service: string }>('/health');
 }
 
+export function listTenants() {
+  return request<{ tenants: Tenant[] }>('/admin/tenants');
+}
+
+export function getTenantDetail(clientNumber: string) {
+  return request<TenantDetail>(`/tenants/${encodeURIComponent(clientNumber)}`);
+}
+
 export function listRegisters(clientNumber: string) {
-  return request<{ clientNumber: string; name: string; registers: TenantRegister[] }>(
-    `/tenants/${encodeURIComponent(clientNumber)}/registers`,
-  );
+  return request<{
+    clientNumber: string;
+    name: string;
+    contactEmail?: string;
+    registers: TenantRegister[];
+  }>(`/tenants/${encodeURIComponent(clientNumber)}/registers`);
 }
 
 export function getRegisterSnapshot(clientNumber: string, registerId: string) {
@@ -61,10 +115,10 @@ export function confirmPairing(code: string, portalUserId: string) {
   });
 }
 
-export function createTenant(clientNumber: string, name: string) {
-  return request('/admin/tenants', {
+export function createTenant(clientNumber: string, name: string, contactEmail?: string) {
+  return request<Tenant>('/admin/tenants', {
     method: 'POST',
-    body: JSON.stringify({ clientNumber, name }),
+    body: JSON.stringify({ clientNumber, name, contactEmail }),
   });
 }
 
@@ -128,4 +182,31 @@ export function formatRelativeTime(iso?: string): string {
 
   const hours = Math.round(minutes / 60);
   return `hace ${hours} h`;
+}
+
+export function formatDateTime(iso?: string): string {
+  if (!iso) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat('es-AR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(iso));
+}
+
+export function licenseLabel(status?: RegisterSnapshot['licenseStatus']): string {
+  if (status === 'active') {
+    return 'Activa';
+  }
+
+  if (status === 'grace') {
+    return 'Gracia';
+  }
+
+  if (status === 'invalid') {
+    return 'Inválida';
+  }
+
+  return 'Sin datos';
 }

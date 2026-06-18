@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws';
+import { snapshotSummary } from '../snapshot.js';
 import type { Register, RegisterPresence, RegisterSnapshot, WsAgentMessage, WsPortalMessage } from '../types.js';
 import { store } from '../store/memory-store.js';
 
@@ -48,6 +49,10 @@ export class WsHub {
       const updated = store.setRegisterOnline(register.id, false);
       if (updated) {
         this.broadcastRegisterUpdate(tenant.clientNumber, updated);
+        const snapshot = store.getSnapshot(tenant.clientNumber, register.id);
+        if (snapshot) {
+          this.broadcastSnapshotUpdate(tenant.clientNumber, { ...snapshot, online: false });
+        }
       }
     });
   }
@@ -82,44 +87,70 @@ export class WsHub {
       const message = JSON.parse(raw) as WsAgentMessage;
 
       if (message.type === 'heartbeat') {
-        const register = store.touchRegister(registerId);
+        const register = store.touchRegister(registerId, message.at);
         if (register) {
           this.broadcastRegisterUpdate(clientNumber, register);
+          const snapshot = store.getSnapshot(clientNumber, registerId);
+          if (snapshot) {
+            const refreshed: RegisterSnapshot = {
+              ...snapshot,
+              online: true,
+              lastHeartbeatAt: message.at,
+              heartbeatHistory: store.getHeartbeatHistory(registerId),
+            };
+            store.setSnapshot(refreshed);
+            this.broadcastSnapshotUpdate(clientNumber, refreshed);
+          }
         }
         return;
       }
 
       if (message.type === 'snapshot') {
-        store.setSnapshot(message.payload);
         const register = store.touchRegister(registerId);
-        if (register) {
-          this.broadcastRegisterUpdate(clientNumber, register);
+        if (!register) {
+          return;
         }
+
+        const normalized = store.setSnapshot({
+          ...message.payload,
+          registerId,
+          clientNumber,
+          online: true,
+          lastHeartbeatAt: message.payload.lastHeartbeatAt ?? new Date().toISOString(),
+          heartbeatHistory: store.getHeartbeatHistory(registerId),
+        });
+
+        this.broadcastRegisterUpdate(clientNumber, register);
+        this.broadcastSnapshotUpdate(clientNumber, normalized);
       }
     } catch {
       // ignore malformed agent payloads in MVP
     }
   }
 
-  private toPresence(register: Register): RegisterPresence {
+  private toPresence(register: Register, clientNumber: string): RegisterPresence {
+    const snapshot = store.getSnapshot(clientNumber, register.id);
     return {
       id: register.id,
       label: register.label,
       online: register.online,
       lastSeen: register.lastSeen,
       assignedPortalUserIds: register.assignedPortalUserIds,
+      ...(snapshot ? { snapshot: snapshotSummary(snapshot) } : {}),
     };
   }
 
   private sendRegistersToPortal(connection: PortalConnection): void {
-    const registers = store.listRegisters(connection.clientNumber).map((register) => this.toPresence(register));
+    const registers = store
+      .listRegisters(connection.clientNumber)
+      .map((register) => this.toPresence(register, connection.clientNumber));
     connection.socket.send(JSON.stringify({ type: 'registers', registers }));
   }
 
   private broadcastRegisterUpdate(clientNumber: string, register: Register): void {
     const payload = JSON.stringify({
       type: 'register_update',
-      register: this.toPresence(register),
+      register: this.toPresence(register, clientNumber),
     });
 
     for (const portal of this.portals) {
@@ -129,20 +160,17 @@ export class WsHub {
     }
   }
 
-  pushMockSnapshot(registerId: string, clientNumber: string, label: string): RegisterSnapshot {
-    const snapshot: RegisterSnapshot = {
-      registerId,
-      clientNumber,
-      label,
-      salesToday: Math.round(Math.random() * 250_000),
-      ticketCount: Math.round(Math.random() * 80),
-      cashSessionOpen: Math.random() > 0.3,
-      lastSync: new Date().toISOString(),
-      currency: 'ARS',
-    };
+  private broadcastSnapshotUpdate(clientNumber: string, snapshot: RegisterSnapshot): void {
+    const payload = JSON.stringify({
+      type: 'snapshot_update',
+      snapshot,
+    });
 
-    store.setSnapshot(snapshot);
-    return snapshot;
+    for (const portal of this.portals) {
+      if (portal.clientNumber === clientNumber) {
+        portal.socket.send(payload);
+      }
+    }
   }
 }
 

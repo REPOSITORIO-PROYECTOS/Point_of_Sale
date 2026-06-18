@@ -1,12 +1,22 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
+import { listTenants, type Tenant } from '@/lib/remote-api';
 
 export function LoginPage() {
   const { session, login } = useAuth();
   const [clientNumber, setClientNumber] = useState('CLI-00001');
   const [password, setPassword] = useState('');
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void listTenants()
+      .then((data) => setTenants(data.tenants))
+      .catch(() => {
+        // relay puede no estar disponible en build estático
+      });
+  }, []);
 
   if (session) {
     return <Navigate to="/" replace />;
@@ -18,6 +28,16 @@ export function LoginPage() {
 
     try {
       login(clientNumber, password);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'No se pudo iniciar sesión');
+    }
+  }
+
+  function handleSelectTenant(tenant: Tenant) {
+    setError(null);
+
+    try {
+      login(tenant.clientNumber, password);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'No se pudo iniciar sesión');
     }
@@ -44,6 +64,24 @@ export function LoginPage() {
           className="mb-4 w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 outline-none ring-teal-500 focus:ring-2"
           placeholder="CLI-00042"
         />
+
+        {tenants.length > 0 ? (
+          <div className="mb-4">
+            <p className="mb-2 text-xs text-slate-400">O elegí un cliente existente:</p>
+            <div className="flex flex-wrap gap-2">
+              {tenants.map((tenant) => (
+                <button
+                  key={tenant.id}
+                  type="button"
+                  onClick={() => handleSelectTenant(tenant)}
+                  className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-200 hover:border-teal-500/40 hover:bg-white/5"
+                >
+                  {tenant.clientNumber}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <label className="mb-2 block text-sm text-slate-300">Contraseña</label>
         <input

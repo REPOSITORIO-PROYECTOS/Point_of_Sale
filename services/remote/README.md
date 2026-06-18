@@ -1,10 +1,10 @@
 # Microservicio Remote Relay (`services/remote`)
 
-Hub de **conectividad remota** para el POS: emparejamiento de cajas, WebSocket, snapshots y API para el portal PWA.
+Hub de **conectividad remota** para el POS: emparejamiento de cajas, WebSocket, snapshots enriquecidos y API para el portal PWA.
 
 ## Estado
 
-**MVP scaffold** — relay in-memory + WebSocket + endpoints admin/pairing. Ver [`docs/ai/remote-connectivity-architecture.md`](../../docs/ai/remote-connectivity-architecture.md).
+**MVP enriquecido** — relay in-memory + WebSocket + snapshots con sesión de caja, ventas del día, stock y licencia. Ver [`docs/ai/remote-connectivity-architecture.md`](../../docs/ai/remote-connectivity-architecture.md).
 
 ## Qué incluye
 
@@ -12,7 +12,7 @@ Hub de **conectividad remota** para el POS: emparejamiento de cajas, WebSocket, 
 |-------|-----|
 | `services/remote/` | Relay API + WebSocket (nube) — **este servicio** |
 | `apps/remote-portal/` | PWA administración móvil |
-| `backend/src/integrations/remote/` | Agente mínimo en pos-api |
+| `backend/src/integrations/remote/` | Agente en pos-api (lee SQLite, push snapshot) |
 
 ## Arquitectura (resumen)
 
@@ -37,24 +37,50 @@ Verificar:
 
 ```powershell
 curl http://127.0.0.1:5090/health
-curl http://127.0.0.1:5090/tenants/CLI-00001/registers
+curl http://127.0.0.1:5090/admin/tenants
+curl http://127.0.0.1:5090/tenants/CLI-00001
+curl http://127.0.0.1:5090/tenants/CLI-00001/registers/reg-id/snapshot
 ```
 
-## Endpoints MVP
+Tests:
+
+```powershell
+npm test --prefix services/remote
+```
+
+## Endpoints
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | GET | `/health` | Health check |
-| POST | `/admin/tenants` | Crear tenant (dev, sin auth) |
+| GET | `/admin/tenants` | Listar clientes |
+| POST | `/admin/tenants` | Crear cliente `{ clientNumber, name, contactEmail? }` |
 | POST | `/admin/registers` | Registrar caja en tenant |
 | POST | `/admin/assign-registers` | Asignar cajas a usuario portal |
 | POST | `/pairing/request` | POS solicita código |
 | POST | `/pairing/confirm` | Portal confirma código |
 | POST | `/pairing/complete` | POS completa emparejamiento |
-| GET | `/tenants/:clientNumber/registers` | Listar cajas |
-| GET | `/tenants/:clientNumber/registers/:id/snapshot` | Resumen (mock o agente) |
-| WS | `/ws/agent?deviceToken=` | Agente POS |
-| WS | `/ws/portal` | Suscripción portal |
+| GET | `/tenants/:clientNumber` | Detalle cliente + resumen cajas |
+| GET | `/tenants/:clientNumber/registers` | Listar cajas con snapshot resumido |
+| GET | `/tenants/:clientNumber/registers/:id/snapshot` | Snapshot enriquecido |
+| WS | `/ws/agent?deviceToken=` | Agente POS (heartbeat + snapshot) |
+| WS | `/ws/portal` | Portal suscrito a `tenant:{clientNumber}` |
+
+### Snapshot enriquecido (por caja)
+
+```typescript
+{
+  registerId, label, online, lastHeartbeatAt, lastSyncAt,
+  cashSession: { open, openedAt?, openingBalance?, salesTotal?, expectedBalance? },
+  salesToday: { count, total },
+  stockAlerts: number,
+  licenseStatus?: 'active' | 'grace' | 'invalid',
+  agentVersion?: string,
+  heartbeatHistory?: string[]  // últimos 5
+}
+```
+
+El portal recibe `snapshot_update` por WebSocket en cada heartbeat/snapshot del agente.
 
 ## Variables de entorno
 

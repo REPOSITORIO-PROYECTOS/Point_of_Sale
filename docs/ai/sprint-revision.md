@@ -17,7 +17,7 @@ Plan por fases para validar backend, integraciones y cableado front-back.
 | 4 | Hardware POS + auth (barcode, print, login) | ✅ Completado (2026-06-18) |
 | **4A** | Tema/logo persistencia API | ✅ Completado |
 | 5 | Secundarios + desktop | 🔄 En progreso (5.1 ✅ UI cableada) |
-| **7** | Conectividad remota + PWA | 🟡 MVP scaffold (2026-06-18) |
+| **7** | Conectividad remota + PWA | 🟡 MVP + detalle caja (2026-06-18) |
 | **4.9** | Soporte recovery + licenciamiento | ✅ Completado (2026-06-18) |
 
 ---
@@ -284,10 +284,10 @@ npm run test:microservices
 | 7.1 | Heartbeat | Tabla `remote_outbox` + reintentos offline | 2 d | ⬜ |
 | **7.2** | PWA shell | `apps/remote-portal/`: Vite + vite-plugin-pwa + login + layout | 3 d | 🟡 MVP |
 | 7.2 | PWA shell | Deploy estático (Cloudflare Pages / Vercel) + env `VITE_RELAY_URL` | 1 d | 🟡 local dev |
-| **7.3** | Multi-local | Portal: selector tenant → local → caja; lista con estado 🟢🟡🔴 | 2.5 d | ⬜ |
+| **7.3** | Multi-local | Portal: selector tenant → local → caja; lista con estado 🟢🟡🔴 | 2.5 d | 🟡 parcial ✅ |
 | 7.3 | Multi-local | Relay: agregación snapshots por `location_id` | 2 d | ⬜ |
-| **7.4** | Resúmenes API | Agente: push snapshot precios + ventas día + estado caja | 2.5 d | ⬜ |
-| 7.4 | Resúmenes API | Portal: dashboard resúmenes (1 local, N locales, todos) | 2 d | ⬜ |
+| **7.4** | Resúmenes API | Agente: push snapshot precios + ventas día + estado caja | 2.5 d | 🟡 parcial ✅ |
+| 7.4 | Resúmenes API | Portal: dashboard resúmenes (1 local, N locales, todos) | 2 d | 🟡 parcial ✅ |
 | 7.4 | Resúmenes API | Alertas stock bajo (evento umbral) | 1.5 d | ⬜ |
 | **7.5** | Usuarios remotos | Relay: comando `disable_user` + cola si offline + audit log | 2 d | ⬜ |
 | 7.5 | Usuarios remotos | Backend: `PATCH users/:id` con `active`; guard último admin | 1 d | ⬜ |
@@ -425,3 +425,4 @@ Frontend :5173
 | 2026-06-18 | 7 | MVP scaffold: relay :5090, PWA portal :5174, remote-agent stub backend |
 | 2026-06-18 | 5/6 | Encomiendas UI→PosAPI; `GET /api/version`; Electron bootstrap smoke |
 | 2026-06-18 | 7 | Commit MVP remoto + push; deps `ws`, scripts `dev:remote`/`dev:portal` |
+| 2026-06-18 | 7.3/7.4 | Portal clientes + detalle caja; snapshots enriquecidos relay + agente SQLite |

@@ -10,7 +10,8 @@ import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { env } from '@/config/env.config';
-import type { RegisterSnapshot } from './remote.types';
+import type { RegisterSnapshot } from './remote-snapshot.builder';
+import { RemoteSnapshotService } from './remote-snapshot.service';
 
 type RemoteDeviceConfig = {
   deviceToken: string;
@@ -36,6 +37,8 @@ export class RemoteAgentService implements OnModuleInit, OnModuleDestroy {
   private ws: WebSocket | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private snapshotTimer: NodeJS.Timeout | null = null;
+
+  constructor(private readonly snapshotService: RemoteSnapshotService) {}
 
   onModuleInit(): void {
     fs.mkdirSync(path.dirname(this.deviceFilePath), { recursive: true });
@@ -155,6 +158,7 @@ export class RemoteAgentService implements OnModuleInit, OnModuleDestroy {
 
     this.ws.on('open', () => {
       this.logger.log('Remote agent connected to relay');
+      void this.pushSnapshot();
       this.sendHeartbeat();
     });
 
@@ -172,7 +176,9 @@ export class RemoteAgentService implements OnModuleInit, OnModuleDestroy {
     this.stopBackgroundJobs();
 
     this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), 30_000);
-    this.snapshotTimer = setInterval(() => this.pushMockSnapshot(), 60_000);
+    this.snapshotTimer = setInterval(() => {
+      void this.pushSnapshot();
+    }, 60_000);
   }
 
   private stopBackgroundJobs(): void {
@@ -195,22 +201,17 @@ export class RemoteAgentService implements OnModuleInit, OnModuleDestroy {
     this.ws.send(JSON.stringify({ type: 'heartbeat', at: new Date().toISOString() }));
   }
 
-  private pushMockSnapshot(): void {
+  private async pushSnapshot(): Promise<void> {
     const config = this.deviceConfig ?? this.loadDeviceConfig();
     if (!config || this.ws?.readyState !== WebSocket.OPEN) {
       return;
     }
 
-    const snapshot: RegisterSnapshot = {
+    const snapshot: RegisterSnapshot = await this.snapshotService.buildSnapshot({
       registerId: config.registerId,
       clientNumber: config.clientNumber,
-      label: config.registerLabel,
-      salesToday: Math.round(Math.random() * 180_000),
-      ticketCount: Math.round(Math.random() * 60),
-      cashSessionOpen: Math.random() > 0.35,
-      lastSync: new Date().toISOString(),
-      currency: 'ARS',
-    };
+      registerLabel: config.registerLabel,
+    });
 
     this.ws.send(JSON.stringify({ type: 'snapshot', payload: snapshot }));
   }

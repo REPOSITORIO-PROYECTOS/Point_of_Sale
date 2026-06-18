@@ -2,6 +2,7 @@ export type Tenant = {
   id: string;
   clientNumber: string;
   name: string;
+  contactEmail?: string;
   createdAt: string;
 };
 
@@ -25,15 +26,53 @@ export type PairingCode = {
   confirmedByPortalUserId?: string;
 };
 
+export type CashSessionSnapshot = {
+  open: boolean;
+  openedAt?: string;
+  openingBalance?: number;
+  salesTotal?: number;
+  expectedBalance?: number;
+};
+
+export type SalesTodaySnapshot = {
+  count: number;
+  total: number;
+};
+
 export type RegisterSnapshot = {
   registerId: string;
   clientNumber: string;
   label: string;
-  salesToday: number;
-  ticketCount: number;
-  cashSessionOpen: boolean;
-  lastSync: string;
+  online: boolean;
+  lastHeartbeatAt?: string;
+  lastSyncAt: string;
+  cashSession: CashSessionSnapshot;
+  salesToday: SalesTodaySnapshot;
+  stockAlerts: number;
+  licenseStatus?: 'active' | 'grace' | 'invalid';
+  agentVersion?: string;
   currency: string;
+  heartbeatHistory?: string[];
+};
+
+export type RegisterSummary = {
+  id: string;
+  label: string;
+  online: boolean;
+  lastSeen?: string;
+  paired: boolean;
+  snapshot?: Pick<
+    RegisterSnapshot,
+    'salesToday' | 'cashSession' | 'stockAlerts' | 'licenseStatus' | 'lastSyncAt'
+  >;
+};
+
+export type TenantDetail = {
+  clientNumber: string;
+  name: string;
+  contactEmail?: string;
+  createdAt: string;
+  registers: RegisterSummary[];
 };
 
 export type WsAgentMessage =
@@ -47,6 +86,7 @@ export type WsPortalMessage =
 export type WsServerMessage =
   | { type: 'registers'; registers: RegisterPresence[] }
   | { type: 'register_update'; register: RegisterPresence }
+  | { type: 'snapshot_update'; snapshot: RegisterSnapshot }
   | { type: 'pong' };
 
 export type RegisterPresence = {
@@ -55,4 +95,8 @@ export type RegisterPresence = {
   online: boolean;
   lastSeen?: string;
   assignedPortalUserIds: string[];
+  snapshot?: Pick<
+    RegisterSnapshot,
+    'salesToday' | 'cashSession' | 'stockAlerts' | 'licenseStatus' | 'lastSyncAt'
+  >;
 };

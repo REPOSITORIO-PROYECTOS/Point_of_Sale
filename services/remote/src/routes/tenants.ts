@@ -4,6 +4,7 @@ import { store } from '../store/memory-store.js';
 type CreateTenantBody = {
   clientNumber: string;
   name: string;
+  contactEmail?: string;
 };
 
 type CreateRegisterBody = {
@@ -18,20 +19,34 @@ type AssignRegistersBody = {
 };
 
 export async function registerTenantRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/admin/tenants', async (_request, reply) => {
+    return reply.send({ tenants: store.listTenants() });
+  });
+
   app.post<{ Body: CreateTenantBody }>('/admin/tenants', async (request, reply) => {
-    const { clientNumber, name } = request.body;
+    const { clientNumber, name, contactEmail } = request.body;
 
     if (!clientNumber?.trim() || !name?.trim()) {
       return reply.code(400).send({ error: 'clientNumber and name are required' });
     }
 
     try {
-      const tenant = store.createTenant(clientNumber, name);
+      const tenant = store.createTenant(clientNumber, name, contactEmail);
       return reply.code(201).send(tenant);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create tenant';
       return reply.code(409).send({ error: message });
     }
+  });
+
+  app.get<{ Params: { clientNumber: string } }>('/tenants/:clientNumber', async (request, reply) => {
+    const detail = store.getTenantDetail(request.params.clientNumber);
+
+    if (!detail) {
+      return reply.code(404).send({ error: 'Tenant not found' });
+    }
+
+    return reply.send(detail);
   });
 
   app.post<{ Body: CreateRegisterBody }>('/admin/registers', async (request, reply) => {
@@ -71,17 +86,13 @@ export async function registerTenantRoutes(app: FastifyInstance): Promise<void> 
         return reply.code(404).send({ error: 'Tenant not found' });
       }
 
-      const registers = store.listRegisters(clientNumber).map((register) => ({
-        id: register.id,
-        label: register.label,
-        machineId: register.machineId,
-        online: register.online,
-        lastSeen: register.lastSeen,
-        assignedPortalUserIds: register.assignedPortalUserIds,
-        paired: Boolean(register.deviceToken),
-      }));
-
-      return reply.send({ clientNumber: tenant.clientNumber, name: tenant.name, registers });
+      const detail = store.getTenantDetail(clientNumber);
+      return reply.send({
+        clientNumber: tenant.clientNumber,
+        name: tenant.name,
+        contactEmail: tenant.contactEmail,
+        registers: detail?.registers ?? [],
+      });
     },
   );
 }

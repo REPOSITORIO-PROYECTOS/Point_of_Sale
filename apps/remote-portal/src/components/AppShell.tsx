@@ -1,5 +1,5 @@
 import { Link, Outlet } from 'react-router-dom';
-import { LogOut, Radio } from 'lucide-react';
+import { LogOut, Radio, Users } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 export function AppShell() {
@@ -19,10 +19,11 @@ export function AppShell() {
 
           <nav className="flex items-center gap-3 text-sm">
             <Link to="/" className="rounded-lg px-3 py-2 hover:bg-white/5">
-              Cajas
+              Dashboard
             </Link>
-            <Link to="/assign" className="rounded-lg px-3 py-2 hover:bg-white/5">
-              Asignar
+            <Link to="/clients" className="inline-flex items-center gap-1 rounded-lg px-3 py-2 hover:bg-white/5">
+              <Users className="h-4 w-4" />
+              Clientes
             </Link>
             <Link to="/pairing" className="inline-flex items-center gap-1 rounded-lg px-3 py-2 hover:bg-white/5">
               <Radio className="h-4 w-4" />
