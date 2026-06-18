@@ -21,7 +21,6 @@ import {
 import { Label } from "../ui/label";
 import { Upload, Download, FileSpreadsheet, CheckCircle, AlertCircle, Package } from "lucide-react";
 import { toast } from "sonner";
-import { WailsAPI } from "../../../lib/wails-bridge";
 import { ProductsManagementView } from "./ProductsManagementView";
 
 interface PreviewData {

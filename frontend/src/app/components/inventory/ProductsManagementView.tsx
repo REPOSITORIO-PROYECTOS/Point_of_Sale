@@ -29,7 +29,8 @@ import {
 } from "../ui/select";
 import { Package, Plus, Edit, Trash2, AlertTriangle, Search, X, Barcode, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { WailsAPI, type Product } from "../../../lib/wails-bridge";
+import { PosAPI } from "../../../lib/pos-api";
+import type { Product } from "../../../lib/wails-bridge";
 import { Checkbox } from "../ui/checkbox";
 import {
   formatCategoriesLabel,
@@ -70,7 +71,7 @@ export function ProductsManagementView() {
 
   const loadProducts = async () => {
     try {
-      const data = await WailsAPI.getProducts();
+      const data = await PosAPI.getProducts();
       setProducts(data);
     } catch (error) {
       console.error("Failed to load products:", error);
@@ -138,11 +139,12 @@ export function ProductsManagementView() {
     };
 
     try {
-      await WailsAPI.saveProduct(newProduct);
       if (selectedProduct) {
+        await PosAPI.updateProduct(newProduct);
         setProducts(products.map((p) => (p.id === selectedProduct.id ? newProduct : p)));
         toast.success("Producto actualizado");
       } else {
+        await PosAPI.createProduct(newProduct);
         setProducts([...products, newProduct]);
         toast.success("Producto agregado");
       }
@@ -250,7 +252,7 @@ export function ProductsManagementView() {
     }
 
     try {
-      const savedProducts = await WailsAPI.replaceProducts(updatedProducts);
+      const savedProducts = await PosAPI.replaceProducts(updatedProducts);
       setProducts(savedProducts);
       setPriceIncreaseDialogOpen(false);
       setIncreasePercentage("");
@@ -279,7 +281,7 @@ export function ProductsManagementView() {
 
   const handleDelete = async (productId: string) => {
     try {
-      await WailsAPI.deleteProduct(productId);
+      await PosAPI.deleteProduct(productId);
       setProducts(products.filter((p) => p.id !== productId));
       toast.success("Producto dado de baja");
     } catch (error) {

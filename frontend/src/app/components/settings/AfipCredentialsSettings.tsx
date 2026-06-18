@@ -13,7 +13,9 @@ import { FileKey, ShieldCheck, Upload } from "lucide-react";
 export function AfipCredentialsSettings() {
   const [status, setStatus] = useState<AfipConfigStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingKey, setIsSavingKey] = useState(false);
+  const [isSavingCert, setIsSavingCert] = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
   const [cuit, setCuit] = useState("");
   const [puntoVenta, setPuntoVenta] = useState("1");
   const [production, setProduction] = useState(false);
@@ -52,8 +54,43 @@ export function AfipCredentialsSettings() {
     setClavePrivada(content);
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
+  const handleSavePrivateKey = async () => {
+    setIsSavingKey(true);
+
+    try {
+      const result = await PosAPI.saveAfipPrivateKey({
+        cuit,
+        clavePrivada,
+        puntoVenta: Number(puntoVenta),
+        production,
+      });
+
+      setStatus(result.status);
+      toast.success("Clave privada guardada. Importá el certificado cuando AFIP lo apruebe.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo guardar la clave privada");
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
+
+  const handleImportCertificate = async () => {
+    setIsSavingCert(true);
+
+    try {
+      const result = await PosAPI.importAfipCertificate({ certificado });
+
+      setStatus(result.status);
+      toast.success("Certificado AFIP importado correctamente");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo importar el certificado");
+    } finally {
+      setIsSavingCert(false);
+    }
+  };
+
+  const handleSaveAll = async () => {
+    setIsSavingAll(true);
 
     try {
       const result = await PosAPI.importAfipCredentials({
@@ -69,9 +106,11 @@ export function AfipCredentialsSettings() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudieron guardar los certificados");
     } finally {
-      setIsSaving(false);
+      setIsSavingAll(false);
     }
   };
+
+  const showCertificateStep = Boolean(status?.pendingCertificate || (status?.hasPrivateKey && !status?.hasCertificate));
 
   return (
     <div className="space-y-6">
@@ -82,13 +121,13 @@ export function AfipCredentialsSettings() {
             Certificados AFIP
           </CardTitle>
           <CardDescription>
-            Importá el certificado (.crt) y la clave privada (.key) emitidos por AFIP. Se guardan localmente en la PC del POS.
+            Guardá la clave privada mientras AFIP procesa el CSR. Cuando llegue el certificado (.crt), importalo para completar la configuración.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Badge variant={status?.configured ? "default" : "secondary"}>
-              {status?.configured ? "Configurado" : "Pendiente"}
+              {status?.configured ? "Configurado" : status?.pendingCertificate ? "Certificado pendiente" : "Pendiente"}
             </Badge>
             <Badge variant={status?.hasCertificate ? "outline" : "destructive"}>
               Certificado {status?.hasCertificate ? "OK" : "faltante"}
@@ -148,44 +187,21 @@ export function AfipCredentialsSettings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileKey className="size-5" />
-            Importar archivos
+            Paso 1 — Clave privada
           </CardTitle>
           <CardDescription>
-            Podés subir los archivos o pegar el contenido PEM directamente.
+            Generá o importá la clave privada y guardala localmente mientras esperás el certificado de AFIP.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="afip-cert-file">Certificado (.crt)</Label>
-              <Input
-                id="afip-cert-file"
-                type="file"
-                accept=".crt,.pem,.cer,text/plain"
-                className="mt-1"
-                onChange={(event) => void handleCertificateFile(event.target.files?.[0])}
-              />
-            </div>
-            <div>
-              <Label htmlFor="afip-key-file">Clave privada (.key)</Label>
-              <Input
-                id="afip-key-file"
-                type="file"
-                accept=".key,.pem,text/plain"
-                className="mt-1"
-                onChange={(event) => void handlePrivateKeyFile(event.target.files?.[0])}
-              />
-            </div>
-          </div>
-
           <div>
-            <Label htmlFor="afip-cert-text">Contenido certificado PEM</Label>
-            <Textarea
-              id="afip-cert-text"
-              value={certificado}
-              onChange={(event) => setCertificado(event.target.value)}
-              placeholder="-----BEGIN CERTIFICATE-----"
-              className="mt-1 min-h-28 font-mono text-xs"
+            <Label htmlFor="afip-key-file">Clave privada (.key)</Label>
+            <Input
+              id="afip-key-file"
+              type="file"
+              accept=".key,.pem,text/plain"
+              className="mt-1"
+              onChange={(event) => void handlePrivateKeyFile(event.target.files?.[0])}
             />
           </div>
 
@@ -201,12 +217,76 @@ export function AfipCredentialsSettings() {
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => void loadStatus()} disabled={isLoading || isSaving}>
+            <Button variant="outline" onClick={() => void loadStatus()} disabled={isLoading || isSavingKey}>
               Recargar
             </Button>
-            <Button onClick={() => void handleSave()} disabled={isSaving || !cuit || !certificado || !clavePrivada}>
+            <Button onClick={() => void handleSavePrivateKey()} disabled={isSavingKey || !cuit || !clavePrivada}>
               <Upload className="size-4 mr-2" />
-              {isSaving ? "Guardando..." : "Importar y guardar"}
+              {isSavingKey ? "Guardando..." : "Guardar clave privada"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {(showCertificateStep || certificado) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="size-5" />
+              Paso 2 — Certificado aprobado
+            </CardTitle>
+            <CardDescription>
+              Cuando AFIP apruebe el CSR, importá el archivo .crt para habilitar la facturación electrónica.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="afip-cert-file">Certificado (.crt)</Label>
+              <Input
+                id="afip-cert-file"
+                type="file"
+                accept=".crt,.pem,.cer,text/plain"
+                className="mt-1"
+                onChange={(event) => void handleCertificateFile(event.target.files?.[0])}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="afip-cert-text">Contenido certificado PEM</Label>
+              <Textarea
+                id="afip-cert-text"
+                value={certificado}
+                onChange={(event) => setCertificado(event.target.value)}
+                placeholder="-----BEGIN CERTIFICATE-----"
+                className="mt-1 min-h-28 font-mono text-xs"
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={() => void handleImportCertificate()} disabled={isSavingCert || !certificado}>
+                <Upload className="size-4 mr-2" />
+                {isSavingCert ? "Importando..." : "Importar certificado"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Importación completa (opcional)</CardTitle>
+          <CardDescription>
+            Si ya tenés certificado y clave, podés importar ambos en un solo paso.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => void handleSaveAll()}
+              disabled={isSavingAll || !cuit || !certificado || !clavePrivada}
+            >
+              {isSavingAll ? "Guardando..." : "Importar certificado y clave juntos"}
             </Button>
           </div>
         </CardContent>

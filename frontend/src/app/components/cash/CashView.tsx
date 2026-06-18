@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { CashSession, WailsAPI } from "../../../lib/wails-bridge";
+import { CashSession } from "../../../lib/wails-bridge";
+import { PosAPI } from "../../../lib/pos-api";
+import { WailsAPI } from "../../../lib/wails-bridge";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -29,7 +31,7 @@ export function CashView() {
 
   const loadSession = async () => {
     try {
-      const data = await WailsAPI.getCashSession();
+      const data = await PosAPI.getCashSession();
       setSession(data);
     } catch (error) {
       console.error("Failed to load cash session:", error);
@@ -42,7 +44,7 @@ export function CashView() {
   const handleStartSession = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await WailsAPI.startCashSession(parseFloat(initialBalance));
+      await PosAPI.startCashSession(parseFloat(initialBalance));
       await loadSession();
       setStartDialogOpen(false);
       setInitialBalance("");
@@ -56,7 +58,9 @@ export function CashView() {
   const handleCloseSession = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await WailsAPI.closeCashSession(parseFloat(finalBalance));
+      if (!session) return;
+      const expected = session.initialBalance + session.totalSales;
+      await PosAPI.closeCashSession(expected, parseFloat(finalBalance));
       await loadSession();
       setCloseDialogOpen(false);
       setFinalBalance("");

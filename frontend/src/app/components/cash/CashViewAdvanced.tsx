@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { CashSession, WailsAPI } from "../../../lib/wails-bridge";
+import { PosAPI } from "../../../lib/pos-api";
 import { Button } from "../ui/button";
 import {
   AlertDialog,
@@ -89,7 +90,7 @@ export function CashViewAdvanced({
 
   const loadSession = async () => {
     try {
-      const data = await WailsAPI.getCashSession();
+      const data = await PosAPI.getCashSession();
       setSession(data);
     } catch (error) {
       console.error("Failed to load cash session:", error);
@@ -119,7 +120,7 @@ export function CashViewAdvanced({
 
   const handleStartSession = async (amount: number) => {
     try {
-      await WailsAPI.startCashSession(amount);
+      await PosAPI.startCashSession(amount);
       await loadSession();
       setStartDialogOpen(false);
       setInitialBalance("");
@@ -137,7 +138,7 @@ export function CashViewAdvanced({
       // Cierre sin arqueo - usar el monto esperado
       try {
         const expectedAmount = session.initialBalance + session.totalSales;
-        await WailsAPI.closeCashSession(session.totalSales, expectedAmount);
+        await PosAPI.closeCashSession(session.initialBalance + session.totalSales, expectedAmount);
         await loadSession();
         setCloseDialogOpen(false);
         resetCountingForm();
@@ -188,7 +189,7 @@ export function CashViewAdvanced({
         return sum;
       }, 0);
 
-      await WailsAPI.closeCashSession(session.totalSales, totalCounted);
+      await PosAPI.closeCashSession(session.initialBalance + session.totalSales, totalCounted);
       await loadSession();
       setCloseDialogOpen(false);
       resetCountingForm();

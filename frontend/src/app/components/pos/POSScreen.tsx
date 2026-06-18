@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
-import { Product, CartItem, WailsAPI, Transaction } from "../../../lib/wails-bridge";
+import { PosAPI } from "../../../lib/pos-api";
+import { useTheme } from "../../../lib/theme-context";
+import { CartItem, Transaction, WailsAPI, Product } from "../../../lib/wails-bridge";
 import { ProductCatalog } from "./ProductCatalog";
 import { ShoppingCart } from "./ShoppingCart";
 import { toast } from "sonner";
 
 export function POSScreen() {
+  const { themeConfig } = useTheme();
   const [products, setProducts] = useState<Product[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,7 +18,7 @@ export function POSScreen() {
 
   const loadProducts = async () => {
     try {
-      const data = await WailsAPI.getProducts();
+      const data = await PosAPI.getProducts();
       setProducts(data);
     } catch (error) {
       console.error("Failed to load products:", error);
@@ -73,8 +76,11 @@ export function POSScreen() {
         timestamp: new Date().toISOString(),
       };
 
-      await WailsAPI.printReceipt(cartItems, total);
-      await WailsAPI.saveTransaction(transaction);
+      await WailsAPI.printReceipt(cartItems, total, {
+        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+        logoUrl: themeConfig.logoUrl,
+      });
+      await PosAPI.createSale(transaction);
 
       toast.success("Transacción completada exitosamente");
       setCartItems([]);

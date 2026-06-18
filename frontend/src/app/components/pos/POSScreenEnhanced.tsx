@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
-import { Product, CartItem, WailsAPI, Transaction, PaymentMethod, CashSession } from "../../../lib/wails-bridge";
+import { PosAPI } from "../../../lib/pos-api";
+import { useTheme } from "../../../lib/theme-context";
+import type { Product, CartItem, Transaction, PaymentMethod, CashSession } from "../../../lib/wails-bridge";
+import { WailsAPI } from "../../../lib/wails-bridge";
 import type { VoucherType } from "./CheckoutModalEnhanced";
 import { ProductCatalog } from "./ProductCatalog";
 import { ShoppingCartEnhanced } from "./ShoppingCartEnhanced";
@@ -48,6 +51,7 @@ export function POSScreenEnhanced({
   heldOrders,
   onHeldOrdersChange,
 }: POSScreenEnhancedProps) {
+  const { themeConfig } = useTheme();
   const [products, setProducts] = useState<Product[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
@@ -79,7 +83,7 @@ export function POSScreenEnhanced({
 
   const loadProducts = async () => {
     try {
-      const data = await WailsAPI.getProducts();
+      const data = await PosAPI.getProducts();
       setProducts(data);
     } catch (error) {
       console.error("Failed to load products:", error);
@@ -91,7 +95,7 @@ export function POSScreenEnhanced({
 
   const loadCashSession = async () => {
     try {
-      const session = await WailsAPI.getCashSession();
+      const session = await PosAPI.getCashSession();
       setCashSession(session);
     } catch (error) {
       console.error("Failed to load cash session:", error);
@@ -215,11 +219,33 @@ export function POSScreenEnhanced({
       };
 
       // Imprimir comprobante según el tipo
-      await WailsAPI.printReceipt(cartItems, total);
+      await WailsAPI.printReceipt(cartItems, total, {
+        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+        logoUrl: themeConfig.logoUrl,
+      });
 
       // Solo guardar transacción y descontar stock si NO es presupuesto
       if (voucherType !== "presupuesto") {
-        await WailsAPI.saveTransaction(transaction);
+        await PosAPI.createSale(transaction, payments, voucherType);
+      }
+
+      if (voucherType === "factura") {
+        try {
+          await PosAPI.facturarAfip({
+            tipo_afip: 6,
+            tipo_documento: 99,
+            documento: "0",
+            total,
+            id_condicion_iva: 5,
+          });
+        } catch (afipError) {
+          console.error("AFIP facturación failed:", afipError);
+          toast.error(
+            afipError instanceof Error
+              ? `Venta registrada, pero falló la factura: ${afipError.message}`
+              : "Venta registrada, pero falló la factura electrónica"
+          );
+        }
       }
 
       // Mensaje según tipo de comprobante
@@ -300,8 +326,8 @@ export function POSScreenEnhanced({
     }
 
     try {
-      await WailsAPI.startCashSession(amount);
-      const newSession = await WailsAPI.getCashSession();
+      await PosAPI.startCashSession(amount);
+      const newSession = await PosAPI.getCashSession();
       setCashSession(newSession);
       setOpenCashDialogOpen(false);
       setInitialBalance("");
@@ -316,8 +342,8 @@ export function POSScreenEnhanced({
     try {
       if (!cashSession) return;
       const expectedAmount = cashSession.initialBalance + cashSession.totalSales;
-      await WailsAPI.closeCashSession(cashSession.totalSales, expectedAmount);
-      const newSession = await WailsAPI.getCashSession();
+      await PosAPI.closeCashSession(cashSession.initialBalance + cashSession.totalSales, expectedAmount);
+      const newSession = await PosAPI.getCashSession();
       setCashSession(newSession);
       setCloseCashDialogOpen(false);
       toast.success("Caja cerrada exitosamente");

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, type KeyboardEvent } from "react";
 import { Product } from "../../../lib/wails-bridge";
 import {
   getAllCategoriesFromProducts,
@@ -76,6 +76,23 @@ export function ProductCatalog({
 
   const quickWeights = [0.25, 0.5, 0.75, 1, 1.5, 2];
 
+  const findProductByBarcode = (code: string): Product | undefined => {
+    const trimmed = code.trim();
+    if (!trimmed) return undefined;
+    return products.find((product) =>
+      product.barcodes?.some((barcode) => barcode === trimmed),
+    );
+  };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    const match = findProductByBarcode(searchQuery);
+    if (!match) return;
+    event.preventDefault();
+    setSearchQuery("");
+    handleProductClick(match);
+  };
+
   const isCashOpen = cashSession && !cashSession.endTime;
 
   return (
@@ -88,6 +105,8 @@ export function ProductCatalog({
             placeholder="Buscar productos..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            autoFocus
             className="pl-10 h-14 text-lg"
           />
         </div>

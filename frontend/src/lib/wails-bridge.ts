@@ -1,6 +1,8 @@
 import { toast } from "sonner";
+import { isElectronEnvironment, printReceiptElectron, printReceiptInBrowser } from "./desktop-api";
 import { normalizeProduct } from "./product-categories";
-
+import { buildReceiptHtml } from "./receipt-template";
+import { resolveReceiptLogoUrl } from "./theme-logo";
 declare global {
   interface Window {
     go?: {
@@ -82,7 +84,14 @@ export interface PaymentMethod {
 export interface ThemeConfig {
   primaryColor: string;
   logoUrl?: string;
+  receiptWidthMm?: 55 | 80;
 }
+
+export type PrintReceiptOptions = {
+  businessName?: string;
+  logoUrl?: string;
+  receiptWidthMm?: 55 | 80;
+};
 
 const isWailsEnvironment = (): boolean => {
   return typeof window !== "undefined" && !!window.go?.main?.App;
@@ -129,13 +138,42 @@ const mockParcels: Parcel[] = [
 ];
 
 export const WailsAPI = {
-  async printReceipt(cartItems: CartItem[], total: number): Promise<void> {
+  async printReceipt(
+    cartItems: CartItem[],
+    total: number,
+    printOptions: PrintReceiptOptions = {},
+  ): Promise<void> {
+    const widthMm = printOptions.receiptWidthMm ?? 80;
+    const html = buildReceiptHtml(
+      cartItems.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      total,
+      {
+        widthMm,
+        businessName: printOptions.businessName ?? "Sistema Punto de Venta",
+        logoUrl: resolveReceiptLogoUrl(printOptions.logoUrl),
+      },
+    );
+
     if (isWailsEnvironment()) {
-      const data = JSON.stringify({ items: cartItems, total });
+      const data = JSON.stringify({ html, widthMm });
       await window.go!.main!.App!.PrintReceipt(data);
-    } else {
-      toast.success("Recibo impreso (modo demostración)");
-      console.log("Mock print:", { items: cartItems, total });
+      return;
+    }
+
+    if (isElectronEnvironment()) {
+      await printReceiptElectron(html, widthMm);
+      return;
+    }
+
+    try {
+      printReceiptInBrowser(html);
+    } catch (error) {
+      toast.error("No se pudo abrir el diálogo de impresión");
+      console.error("Browser print fallback:", error, { items: cartItems, total });
     }
   },
 
@@ -270,6 +308,7 @@ export const WailsAPI = {
     } else {
       return {
         primaryColor: "#030213",
+        receiptWidthMm: 80,
       };
     }
   },
