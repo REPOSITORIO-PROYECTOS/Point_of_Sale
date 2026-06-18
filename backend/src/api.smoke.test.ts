@@ -85,10 +85,12 @@ async function authedRequest(path: string, init?: RequestInit) {
   });
 }
 
-function skipIfOffline(t: { skip: (message?: string) => void }) {
+function skipIfOffline(t: { skip: (message?: string) => void }): boolean {
   if (!apiLive) {
     t.skip('pos-api no responde — levantar con: npm run dev:api');
+    return true;
   }
+  return false;
 }
 
 test.before(async () => {
@@ -96,7 +98,7 @@ test.before(async () => {
 });
 
 test('pos-api health', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
   const { response, body } = await request('');
   assert.equal(response.status, 200);
   assert.equal((body as Record<string, unknown>)?.status, 'ok');
@@ -104,7 +106,7 @@ test('pos-api health', async (t) => {
 });
 
 test('products CRUD contract', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const productId = `smoke-${Date.now()}`;
   const payload = {
@@ -149,7 +151,7 @@ test('products CRUD contract', async (t) => {
 });
 
 test('cash session and sale flow', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const stamp = Date.now();
   const productId = `smoke-sale-prod-${stamp}`;
@@ -206,7 +208,7 @@ test('cash session and sale flow', async (t) => {
 });
 
 test('cash GET and POST', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
   const listBefore = await authedRequest('/cash');
   assert.equal(listBefore.response.status, 200);
   assert.ok(Array.isArray(listBefore.body));
@@ -223,7 +225,7 @@ test('cash GET and POST', async (t) => {
 });
 
 test('inventory GET and POST', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
   const listBefore = await authedRequest('/inventory');
   assert.equal(listBefore.response.status, 200);
   assert.ok(Array.isArray(listBefore.body));
@@ -242,7 +244,7 @@ test('inventory GET and POST', async (t) => {
 });
 
 test('AFIP integration health', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
   const { response, body } = await request('/integrations/afip/health');
   assert.equal(response.status, 200);
   const status = body as Record<string, unknown>;
@@ -252,7 +254,7 @@ test('AFIP integration health', async (t) => {
 });
 
 test('auth setup-status and login returns JWT', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const status = await request('/auth/setup-status');
   assert.equal(status.response.status, 200);
@@ -270,7 +272,7 @@ test('auth setup-status and login returns JWT', async (t) => {
 });
 
 test('products lookup by barcode exact match', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const barcode = `smoke-bc-${Date.now()}`;
   const productId = `smoke-bc-prod-${Date.now()}`;
@@ -301,7 +303,7 @@ MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCexample
 -----END PRIVATE KEY-----`;
 
 test('AFIP facturar requires full credentials', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const config = await request('/integrations/afip/config');
   assert.equal(config.response.status, 200);
@@ -326,7 +328,7 @@ test('AFIP facturar requires full credentials', async (t) => {
 });
 
 test('AFIP credentials partial then complete flow', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const configBefore = await request('/integrations/afip/config');
   assert.equal(configBefore.response.status, 200);
@@ -372,7 +374,7 @@ test('AFIP real import test', async (t) => {
     return t.skip('Set RUN_AFIP_IMPORT_TEST=true with real PEM env vars to run');
   }
 
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const cuit = process.env.AFIP_TEST_CUIT;
   const certificado = process.env.AFIP_TEST_CERT;
@@ -397,8 +399,21 @@ test('AFIP real import test', async (t) => {
   assert.equal((imported.body as { status: Record<string, unknown> }).status.configured, true);
 });
 
+test('GET /version returns monorepo version metadata', async (t) => {
+  if (skipIfOffline(t)) return;
+
+  const result = await request('/version');
+  assert.equal(result.response.status, 200);
+  assert.equal((result.body as Record<string, unknown>).name, 'point-of-sale');
+  assert.ok(typeof (result.body as Record<string, unknown>).version === 'string');
+  const components = (result.body as Record<string, unknown>).components as Record<string, string>;
+  assert.ok(components.backend);
+  assert.ok(components.frontend);
+  assert.ok(components.desktop);
+});
+
 test('settings theme persistence', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const initial = await authedRequest('/settings/theme');
   assert.equal(initial.response.status, 200);
@@ -422,7 +437,7 @@ test('settings theme persistence', async (t) => {
 });
 
 test('parcels CRUD contract', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const parcelId = `smoke-parcel-${Date.now()}`;
   const created = await authedRequest('/parcels', {
@@ -448,7 +463,7 @@ test('parcels CRUD contract', async (t) => {
 });
 
 test('auth setup returns 409 when already completed', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   await ensureAdminToken();
 
@@ -464,7 +479,7 @@ test('auth setup returns 409 when already completed', async (t) => {
 });
 
 test('users PATCH isActive requires admin role', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const me = await authedRequest('/auth/me');
   assert.equal(me.response.status, 200);
@@ -485,7 +500,7 @@ test('users PATCH isActive requires admin role', async (t) => {
 });
 
 test('settings theme logo upload, serve bytes, and delete', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const tinyPngBase64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -516,7 +531,7 @@ test('settings theme logo upload, serve bytes, and delete', async (t) => {
 });
 
 test('support recovery unlock returns 503 when server has no secret', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const result = await request('/support/recovery/unlock', {
     method: 'POST',
@@ -533,7 +548,7 @@ test('support recovery unlock returns 503 when server has no secret', async (t) 
 });
 
 test('support recovery unlock returns 401 with wrong key when enabled', async (t) => {
-  skipIfOffline(t);
+  if (skipIfOffline(t)) return;
 
   const result = await request('/support/recovery/unlock', {
     method: 'POST',
