@@ -1,9 +1,9 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { AuditLogService } from '@/services/audit-log.service';
 
 @Catch()
 export class AuditExceptionFilter implements ExceptionFilter {
-  constructor(private readonly auditLogService: AuditLogService) {}
+  constructor(@Inject(AuditLogService) private readonly auditLogService: AuditLogService) {}
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse();

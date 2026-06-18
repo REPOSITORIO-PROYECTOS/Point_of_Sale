@@ -41,4 +41,5 @@ export function ensureDesktopPaths(paths: ReturnType<typeof getDesktopPaths>) {
   fs.mkdirSync(paths.brandingDir, { recursive: true });
   fs.mkdirSync(paths.logsDir, { recursive: true });
   fs.mkdirSync(path.join(paths.appDataDir, 'afip'), { recursive: true });
+  fs.mkdirSync(path.join(paths.appDataDir, 'remote'), { recursive: true });
 }

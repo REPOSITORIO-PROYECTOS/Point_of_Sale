@@ -1,7 +1,7 @@
 # Conectividad remota — arquitectura y diseño
 
 **Última actualización:** 2026-06-18  
-**Estado:** diseño / pre-implementación  
+**Estado:** MVP scaffold implementado (2026-06-18)  
 **Sprint planificado:** [Sprint 7 en `sprint-revision.md`](./sprint-revision.md#sprint-7--conectividad-remota--pwa)
 
 ---
@@ -339,6 +339,7 @@ CORS_ORIGINS=https://portal.ejemplo.com
 
 ### MVP (Sprint 7.0 – 7.4)
 
+- ✅ **Scaffold (2026-06-18):** `services/remote/` relay Fastify :5090, `apps/remote-portal/` PWA :5174, stub `remote-agent` en backend
 - Emparejamiento 1 tenant → 1+ dispositivos
 - Heartbeat y estado online/offline
 - PWA instalable con login y dashboard de 1 cliente
@@ -363,11 +364,14 @@ Propuesta alineada a `package.json` raíz:
 
 ```json
 {
-  "dev:remote": "docker compose -f docker-compose.dev.yml up remote",
+  "dev:remote": "concurrently relay + portal",
   "dev:portal": "npm run dev --prefix apps/remote-portal",
-  "dev:stack:remote": "concurrently ... web,api,afip,remote,portal"
+  "dev:remote-api": "npm run dev --prefix services/remote",
+  "dev:stack:full": "concurrently web,api,afip,relay,portal"
 }
 ```
+
+**Implementado (MVP scaffold):** scripts anteriores en raíz; `dev:stack` sigue sin remote (usar `dev:stack:full` para stack completo).
 
 Puertos:
 

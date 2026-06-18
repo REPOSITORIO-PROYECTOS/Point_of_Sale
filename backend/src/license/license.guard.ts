@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   HttpException,
+  Inject,
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -12,8 +13,8 @@ import { LicenseService } from './license.service';
 @Injectable()
 export class LicenseGuard implements CanActivate {
   constructor(
-    private readonly reflector: Reflector,
-    private readonly licenseService: LicenseService,
+    @Inject(Reflector) private readonly reflector: Reflector,
+    @Inject(LicenseService) private readonly licenseService: LicenseService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

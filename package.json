@@ -8,6 +8,10 @@
     "dev:afip": "docker compose -f docker-compose.dev.yml up afip",
     "build:afip-sidecar": "powershell -ExecutionPolicy Bypass -File services/afip/build-sidecar.ps1",
     "dev:stack": "concurrently -n web,api,afip -c cyan,green,yellow \"npm run dev:web\" \"npm run dev:api\" \"npm run dev:afip\"",
+    "dev:remote": "concurrently -n relay,portal -c magenta,blue \"npm run dev:remote-api\" \"npm run dev:portal\"",
+    "dev:portal": "npm run dev --prefix apps/remote-portal",
+    "dev:remote-api": "npm run dev --prefix services/remote",
+    "dev:stack:full": "concurrently -n web,api,afip,relay,portal -c cyan,green,yellow,magenta,blue \"npm run dev:web\" \"npm run dev:api\" \"npm run dev:afip\" \"npm run dev:remote-api\" \"npm run dev:portal\"",
     "dev:desktop": "npm run dev --prefix desktop",
     "build:web": "npm run build --prefix frontend",
     "build:api": "npm run build --prefix backend",
@@ -18,7 +22,8 @@
     "test:microservices": "node scripts/verify-microservices.mjs",
     "test:microservices:unit": "npm run test:microservices --prefix backend",
     "test:api:smoke": "npm run test:smoke --prefix backend",
-    "test:all": "npm run test:microservices:unit && npm run test:api:smoke"
+    "test:desktop:smoke": "npm run test:smoke --prefix desktop",
+    "test:all": "npm run test:microservices:unit && npm run test:api:smoke && npm run test:desktop:smoke"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
