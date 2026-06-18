@@ -12,7 +12,7 @@ import type {
 } from './afip.types';
 import {
   AFIP_CONSULTA_PATH,
-  AFIP_FACTURADOR_PATH,
+  AFIP_FACTURADOR_PATHS,
   AFIP_TEST_PATHS,
 } from './afip.types';
 
@@ -93,21 +93,34 @@ export class AfipService implements OnModuleInit {
 
   async issueInvoice(payload: AfipIssueInvoicePayload): Promise<AfipIssueInvoiceResponse> {
     const body = this.buildMicroserviceInvoiceRequest(payload);
+    let lastError: Error | null = null;
 
-    const response = await fetch(`${this.baseUrl}${AFIP_FACTURADOR_PATH}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
-    });
+    for (const facturadorPath of AFIP_FACTURADOR_PATHS) {
+      const url = `${this.baseUrl}${facturadorPath}`;
 
-    const data = (await response.json().catch(() => ({}))) as AfipIssueInvoiceResponse;
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(30000),
+        });
 
-    if (!response.ok) {
-      throw new Error(`AFIP facturador error (${response.status}): ${JSON.stringify(data)}`);
+        const data = (await response.json().catch(() => ({}))) as AfipIssueInvoiceResponse;
+
+        if (response.ok) {
+          return data;
+        }
+
+        lastError = new Error(`AFIP facturador error (${response.status}) at ${facturadorPath}: ${JSON.stringify(data)}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown AFIP facturador error';
+        lastError = new Error(`AFIP facturador request failed at ${facturadorPath}: ${message}`);
+        this.logger.debug(lastError.message);
+      }
     }
 
-    return data;
+    throw lastError ?? new Error('AFIP facturador unreachable on known paths');
   }
 
   async queryVoucher(params: AfipQueryVoucherParams): Promise<AfipQueryVoucherResponse> {

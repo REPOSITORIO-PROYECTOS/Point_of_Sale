@@ -28,6 +28,17 @@ type ImportAfipCredentialsInput = {
   production?: boolean;
 };
 
+type SaveAfipPrivateKeyInput = {
+  cuit: string;
+  clavePrivada: string;
+  puntoVenta?: number;
+  production?: boolean;
+};
+
+type ImportAfipCertificateInput = {
+  certificado: string;
+};
+
 @Injectable()
 export class AfipConfigService {
   getStatus(): AfipConfigStatus {
@@ -38,8 +49,12 @@ export class AfipConfigService {
     const hasCertificate = hasAfipCertificateFile();
     const hasPrivateKey = hasAfipPrivateKeyFile();
 
+    const configured = Boolean(cuit && hasCertificate && hasPrivateKey);
+    const pendingCertificate = Boolean(cuit && hasPrivateKey && !hasCertificate);
+
     return {
-      configured: Boolean(cuit && hasCertificate && hasPrivateKey),
+      configured,
+      pendingCertificate,
       cuit,
       puntoVenta: stored?.puntoVenta ?? env.afipPuntoVenta,
       production: stored?.production ?? env.afipProduction,
@@ -83,6 +98,68 @@ export class AfipConfigService {
       }
 
       throw new BadRequestException(error instanceof Error ? error.message : 'Invalid AFIP credentials');
+    }
+  }
+
+  savePrivateKey(input: SaveAfipPrivateKeyInput) {
+    try {
+      const cuit = validateCuit(input.cuit);
+      const clavePrivada = validatePrivateKeyPem(input.clavePrivada);
+      const puntoVenta = input.puntoVenta ?? readStoredAfipConfig()?.puntoVenta ?? env.afipPuntoVenta;
+      const production = input.production ?? readStoredAfipConfig()?.production ?? env.afipProduction;
+
+      if (!Number.isInteger(puntoVenta) || puntoVenta < 1) {
+        throw new BadRequestException('puntoVenta must be a positive integer');
+      }
+
+      writeAfipPrivateKey(clavePrivada);
+
+      const config: AfipStoredConfig = {
+        cuit,
+        puntoVenta,
+        production,
+        updatedAt: new Date().toISOString(),
+      };
+
+      writeStoredAfipConfig(config);
+
+      return this.getStatus();
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException(error instanceof Error ? error.message : 'Invalid AFIP private key');
+    }
+  }
+
+  importCertificate(input: ImportAfipCertificateInput) {
+    try {
+      const certificado = validateCertificatePem(input.certificado);
+      const stored = readStoredAfipConfig();
+
+      if (!stored?.cuit) {
+        throw new BadRequestException('Save CUIT and private key before importing the certificate');
+      }
+
+      if (!hasAfipPrivateKeyFile()) {
+        throw new BadRequestException('Private key is required before importing the certificate');
+      }
+
+      writeAfipCertificate(certificado);
+
+      writeStoredAfipConfig({
+        ...stored,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return this.getStatus();
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException(error instanceof Error ? error.message : 'Invalid AFIP certificate');
     }
   }
 

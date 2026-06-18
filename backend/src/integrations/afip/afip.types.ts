@@ -6,7 +6,7 @@ export type AfipCredentials = {
 
 export type AfipInvoiceData = {
   tipo_afip: number;
-  punto_venta: number;
+  punto_venta?: number;
   tipo_documento: number;
   documento: string;
   total: number;
@@ -55,5 +55,6 @@ export type AfipQueryVoucherResponse = {
 
 export const AFIP_TEST_PATHS = ['/api/afipws/test', '/afipws/test'] as const;
 
-export const AFIP_FACTURADOR_PATH = '/api/afipws/facturador';
+export const AFIP_FACTURADOR_PATHS = ['/api/afipws/facturador', '/afipws/facturador'] as const;
+export const AFIP_FACTURADOR_PATH = AFIP_FACTURADOR_PATHS[0];
 export const AFIP_CONSULTA_PATH = '/api/afipws/consulta_comprobante';

@@ -7,6 +7,7 @@ export type AfipStoredConfig = {
 
 export type AfipConfigStatus = {
   configured: boolean;
+  pendingCertificate: boolean;
   cuit: string | null;
   puntoVenta: number;
   production: boolean;
