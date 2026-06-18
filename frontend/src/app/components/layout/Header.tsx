@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "../../../lib/auth-context";
 import { useTheme } from "../../../lib/theme-context";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -43,6 +44,7 @@ interface HeaderProps {
 }
 
 export function Header({ activeTab, onTabChange }: HeaderProps) {
+  const { user, logout, isAdmin } = useAuth();
   const { themeConfig = { primaryColor: "#030213" } } = useTheme() || {};
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
@@ -51,7 +53,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
 
   const navigationItems = [
     { id: "pos", label: "Mostrador", icon: ShoppingCart },
-    { id: "parcels", label: "Encomiendas", icon: Package },
+    ...(isAdmin ? [{ id: "parcels", label: "Encomiendas", icon: Package }] : []),
   ];
 
   return (
@@ -103,32 +105,36 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
             })}
 
             {/* Inventario */}
-            <Button
-              variant={activeTab === "inventory" ? "secondary" : "ghost"}
-              className={`h-11 px-6 gap-2 ${
-                activeTab === "inventory"
-                  ? "bg-primary-foreground text-primary"
-                  : "text-primary-foreground hover:bg-primary-foreground/10"
-              }`}
-              onClick={() => onTabChange("inventory")}
-            >
-              <FileSpreadsheet className="size-5" />
-              Inventario
-            </Button>
+            {isAdmin && (
+              <Button
+                variant={activeTab === "inventory" ? "secondary" : "ghost"}
+                className={`h-11 px-6 gap-2 ${
+                  activeTab === "inventory"
+                    ? "bg-primary-foreground text-primary"
+                    : "text-primary-foreground hover:bg-primary-foreground/10"
+                }`}
+                onClick={() => onTabChange("inventory")}
+              >
+                <FileSpreadsheet className="size-5" />
+                Inventario
+              </Button>
+            )}
 
             {/* Auditoría */}
-            <Button
-              variant={activeTab === "audit" ? "secondary" : "ghost"}
-              className={`h-11 px-6 gap-2 ${
-                activeTab === "audit"
-                  ? "bg-primary-foreground text-primary"
-                  : "text-primary-foreground hover:bg-primary-foreground/10"
-              }`}
-              onClick={() => onTabChange("audit")}
-            >
-              <ClipboardList className="size-5" />
-              Auditoría
-            </Button>
+            {isAdmin && (
+              <Button
+                variant={activeTab === "audit" ? "secondary" : "ghost"}
+                className={`h-11 px-6 gap-2 ${
+                  activeTab === "audit"
+                    ? "bg-primary-foreground text-primary"
+                    : "text-primary-foreground hover:bg-primary-foreground/10"
+                }`}
+                onClick={() => onTabChange("audit")}
+              >
+                <ClipboardList className="size-5" />
+                Auditoría
+              </Button>
+            )}
           </nav>
 
           {/* Acciones del usuario */}
@@ -143,41 +149,43 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
             </Button>
 
             {/* Configuración de Negocio */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-primary-foreground hover:bg-primary-foreground/10"
-                >
-                  <Store className="size-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Configuración de Negocio</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setAppearanceOpen(true)}>
-                  <Palette className="size-4 mr-2" />
-                  Apariencia y Logo
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setBusinessOpen(true)}>
-                  <Store className="size-4 mr-2" />
-                  Datos del Negocio
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setRolesOpen(true)}>
-                  <Shield className="size-4 mr-2" />
-                  Roles y Permisos
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAfipOpen(true)}>
-                  <FileKey className="size-4 mr-2" />
-                  Certificados AFIP
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="size-4 mr-2" />
-                  Configuración General
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {isAdmin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-primary-foreground hover:bg-primary-foreground/10"
+                  >
+                    <Store className="size-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Configuración de Negocio</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setAppearanceOpen(true)}>
+                    <Palette className="size-4 mr-2" />
+                    Apariencia y Logo
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setBusinessOpen(true)}>
+                    <Store className="size-4 mr-2" />
+                    Datos del Negocio
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setRolesOpen(true)}>
+                    <Shield className="size-4 mr-2" />
+                    Roles y Permisos
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAfipOpen(true)}>
+                    <FileKey className="size-4 mr-2" />
+                    Certificados AFIP
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Settings className="size-4 mr-2" />
+                    Configuración General
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {/* Usuario */}
             <DropdownMenu>
@@ -190,8 +198,10 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
                     <User className="size-5" />
                   </div>
                   <div className="text-left hidden md:block">
-                    <p className="text-sm font-medium">Administrador</p>
-                    <p className="text-xs opacity-75">admin@local.com</p>
+                    <p className="text-sm font-medium">
+                      {user?.role === "admin" ? "Administrador" : "Cajero"}
+                    </p>
+                    <p className="text-xs opacity-75">{user?.username}</p>
                   </div>
                 </Button>
               </DropdownMenuTrigger>
@@ -207,7 +217,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
                   Preferencias
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem className="text-destructive" onClick={logout}>
                   <LogOut className="size-4 mr-2" />
                   Cerrar Sesión
                 </DropdownMenuItem>

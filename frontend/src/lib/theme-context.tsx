@@ -1,18 +1,35 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { WailsAPI, ThemeConfig } from "./wails-bridge";
+import { PosAPI } from "./pos-api";
+import { resolveThemeLogoUrl } from "./theme-logo";
+
+const isWailsEnvironment = (): boolean =>
+  typeof window !== "undefined" && !!window.go?.main?.App;
 
 interface ThemeContextType {
   themeConfig: ThemeConfig;
-  updateTheme: (config: Partial<ThemeConfig>) => void;
+  updateTheme: (config: Partial<ThemeConfig>) => Promise<void>;
   uploadLogo: (file: File) => Promise<void>;
+  removeLogo: () => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const defaultTheme: ThemeConfig = {
+  primaryColor: "#030213",
+  receiptWidthMm: 80,
+};
+
+function withResolvedLogo(config: ThemeConfig): ThemeConfig {
+  return {
+    ...config,
+    receiptWidthMm: config.receiptWidthMm ?? 80,
+    ...(config.logoUrl ? { logoUrl: resolveThemeLogoUrl(config.logoUrl) } : {}),
+  };
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig>({
-    primaryColor: "#030213",
-  });
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(defaultTheme);
 
   useEffect(() => {
     loadTheme();
@@ -24,8 +41,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const loadTheme = async () => {
     try {
-      const config = await WailsAPI.getThemeConfig();
-      setThemeConfig(config);
+      const config = isWailsEnvironment()
+        ? await WailsAPI.getThemeConfig()
+        : await PosAPI.getThemeConfig();
+      setThemeConfig(withResolvedLogo(config));
     } catch (error) {
       console.error("Error loading theme:", error);
     }
@@ -45,32 +64,46 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeConfig(newConfig);
 
     try {
-      await WailsAPI.saveThemeConfig(newConfig);
+      if (isWailsEnvironment()) {
+        await WailsAPI.saveThemeConfig(newConfig);
+      } else {
+        const saved = await PosAPI.saveThemeConfig(newConfig);
+        setThemeConfig(withResolvedLogo(saved));
+      }
     } catch (error) {
       console.error("Error saving theme:", error);
     }
   };
 
   const uploadLogo = async (file: File) => {
-    return new Promise<void>((resolve, reject) => {
+    if (isWailsEnvironment()) {
       const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const base64 = e.target?.result as string;
-          const logoUrl = await WailsAPI.uploadLogo(base64);
-          await updateTheme({ logoUrl });
-          resolve();
-        } catch (error) {
-          reject(error);
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const logoUrl = await WailsAPI.uploadLogo(base64);
+      await updateTheme({ logoUrl });
+      return;
+    }
+
+    const saved = await PosAPI.uploadThemeLogo(file);
+    setThemeConfig(withResolvedLogo(saved));
+  };
+
+  const removeLogo = async () => {
+    if (isWailsEnvironment()) {
+      await updateTheme({ logoUrl: undefined });
+      return;
+    }
+
+    const saved = await PosAPI.deleteThemeLogo();
+    setThemeConfig(withResolvedLogo(saved));
   };
 
   return (
-    <ThemeContext.Provider value={{ themeConfig, updateTheme, uploadLogo }}>
+    <ThemeContext.Provider value={{ themeConfig, updateTheme, uploadLogo, removeLogo }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -80,9 +113,10 @@ export function useTheme() {
   const context = useContext(ThemeContext);
   if (context === undefined) {
     return {
-      themeConfig: { primaryColor: "#030213" },
-      updateTheme: () => Promise.resolve(),
-      uploadLogo: () => Promise.resolve(),
+      themeConfig: defaultTheme,
+      updateTheme: async () => undefined,
+      uploadLogo: async () => undefined,
+      removeLogo: async () => undefined,
     };
   }
   return context;
