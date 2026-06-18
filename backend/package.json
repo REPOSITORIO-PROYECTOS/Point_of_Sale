@@ -10,9 +10,11 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "db:init": "tsx src/database/init-db.ts",
-    "test:microservices": "tsx --test src/integrations/afip/afip.microservice.test.ts src/integrations/afip/afip-config.storage.test.ts src/integrations/afip/afip-config.service.test.ts src/auth/auth.service.test.ts src/resources/settings/logo-storage.test.ts src/receipt-template.test.ts src/license/license-crypto.test.ts src/support/support-recovery.service.test.ts",
+    "test:microservices": "tsx --test src/integrations/afip/afip.microservice.test.ts src/integrations/afip/afip-config.storage.test.ts src/integrations/afip/afip-config.service.test.ts src/auth/auth.service.test.ts src/guards/roles.guard.test.ts src/resources/users/users.service.test.ts src/resources/parcels/parcels.service.test.ts src/resources/settings/logo-storage.test.ts src/receipt-template.test.ts src/license/license-crypto.test.ts src/support/support-recovery.service.test.ts",
+    "test:unit": "npm run test:microservices",
     "support:export": "tsx scripts/support-export.ts",
-    "test:smoke": "tsx --test src/api.smoke.test.ts"
+    "test:smoke": "tsx --test src/api.smoke.test.ts",
+    "test:all": "npm run test:unit && npm run test:smoke"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

@@ -54,3 +54,32 @@ test('LogoStorageService rejects logos larger than 2 MB', () => {
     );
   });
 });
+
+test('LogoStorageService saveLogoBuffer and clearStoredLogo roundtrip', () => {
+  withTempBrandingDir((brandingDir) => {
+    const service = new LogoStorageService();
+    const buffer = Buffer.from(tinyPngBase64, 'base64');
+
+    service.saveLogoBuffer(buffer, 'image/png');
+    assert.ok(service.hasStoredLogo());
+    assert.ok(fs.existsSync(path.join(brandingDir, 'logo.png')));
+
+    const stored = service.findStoredLogo();
+    assert.equal(stored?.contentType, 'image/png');
+    assert.deepEqual(stored?.buffer, buffer);
+
+    service.clearStoredLogo();
+    assert.equal(service.hasStoredLogo(), false);
+    assert.equal(fs.existsSync(path.join(brandingDir, 'logo.png')), false);
+  });
+});
+
+test('LogoStorageService recognizes API logo path references', () => {
+  withTempBrandingDir(() => {
+    const service = new LogoStorageService();
+
+    assert.equal(service.isApiLogoPath(THEME_LOGO_API_PATH), true);
+    assert.equal(service.isApiLogoPath('/api/settings/theme/logo'), true);
+    assert.equal(service.isApiLogoPath('data:image/png;base64,abc'), false);
+  });
+});

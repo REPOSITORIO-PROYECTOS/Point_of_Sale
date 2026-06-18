@@ -446,3 +446,104 @@ test('parcels CRUD contract', async (t) => {
   assert.ok(Array.isArray(list.body));
   assert.ok((list.body as Array<Record<string, unknown>>).some((parcel) => parcel.id === parcelId));
 });
+
+test('auth setup returns 409 when already completed', async (t) => {
+  skipIfOffline(t);
+
+  await ensureAdminToken();
+
+  const secondSetup = await request('/auth/setup', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: 'another-admin',
+      password: 'another-pass-123',
+      confirmPassword: 'another-pass-123',
+    }),
+  });
+  assert.equal(secondSetup.response.status, 409);
+});
+
+test('users PATCH isActive requires admin role', async (t) => {
+  skipIfOffline(t);
+
+  const me = await authedRequest('/auth/me');
+  assert.equal(me.response.status, 200);
+  const userId = (me.body as Record<string, unknown>).id as string;
+
+  const unauthenticated = await request(`/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isActive: true }),
+  });
+  assert.equal(unauthenticated.response.status, 401);
+
+  const updated = await authedRequest(`/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isActive: true }),
+  });
+  assert.equal(updated.response.status, 200);
+  assert.equal((updated.body as Record<string, unknown>).isActive, true);
+});
+
+test('settings theme logo upload, serve bytes, and delete', async (t) => {
+  skipIfOffline(t);
+
+  const tinyPngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  const uploaded = await authedRequest('/settings/theme/logo', {
+    method: 'POST',
+    body: JSON.stringify({ imageBase64: `data:image/png;base64,${tinyPngBase64}` }),
+  });
+  assert.equal(uploaded.response.status, 201);
+  assert.equal((uploaded.body as Record<string, unknown>).logoUrl, '/settings/theme/logo');
+
+  const logoResponse = await fetch(`${BASE_URL}/settings/theme/logo`, {
+    signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(logoResponse.status, 200);
+  assert.match(logoResponse.headers.get('content-type') ?? '', /image\/png/);
+  const logoBytes = Buffer.from(await logoResponse.arrayBuffer());
+  assert.ok(logoBytes.length > 0);
+
+  const deleted = await authedRequest('/settings/theme/logo', { method: 'DELETE' });
+  assert.equal(deleted.response.status, 200);
+  assert.equal((deleted.body as Record<string, unknown>).logoUrl, undefined);
+
+  const missingLogo = await fetch(`${BASE_URL}/settings/theme/logo`, {
+    signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(missingLogo.status, 404);
+});
+
+test('support recovery unlock returns 503 when server has no secret', async (t) => {
+  skipIfOffline(t);
+
+  const result = await request('/support/recovery/unlock', {
+    method: 'POST',
+    headers: { 'X-Support-Recovery-Key': 'any-key-value-here' },
+    body: JSON.stringify({}),
+  });
+
+  if (result.response.status === 503) {
+    assert.equal(result.response.status, 503);
+    return;
+  }
+
+  t.skip('SUPPORT_RECOVERY_SECRET configurado en el servidor; ruta 503 cubierta por unit tests');
+});
+
+test('support recovery unlock returns 401 with wrong key when enabled', async (t) => {
+  skipIfOffline(t);
+
+  const result = await request('/support/recovery/unlock', {
+    method: 'POST',
+    headers: { 'X-Support-Recovery-Key': 'wrong-recovery-key' },
+    body: JSON.stringify({}),
+  });
+
+  if (result.response.status === 503) {
+    return t.skip('Recovery deshabilitado en el servidor (sin SUPPORT_RECOVERY_SECRET)');
+  }
+
+  assert.equal(result.response.status, 401);
+});

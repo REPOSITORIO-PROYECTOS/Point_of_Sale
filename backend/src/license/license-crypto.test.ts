@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
+import path from 'node:path';
 import test from 'node:test';
 import {
   loadPrivateKey,
@@ -7,22 +8,22 @@ import {
   signLicensePayload,
   verifyLicenseKey,
 } from './license-crypto';
+import type { LicensePayload } from './license-payload';
 import { buildLicensePayload } from './license.service';
-import path from 'node:path';
 
-const repoRoot = path.resolve(import.meta.dirname, '../../..');
+const repoRoot = path.resolve(process.cwd(), '..');
 const teamPublicKeyPath = path.join(repoRoot, 'backend/src/license/keys/license-public.pem');
 const teamPrivateKeyPath = path.join(repoRoot, 'tools/keys/license-private.pem');
 
-function samplePayload(machineId: string) {
+function samplePayload(machineId: string): LicensePayload {
   return {
-    v: 1 as const,
+    v: 1,
     licenseId: 'CLI-00042',
     clientNumber: '00042',
     machineId,
     issuedAt: '2026-06-18T12:00:00.000Z',
     expiresAt: '2027-12-31T23:59:59.999Z',
-    features: ['pos', 'afip', 'remote'] as const,
+    features: ['pos', 'afip', 'remote'],
   };
 }
 
