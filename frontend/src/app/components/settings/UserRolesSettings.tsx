@@ -1,9 +1,17 @@
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader } from "../ui/card";
+import { useCallback, useEffect, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Switch } from "../ui/switch";
+import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import {
   Table,
   TableBody,
@@ -12,236 +20,196 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
-import { mockUserRoles, type UserRole } from "../../../lib/mock-data";
-import {
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  User,
-  Eye,
-  Edit,
-  DollarSign,
-  XCircle,
-  PercentCircle,
-  FileText,
-} from "lucide-react";
+import { PosAPI } from "../../../lib/pos-api";
+import { ShieldAlert, User, UserPlus } from "lucide-react";
+import { toast } from "sonner";
+
+type ApiUser = {
+  id: string;
+  username: string;
+  role: "admin" | "cashier";
+  isActive: boolean;
+  createdAt: string;
+};
 
 export function UserRolesSettings() {
-  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
-  const [roles] = useState<UserRole[]>(mockUserRoles);
+  const [users, setUsers] = useState<ApiUser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "cashier">("cashier");
+  const [isCreating, setIsCreating] = useState(false);
 
-  const getRoleIcon = (accessLevel: string) => {
-    switch (accessLevel) {
-      case "admin":
-        return <ShieldAlert className="size-5 text-red-600" />;
-      case "manager":
-        return <ShieldCheck className="size-5 text-blue-600" />;
-      case "cashier":
-        return <User className="size-5 text-green-600" />;
-      case "auditor":
-        return <Shield className="size-5 text-purple-600" />;
-      default:
-        return <User className="size-5" />;
+  const loadUsers = useCallback(async () => {
+    try {
+      const data = await PosAPI.getUsers();
+      setUsers(data);
+    } catch (error) {
+      toast.error("No se pudieron cargar los usuarios");
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
+
+  const handleToggleActive = async (user: ApiUser, isActive: boolean) => {
+    try {
+      const updated = await PosAPI.updateUserActive(user.id, isActive);
+      setUsers((current) =>
+        current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
+      );
+      toast.success(`Usuario ${updated.username} ${isActive ? "habilitado" : "deshabilitado"}`);
+    } catch (error) {
+      toast.error("No se pudo actualizar el usuario");
+      console.error(error);
     }
   };
 
-  const getRoleBadgeVariant = (accessLevel: string) => {
-    switch (accessLevel) {
-      case "admin":
-        return "destructive";
-      case "manager":
-        return "default";
-      case "cashier":
-        return "secondary";
-      case "auditor":
-        return "outline";
-      default:
-        return "secondary";
+  const handleCreateUser = async () => {
+    if (!newUsername.trim() || newPassword.length < 6) {
+      toast.error("Usuario (mín. 3) y contraseña (mín. 6) requeridos");
+      return;
     }
-  };
 
-  const permissionLabels: Record<keyof UserRole["permissions"], string> = {
-    canViewAudit: "Ver auditorías",
-    canEditProducts: "Editar productos",
-    canManageCash: "Gestionar caja",
-    canCancelSales: "Cancelar ventas",
-    canApplyDiscounts: "Aplicar descuentos",
-    canAccessReports: "Acceder a reportes",
-  };
-
-  const permissionIcons: Record<keyof UserRole["permissions"], any> = {
-    canViewAudit: Eye,
-    canEditProducts: Edit,
-    canManageCash: DollarSign,
-    canCancelSales: XCircle,
-    canApplyDiscounts: PercentCircle,
-    canAccessReports: FileText,
+    setIsCreating(true);
+    try {
+      const created = await PosAPI.createUser(newUsername.trim(), newPassword, newRole);
+      setUsers((current) => [...current, created].sort((a, b) => a.username.localeCompare(b.username)));
+      setNewUsername("");
+      setNewPassword("");
+      setNewRole("cashier");
+      toast.success(`Usuario ${created.username} creado`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo crear el usuario");
+      console.error(error);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
-    <>
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-lg font-semibold mb-2">Roles y Permisos</h3>
-          <p className="text-sm text-muted-foreground">
-            Configura los niveles de acceso y permisos para cada rol de usuario
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {roles.map((role) => (
-            <Card
-              key={role.id}
-              className="cursor-pointer hover:border-primary transition-colors"
-              onClick={() => setSelectedRole(role)}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {getRoleIcon(role.accessLevel)}
-                    <h4 className="font-semibold">{role.name}</h4>
-                  </div>
-                  <Badge variant={getRoleBadgeVariant(role.accessLevel) as any}>
-                    {role.accessLevel}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {Object.entries(role.permissions).map(([key, value]) => {
-                    const Icon =
-                      permissionIcons[key as keyof UserRole["permissions"]];
-                    return (
-                      <div
-                        key={key}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon className="size-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {
-                              permissionLabels[
-                                key as keyof UserRole["permissions"]
-                              ]
-                            }
-                          </span>
-                        </div>
-                        <Badge
-                          variant={value ? "default" : "secondary"}
-                          className="text-xs"
-                        >
-                          {value ? "Sí" : "No"}
-                        </Badge>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <Card className="bg-blue-50 border-blue-200">
-          <CardHeader>
-            <div className="flex items-start gap-3">
-              <Shield className="size-5 text-blue-600 mt-0.5" />
-              <div>
-                <h4 className="font-semibold text-blue-900">
-                  Niveles de Acceso
-                </h4>
-                <CardDescription className="text-blue-700 mt-1">
-                  <ul className="space-y-1 text-sm">
-                    <li>
-                      • <strong>Administrador:</strong> Acceso total al sistema
-                    </li>
-                    <li>
-                      • <strong>Gerente:</strong> Gestión completa con
-                      supervisión
-                    </li>
-                    <li>
-                      • <strong>Cajero:</strong> Operaciones de venta y caja
-                    </li>
-                    <li>
-                      • <strong>Auditor:</strong> Solo lectura y reportes
-                    </li>
-                  </ul>
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold mb-2">Usuarios del sistema</h3>
+        <p className="text-sm text-muted-foreground">
+          Usuarios reales persistidos en SQLite. La deshabilitación remota vía portal usa el mismo
+          endpoint cuando el agente remoto esté emparejado.
+        </p>
       </div>
 
-      {/* Modal de Detalle del Rol */}
-      <Dialog
-        open={!!selectedRole}
-        onOpenChange={(open) => !open && setSelectedRole(null)}
-      >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedRole && getRoleIcon(selectedRole.accessLevel)}
-              {selectedRole?.name}
-            </DialogTitle>
-            <DialogDescription>
-              Gestiona los permisos y configuraciones para este rol
-            </DialogDescription>
-          </DialogHeader>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserPlus className="size-4" />
+            Crear usuario
+          </CardTitle>
+          <CardDescription>Agregá cajeros o administradores al POS local</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-4">
+          <div className="space-y-2">
+            <Label htmlFor="newUsername">Usuario</Label>
+            <Input
+              id="newUsername"
+              value={newUsername}
+              onChange={(event) => setNewUsername(event.target.value)}
+              placeholder="cajero2"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="newPassword">Contraseña</Label>
+            <Input
+              id="newPassword"
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              placeholder="mínimo 6 caracteres"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Rol</Label>
+            <Select value={newRole} onValueChange={(value: "admin" | "cashier") => setNewRole(value)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cashier">Cajero</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-end">
+            <Button onClick={() => void handleCreateUser()} disabled={isCreating} className="w-full">
+              {isCreating ? "Creando…" : "Crear usuario"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-          {selectedRole && (
-            <div className="space-y-6 py-4">
-              <div>
-                <Label className="text-base mb-4 block">Permisos</Label>
-                <div className="space-y-3">
-                  {Object.entries(selectedRole.permissions).map(
-                    ([key, value]) => {
-                      const Icon =
-                        permissionIcons[key as keyof UserRole["permissions"]];
-                      return (
-                        <div
-                          key={key}
-                          className="flex items-center justify-between p-3 border rounded-lg"
-                        >
-                          <div className="flex items-center gap-3">
-                            <Icon className="size-5 text-muted-foreground" />
-                            <div>
-                              <p className="font-medium">
-                                {
-                                  permissionLabels[
-                                    key as keyof UserRole["permissions"]
-                                  ]
-                                }
-                              </p>
-                            </div>
-                          </div>
-                          <Switch checked={value} disabled />
-                        </div>
-                      );
-                    }
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => setSelectedRole(null)}
-                >
-                  Cerrar
-                </Button>
-                <Button>Guardar Cambios</Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+      <Card>
+        <CardHeader>
+          <CardTitle>Cuentas locales</CardTitle>
+          <CardDescription>Roles disponibles: admin y cashier</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Usuario</TableHead>
+                <TableHead>Rol</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">Activo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    Cargando usuarios...
+                  </TableCell>
+                </TableRow>
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    No hay usuarios registrados
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.username}</TableCell>
+                    <TableCell>
+                      <Badge variant={user.role === "admin" ? "destructive" : "secondary"}>
+                        {user.role === "admin" ? (
+                          <ShieldAlert className="size-3 mr-1 inline" />
+                        ) : (
+                          <User className="size-3 mr-1 inline" />
+                        )}
+                        {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={user.isActive ? "default" : "outline"}>
+                        {user.isActive ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Switch
+                        checked={user.isActive}
+                        onCheckedChange={(checked) => void handleToggleActive(user, checked)}
+                        aria-label={`Activar ${user.username}`}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

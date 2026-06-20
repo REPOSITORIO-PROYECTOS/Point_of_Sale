@@ -1,7 +1,13 @@
 import type { WebSocket } from 'ws';
+import { customAlphabet } from 'nanoid';
 import { snapshotSummary } from '../snapshot.js';
 import type { Register, RegisterPresence, RegisterSnapshot, WsAgentMessage, WsPortalMessage } from '../types.js';
 import { store } from '../store/memory-store.js';
+import { commandQueue } from '../store/command-queue.js';
+import { normalizeCashHistory, normalizeCatalog } from '../normalize-register-data.js';
+import { commandBridge } from './command-bridge.js';
+
+const generateCommandId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 
 type AgentConnection = {
   socket: WebSocket;
@@ -39,6 +45,7 @@ export class WsHub {
     });
 
     this.broadcastRegisterUpdate(tenant.clientNumber, register);
+    void this.drainPendingCommands(register.id, tenant.clientNumber);
 
     socket.on('message', (raw) => {
       this.handleAgentMessage(register.id, tenant.clientNumber, raw.toString());
@@ -122,6 +129,39 @@ export class WsHub {
 
         this.broadcastRegisterUpdate(clientNumber, register);
         this.broadcastSnapshotUpdate(clientNumber, normalized);
+        return;
+      }
+
+      if (message.type === 'data_push') {
+        const register = store.touchRegister(registerId);
+        if (!register) {
+          return;
+        }
+
+        let catalogSyncedAt: string | undefined;
+        let cashHistorySyncedAt: string | undefined;
+
+        if (message.payload.catalog) {
+          const catalog = store.setCatalog(
+            normalizeCatalog(clientNumber, registerId, message.payload.catalog),
+          );
+          catalogSyncedAt = catalog.syncedAt;
+        }
+
+        if (message.payload.cashHistory) {
+          const history = store.setCashHistory(
+            normalizeCashHistory(clientNumber, registerId, message.payload.cashHistory),
+          );
+          cashHistorySyncedAt = history.syncedAt;
+        }
+
+        this.broadcastRegisterUpdate(clientNumber, register);
+        this.broadcastDataUpdate(clientNumber, registerId, catalogSyncedAt, cashHistorySyncedAt);
+        return;
+      }
+
+      if (message.type === 'command_response' && message.commandId) {
+        commandBridge.resolveResponse(message.commandId, message.ok, message.payload, message.error);
       }
     } catch {
       // ignore malformed agent payloads in MVP
@@ -169,6 +209,82 @@ export class WsHub {
     for (const portal of this.portals) {
       if (portal.clientNumber === clientNumber) {
         portal.socket.send(payload);
+      }
+    }
+  }
+
+  private broadcastDataUpdate(
+    clientNumber: string,
+    registerId: string,
+    catalogSyncedAt?: string,
+    cashHistorySyncedAt?: string,
+  ): void {
+    const payload = JSON.stringify({
+      type: 'data_update',
+      registerId,
+      ...(catalogSyncedAt ? { catalogSyncedAt } : {}),
+      ...(cashHistorySyncedAt ? { cashHistorySyncedAt } : {}),
+    });
+
+    for (const portal of this.portals) {
+      if (portal.clientNumber === clientNumber) {
+        portal.socket.send(payload);
+      }
+    }
+  }
+
+  async sendCommand(
+    registerId: string,
+    action: string,
+    payload?: unknown,
+    timeoutMs = 15_000,
+  ): Promise<unknown> {
+    const agent = this.agents.get(registerId);
+    if (!agent) {
+      throw new Error('La caja está offline. Conectá el POS para sincronizar.');
+    }
+
+    const commandId = generateCommandId();
+    const responsePromise = commandBridge.waitForResponse(commandId, timeoutMs);
+
+    agent.socket.send(
+      JSON.stringify({
+        type: 'command',
+        commandId,
+        action,
+        ...(payload !== undefined ? { payload } : {}),
+      }),
+    );
+
+    return responsePromise;
+  }
+
+  isRegisterOnline(registerId: string): boolean {
+    return this.agents.has(registerId);
+  }
+
+  async drainPendingCommands(registerId: string, clientNumber: string): Promise<void> {
+    if (!this.isRegisterOnline(registerId)) {
+      return;
+    }
+
+    const pending = commandQueue.listPending(registerId);
+    for (const queued of pending) {
+      commandQueue.markProcessing(queued.id);
+
+      try {
+        await this.sendCommand(registerId, queued.action, queued.payload);
+        commandQueue.markCompleted(queued.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Command failed';
+        commandQueue.markFailed(queued.id, message);
+      }
+    }
+
+    if (pending.length > 0) {
+      const register = store.getRegister(clientNumber, registerId);
+      if (register) {
+        this.broadcastRegisterUpdate(clientNumber, register);
       }
     }
   }

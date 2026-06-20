@@ -1,4 +1,11 @@
-import { createPublicKey, createPrivateKey, sign, verify, type KeyObject } from 'node:crypto';
+import {
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+  sign,
+  verify,
+  type KeyObject,
+} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -36,6 +43,14 @@ export function loadPublicKey(pemPath?: string): KeyObject {
   const resolved =
     pemPath ??
     path.join(__dirname, 'keys', 'license-public.pem');
+
+  if (!fs.existsSync(resolved)) {
+    if (process.env.NODE_ENV === 'development' && process.env.DEV_SKIP_LICENSE === 'true') {
+      return generateKeyPairSync('ed25519').publicKey;
+    }
+
+    throw new Error(`Clave pública de licencia no encontrada: ${resolved}`);
+  }
 
   const pem = fs.readFileSync(resolved, 'utf8');
   return createPublicKey(pem);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -12,23 +12,60 @@ import {
   TableRow,
 } from "../ui/table";
 import { RotateCcw } from "lucide-react";
-import { mockTransactions, type Transaction } from "../../../lib/mock-data";
+import { PosAPI } from "../../../lib/pos-api";
+import type { Transaction } from "../../../lib/wails-bridge";
 import { ReturnModal } from "./ReturnModal";
 import { toast } from "sonner";
 
 export function SalesHistoryTable() {
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const getPaymentMethodLabel = (method: string) => {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSales() {
+      try {
+        const data = await PosAPI.getSales();
+        if (!cancelled) {
+          setTransactions(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error("No se pudo cargar el historial de ventas");
+          console.error(error);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadSales();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const getPaymentMethodLabel = (transaction: Transaction) => {
+    const payments = (transaction as Transaction & { payments?: Array<{ type: string }> }).payments;
+    if (!payments?.length) {
+      return "—";
+    }
+    if (payments.length > 1) {
+      return "Mixto";
+    }
+
     const labels: Record<string, string> = {
       cash: "Efectivo",
       card: "Tarjeta",
       transfer: "Transferencia",
       qr: "QR",
-      mixed: "Mixto",
     };
-    return labels[method] || method;
+    return labels[payments[0].type] ?? payments[0].type;
   };
 
   const handleReturnClick = (transaction: Transaction) => {
@@ -37,18 +74,16 @@ export function SalesHistoryTable() {
   };
 
   const handleSaveReturn = (returnData: {
-    items: any[];
+    items: unknown[];
     refundType: "cash" | "credit_note";
     amount: number;
   }) => {
     if (returnData.refundType === "cash") {
       toast.success(
-        `Devolución procesada: $${returnData.amount.toFixed(2)} devueltos en efectivo`
+        `Devolución procesada: $${returnData.amount.toFixed(2)} devueltos en efectivo`,
       );
     } else {
-      toast.success(
-        `Nota de Crédito emitida por $${returnData.amount.toFixed(2)}`
-      );
+      toast.success(`Nota de Crédito emitida por $${returnData.amount.toFixed(2)}`);
     }
   };
 
@@ -58,7 +93,7 @@ export function SalesHistoryTable() {
         <CardHeader>
           <CardTitle>Historial de Ventas</CardTitle>
           <CardDescription>
-            Tickets del turno actual con opción de gestión de devoluciones
+            Ventas persistidas en SQLite vía API
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -76,42 +111,61 @@ export function SalesHistoryTable() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockTransactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell className="font-mono font-medium">
-                        #{transaction.id}
-                      </TableCell>
-                      <TableCell>{transaction.time}</TableCell>
-                      <TableCell>
-                        <div className="text-sm space-y-1">
-                          {transaction.items.map((item, idx) => (
-                            <div key={idx} className="text-muted-foreground">
-                              {item.quantity}x {item.name}
-                            </div>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-normal">
-                          {getPaymentMethodLabel(transaction.paymentMethod)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        ${transaction.amount.toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleReturnClick(transaction)}
-                          className="w-full"
-                        >
-                          <RotateCcw className="size-4 mr-2" />
-                          Devolución
-                        </Button>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        Cargando ventas...
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        No hay ventas registradas todavía
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    transactions.map((transaction) => (
+                      <TableRow key={transaction.id}>
+                        <TableCell className="font-mono text-xs">
+                          {transaction.id.slice(0, 8)}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(transaction.timestamp).toLocaleTimeString("es-AR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {transaction.items.slice(0, 2).map((item) => (
+                              <Badge key={item.id} variant="secondary" className="text-xs">
+                                {item.quantity}x {item.name}
+                              </Badge>
+                            ))}
+                            {transaction.items.length > 2 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{transaction.items.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{getPaymentMethodLabel(transaction)}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          ${transaction.total.toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleReturnClick(transaction)}
+                          >
+                            <RotateCcw className="size-3 mr-1" />
+                            Devolver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </ScrollArea>

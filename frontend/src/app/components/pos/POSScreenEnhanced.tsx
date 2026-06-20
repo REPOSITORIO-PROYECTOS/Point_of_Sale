@@ -209,46 +209,65 @@ export function POSScreenEnhanced({
     if (cartItems.length === 0) return;
 
     try {
+      const subtotal = calculateSubtotal();
       const total = calculateTotal();
+      const ticketId = Date.now().toString();
 
       const transaction: Transaction = {
-        id: Date.now().toString(),
+        id: ticketId,
         items: cartItems,
         total,
         timestamp: new Date().toISOString(),
       };
 
-      // Imprimir comprobante según el tipo
-      await WailsAPI.printReceipt(cartItems, total, {
-        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
-        logoUrl: themeConfig.logoUrl,
-      });
+      const receiptAdjustments = adjustments.map((adj) => ({
+        type: adj.type,
+        label: adj.label,
+        amount: adj.isPercentage ? (subtotal * adj.amount) / 100 : adj.amount,
+        isPercentage: adj.isPercentage,
+      }));
 
-      // Solo guardar transacción y descontar stock si NO es presupuesto
+      let afipCae: string | undefined;
+
       if (voucherType !== "presupuesto") {
         await PosAPI.createSale(transaction, payments, voucherType);
       }
 
       if (voucherType === "factura") {
         try {
-          await PosAPI.facturarAfip({
+          const afipResult = await PosAPI.facturarAfip({
             tipo_afip: 6,
             tipo_documento: 99,
             documento: "0",
             total,
             id_condicion_iva: 5,
           });
+          const cae = (afipResult.result as { cae?: string })?.cae;
+          if (typeof cae === "string") {
+            afipCae = cae;
+          }
         } catch (afipError) {
           console.error("AFIP facturación failed:", afipError);
           toast.error(
             afipError instanceof Error
               ? `Venta registrada, pero falló la factura: ${afipError.message}`
-              : "Venta registrada, pero falló la factura electrónica"
+              : "Venta registrada, pero falló la factura electrónica",
           );
         }
       }
 
-      // Mensaje según tipo de comprobante
+      await WailsAPI.printReceipt(cartItems, total, {
+        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+        logoUrl: themeConfig.logoUrl,
+        businessName: "Sistema Punto de Venta",
+        ticketId,
+        voucherType,
+        payments,
+        adjustments: receiptAdjustments,
+        subtotal,
+        afipCae,
+      });
+
       const voucherLabels = {
         factura: "Factura",
         comprobante: "Comprobante",
@@ -258,7 +277,7 @@ export function POSScreenEnhanced({
       toast.success(
         voucherType === "presupuesto"
           ? `${voucherLabels[voucherType]} generado (sin descuento de stock)`
-          : `${voucherLabels[voucherType]} generado exitosamente`
+          : `${voucherLabels[voucherType]} generado exitosamente`,
       );
 
       setCartItems([]);
@@ -497,7 +516,26 @@ export function POSScreenEnhanced({
         onOpenChange={setCheckoutOpen}
         items={cartItems}
         subtotal={calculateTotal()}
+        adjustments={adjustments}
         onConfirm={handleCheckout}
+        onPreviewTicket={(voucherType) => {
+          const subtotal = calculateSubtotal();
+          const total = calculateTotal();
+          WailsAPI.previewReceipt(cartItems, total, {
+            receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+            logoUrl: themeConfig.logoUrl,
+            businessName: "Sistema Punto de Venta",
+            ticketId: "PREVIEW",
+            voucherType,
+            subtotal,
+            adjustments: adjustments.map((adj) => ({
+              type: adj.type,
+              label: adj.label,
+              amount: adj.isPercentage ? (subtotal * adj.amount) / 100 : adj.amount,
+              isPercentage: adj.isPercentage,
+            })),
+          });
+        }}
       />
 
       {/* Diálogo de caja cerrada */}

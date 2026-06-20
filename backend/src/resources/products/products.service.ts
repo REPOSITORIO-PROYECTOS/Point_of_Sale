@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BulkUpsertProductsDto } from './dto/bulk-upsert-products.dto';
@@ -156,6 +161,67 @@ export class ProductsService {
     }
 
     return saved.map(toProductResponse);
+  }
+
+  async listCategories(): Promise<string[]> {
+    const entities = await this.repository.find({ select: ['categories'] });
+    const categories = new Set<string>();
+
+    for (const entity of entities) {
+      for (const category of parseJsonArray(entity.categories)) {
+        const trimmed = category.trim();
+        if (trimmed) {
+          categories.add(trimmed);
+        }
+      }
+    }
+
+    return [...categories].sort((left, right) => left.localeCompare(right, 'es'));
+  }
+
+  async increasePricesByCategory(category: string, percent: number) {
+    const normalizedCategory = category.trim();
+    if (!normalizedCategory) {
+      throw new BadRequestException('Category is required');
+    }
+
+    if (percent <= 0) {
+      throw new BadRequestException('Percent must be greater than zero');
+    }
+
+    const factor = 1 + percent / 100;
+    const entities = await this.repository.find({ order: { name: 'ASC' } });
+    const updated: ProductEntity[] = [];
+
+    for (const entity of entities) {
+      const matches = parseJsonArray(entity.categories).some(
+        (item) => item.trim().toLowerCase() === normalizedCategory.toLowerCase(),
+      );
+
+      if (!matches) {
+        continue;
+      }
+
+      entity.price = Math.round(entity.price * factor);
+      if (entity.cost != null) {
+        entity.cost = Math.round(entity.cost * factor);
+      }
+
+      updated.push(entity);
+    }
+
+    if (updated.length === 0) {
+      throw new NotFoundException(`No products found in category "${normalizedCategory}"`);
+    }
+
+    const saved = await this.repository.save(updated);
+
+    return {
+      affectedCount: saved.length,
+      category: normalizedCategory,
+      percent,
+      products: saved.map(toProductResponse),
+    };
   }
 }
 

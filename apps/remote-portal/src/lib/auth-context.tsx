@@ -1,15 +1,14 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { getPortalSession, loginPortal, logoutPortal, type PortalLoginResponse, type PortalRole } from '@/lib/remote-api';
 
-type PortalSession = {
-  clientNumber: string;
-  portalUserId: string;
-  devMode: boolean;
-};
+export type PortalSession = PortalLoginResponse;
 
 type AuthContextValue = {
   session: PortalSession | null;
-  login: (clientNumber: string, password: string) => void;
-  logout: () => void;
+  isBootstrapping: boolean;
+  isDeveloper: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
 };
 
 const STORAGE_KEY = 'pos-remote-portal-session';
@@ -29,39 +28,74 @@ function loadSession(): PortalSession | null {
   }
 }
 
+function persistSession(session: PortalSession | null) {
+  if (!session) {
+    localStorage.removeItem(STORAGE_KEY);
+    return;
+  }
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+}
+
+export function isDeveloperRole(role?: PortalRole): boolean {
+  return role === 'developer';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<PortalSession | null>(() => loadSession());
+  const [isBootstrapping, setIsBootstrapping] = useState(() => Boolean(loadSession()?.sessionToken));
+
+  useEffect(() => {
+    const stored = loadSession();
+    if (!stored?.sessionToken) {
+      if (stored) {
+        persistSession(null);
+        setSession(null);
+      }
+      setIsBootstrapping(false);
+      return;
+    }
+
+    void getPortalSession(stored.sessionToken)
+      .then((validated) => {
+        persistSession(validated);
+        setSession(validated);
+      })
+      .catch(() => {
+        persistSession(null);
+        setSession(null);
+      })
+      .finally(() => setIsBootstrapping(false));
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      login: (clientNumber, password) => {
-        const normalized = clientNumber.trim().toUpperCase();
-        const devMode = import.meta.env.DEV && (!password || password === 'dev');
-
+      isBootstrapping,
+      isDeveloper: isDeveloperRole(session?.role),
+      login: async (email, password) => {
+        const normalized = email.trim().toLowerCase();
         if (!normalized) {
-          throw new Error('Ingresá el número de cliente');
+          throw new Error('Ingresá tu email');
         }
 
-        if (!devMode && password.length < 4) {
-          throw new Error('Contraseña inválida');
-        }
-
-        const nextSession: PortalSession = {
-          clientNumber: normalized,
-          portalUserId: `portal-${normalized.toLowerCase()}`,
-          devMode,
-        };
-
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSession));
-        setSession(nextSession);
+        const payload = await loginPortal(normalized, password);
+        persistSession(payload);
+        setSession(payload);
       },
-      logout: () => {
-        localStorage.removeItem(STORAGE_KEY);
+      logout: async () => {
+        const token = session?.sessionToken ?? loadSession()?.sessionToken;
+        if (token) {
+          await logoutPortal(token).catch(() => {
+            // relay puede estar offline; igual limpiamos local
+          });
+        }
+
+        persistSession(null);
         setSession(null);
       },
     }),
-    [session],
+    [session, isBootstrapping],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

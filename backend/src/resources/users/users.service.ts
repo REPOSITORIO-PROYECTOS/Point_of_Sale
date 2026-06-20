@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'node:crypto';
 import { Repository } from 'typeorm';
 import { UserEntity } from '@/auth/user.entity';
+import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 export type UserResponse = {
@@ -23,6 +30,27 @@ export class UsersService {
     return this.repository
       .find({ order: { username: 'ASC' } })
       .then((users) => users.map(toUserResponse));
+  }
+
+  async create(payload: CreateUserDto) {
+    const username = payload.username.trim();
+    const existing = await this.repository.findOne({ where: { username } });
+
+    if (existing) {
+      throw new ConflictException(`User ${username} already exists`);
+    }
+
+    const passwordHash = await bcrypt.hash(payload.password, 10);
+    const entity = this.repository.create({
+      id: randomUUID(),
+      username,
+      passwordHash,
+      role: payload.role,
+      isActive: true,
+    });
+
+    const saved = await this.repository.save(entity);
+    return toUserResponse(saved);
   }
 
   async update(id: string, payload: UpdateUserDto) {

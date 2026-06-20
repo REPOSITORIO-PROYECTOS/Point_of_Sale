@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
@@ -49,13 +49,14 @@ import {
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  mockCashClosings,
-  mockTransactions,
-  mockAuditEvents,
   type CashClosing,
-  type Transaction,
   type AuditEvent,
-} from "../../../lib/mock-data";
+} from "../../../lib/pos-domain-types";
+import { PosAPI } from "../../../lib/pos-api";
+import { mapCashSessionToClosing } from "../../../lib/cash-closing-mapper";
+
+const auditTransactions: never[] = [];
+const auditEvents: AuditEvent[] = [];
 import { CashViewAdvanced } from "../cash/CashViewAdvanced";
 import { ClosingDetailModal } from "./ClosingDetailModal";
 
@@ -65,14 +66,48 @@ interface AuditViewProps {
 }
 
 export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditViewProps = {}) {
+  const [cashClosings, setCashClosings] = useState<CashClosing[]>([]);
+  const [closingsLoading, setClosingsLoading] = useState(true);
+  const [closingsError, setClosingsError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUser, setSelectedUser] = useState<string>("all");
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [selectedClosing, setSelectedClosing] = useState<CashClosing | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void PosAPI.getCashSessionHistory()
+      .then((sessions) => {
+        if (cancelled) {
+          return;
+        }
+
+        setCashClosings(sessions.map((session) => mapCashSessionToClosing(session)));
+        setClosingsError(null);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setClosingsError(error instanceof Error ? error.message : "No se pudo cargar el historial");
+        setCashClosings([]);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setClosingsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const filteredClosings = useMemo(() => {
-    return mockCashClosings.filter((closing) => {
+    return cashClosings.filter((closing) => {
       const matchesSearch =
         searchTerm === "" ||
         closing.user.toLowerCase().includes(searchTerm.toLowerCase());
@@ -87,12 +122,12 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
 
       return matchesSearch && matchesUser && matchesDate;
     });
-  }, [searchTerm, selectedUser, dateRange]);
+  }, [cashClosings, searchTerm, selectedUser, dateRange]);
 
   const users = useMemo(() => {
-    const uniqueUsers = new Set(mockCashClosings.map((c) => c.user));
+    const uniqueUsers = new Set(cashClosings.map((c) => c.user));
     return Array.from(uniqueUsers);
-  }, []);
+  }, [cashClosings]);
 
   const getStatusBadge = (status: CashClosing["status"], difference: number) => {
     switch (status) {
@@ -261,6 +296,12 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {closingsError ? (
+                  <p className="mb-4 text-sm text-destructive">{closingsError}</p>
+                ) : null}
+                {closingsLoading ? (
+                  <p className="py-12 text-center text-muted-foreground">Cargando cierres…</p>
+                ) : (
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
@@ -342,6 +383,7 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
                     </TableBody>
                   </Table>
                 </div>
+                )}
               </CardContent>
             </Card>
           </div>

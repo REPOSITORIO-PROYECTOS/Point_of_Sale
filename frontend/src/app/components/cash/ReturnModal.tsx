@@ -23,7 +23,7 @@ import {
 import { Card, CardContent } from "../ui/card";
 import { RotateCcw, DollarSign, FileText, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { type Transaction } from "../../../lib/mock-data";
+import { type Transaction } from "../../../lib/wails-bridge";
 
 interface ReturnItem {
   name: string;

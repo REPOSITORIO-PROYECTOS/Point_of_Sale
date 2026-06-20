@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { store } from '../store/memory-store.js';
+import { sanitizeTenant } from '../utils/sanitize-tenant.js';
 
 type CreateTenantBody = {
   clientNumber: string;
   name: string;
-  contactEmail?: string;
+  contactEmail: string;
+  portalPassword?: string;
 };
 
 type CreateRegisterBody = {
@@ -20,19 +22,19 @@ type AssignRegistersBody = {
 
 export async function registerTenantRoutes(app: FastifyInstance): Promise<void> {
   app.get('/admin/tenants', async (_request, reply) => {
-    return reply.send({ tenants: store.listTenants() });
+    return reply.send({ tenants: store.listTenants().map(sanitizeTenant) });
   });
 
   app.post<{ Body: CreateTenantBody }>('/admin/tenants', async (request, reply) => {
-    const { clientNumber, name, contactEmail } = request.body;
+    const { clientNumber, name, contactEmail, portalPassword } = request.body;
 
-    if (!clientNumber?.trim() || !name?.trim()) {
-      return reply.code(400).send({ error: 'clientNumber and name are required' });
+    if (!clientNumber?.trim() || !name?.trim() || !contactEmail?.trim()) {
+      return reply.code(400).send({ error: 'clientNumber, name and contactEmail are required' });
     }
 
     try {
-      const tenant = store.createTenant(clientNumber, name, contactEmail);
-      return reply.code(201).send(tenant);
+      const tenant = await store.createTenant(clientNumber, name, contactEmail, portalPassword);
+      return reply.code(201).send(sanitizeTenant(tenant));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create tenant';
       return reply.code(409).send({ error: message });

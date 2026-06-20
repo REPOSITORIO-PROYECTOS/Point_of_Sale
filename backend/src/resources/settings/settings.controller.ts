@@ -14,6 +14,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { PublicRoute } from '../../decorators/public-routes.decorator';
+import { Roles } from '../../decorators/roles.decorator';
+import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 import { UploadThemeLogoDto } from './dto/upload-theme-logo.dto';
 import { UpdateThemeSettingsDto } from './dto/update-theme-settings.dto';
 import { MAX_LOGO_BYTES } from './logo-storage.service';
@@ -73,5 +75,16 @@ export class SettingsController {
   @Delete('theme/logo')
   deleteLogo() {
     return this.service.deleteLogo();
+  }
+
+  @Get('business')
+  getBusiness() {
+    return this.service.getBusiness();
+  }
+
+  @Put('business')
+  @Roles('admin')
+  updateBusiness(@Body() payload: UpdateBusinessSettingsDto) {
+    return this.service.updateBusiness(payload);
   }
 }

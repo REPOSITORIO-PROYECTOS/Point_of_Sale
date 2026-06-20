@@ -1,16 +1,29 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerPairingRoutes } from './routes/pairing.js';
+import { registerRegisterDataRoutes } from './routes/register-data.js';
 import { registerSnapshotRoutes } from './routes/snapshots.js';
 import { registerTenantRoutes } from './routes/tenants.js';
 import { wsHub } from './ws/hub.js';
 import { store } from './store/memory-store.js';
 
-function seedDemoData(): void {
+async function seedDemoData(): Promise<void> {
   try {
-    const tenant = store.createTenant('CLI-00001', 'Cliente demo');
+    await store.seedDeveloperAccount(
+      process.env.DEV_PORTAL_EMAIL ?? 'developer@pos.local',
+      process.env.DEV_PORTAL_PASSWORD ?? 'dev1234',
+      'Desarrollador',
+    );
+
+    const tenant = await store.createTenant(
+      'CLI-00001',
+      'Cliente demo',
+      process.env.DEMO_CLIENT_EMAIL ?? 'demo@pos.local',
+      process.env.DEMO_CLIENT_PASSWORD ?? 'demo1234',
+    );
     const register = store.createRegister(tenant.clientNumber, 'Caja 1', ['portal-cli-00001']);
     store.setSnapshot({
       registerId: register.id,
@@ -45,7 +58,7 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5174')
 const pairingTtlMinutes = Number(process.env.PAIRING_TTL_MINUTES ?? 15);
 
 async function bootstrap(): Promise<void> {
-  seedDemoData();
+  await seedDemoData();
   const app = Fastify({ logger: true });
 
   await app.register(cors, {
@@ -55,9 +68,11 @@ async function bootstrap(): Promise<void> {
   await app.register(websocket);
 
   await registerHealthRoutes(app);
+  await registerAuthRoutes(app);
   await registerTenantRoutes(app);
   await registerPairingRoutes(app, pairingTtlMinutes);
   await registerSnapshotRoutes(app);
+  await registerRegisterDataRoutes(app);
 
   app.get('/ws/agent', { websocket: true }, (socket, request) => {
     const query = request.query as { deviceToken?: string };

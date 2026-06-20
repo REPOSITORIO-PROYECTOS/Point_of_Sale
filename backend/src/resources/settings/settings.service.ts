@@ -1,11 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { BusinessSettingsEntity } from './business-settings.entity';
+import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 import { UpdateThemeSettingsDto } from './dto/update-theme-settings.dto';
 import { LogoStorageService, THEME_LOGO_API_PATH } from './logo-storage.service';
 import { ThemeSettingsEntity } from './theme-settings.entity';
 
 const DEFAULT_THEME_ID = 'default';
+const DEFAULT_BUSINESS_ID = 'default';
 const DEFAULT_PRIMARY_COLOR = '#030213';
 const DEFAULT_RECEIPT_WIDTH_MM = 80;
 
@@ -15,11 +18,22 @@ export type ThemeSettingsResponse = {
   receiptWidthMm: 55 | 80;
 };
 
+export type BusinessSettingsResponse = {
+  businessName?: string;
+  taxId?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  parcelsEnabled: boolean;
+};
+
 @Injectable()
 export class SettingsService {
   constructor(
     @InjectRepository(ThemeSettingsEntity)
     private readonly themeRepo: Repository<ThemeSettingsEntity>,
+    @InjectRepository(BusinessSettingsEntity)
+    private readonly businessRepo: Repository<BusinessSettingsEntity>,
     private readonly logoStorage: LogoStorageService,
   ) {}
 
@@ -142,5 +156,42 @@ export class SettingsService {
     }
 
     return stored;
+  }
+
+  private toBusinessResponse(row: BusinessSettingsEntity | null): BusinessSettingsResponse {
+    if (!row) {
+      return { parcelsEnabled: false };
+    }
+
+    return {
+      ...(row.businessName ? { businessName: row.businessName } : {}),
+      ...(row.taxId ? { taxId: row.taxId } : {}),
+      ...(row.phone ? { phone: row.phone } : {}),
+      ...(row.email ? { email: row.email } : {}),
+      ...(row.address ? { address: row.address } : {}),
+      parcelsEnabled: row.parcelsEnabled,
+    };
+  }
+
+  async getBusiness(): Promise<BusinessSettingsResponse> {
+    const row = await this.businessRepo.findOne({ where: { id: DEFAULT_BUSINESS_ID } });
+    return this.toBusinessResponse(row);
+  }
+
+  async updateBusiness(payload: UpdateBusinessSettingsDto): Promise<BusinessSettingsResponse> {
+    const existing = await this.businessRepo.findOne({ where: { id: DEFAULT_BUSINESS_ID } });
+
+    const row = this.businessRepo.create({
+      id: DEFAULT_BUSINESS_ID,
+      businessName: payload.businessName ?? existing?.businessName ?? null,
+      taxId: payload.taxId ?? existing?.taxId ?? null,
+      phone: payload.phone ?? existing?.phone ?? null,
+      email: payload.email ?? existing?.email ?? null,
+      address: payload.address ?? existing?.address ?? null,
+      parcelsEnabled: payload.parcelsEnabled ?? existing?.parcelsEnabled ?? false,
+    });
+
+    const saved = await this.businessRepo.save(row);
+    return this.toBusinessResponse(saved);
   }
 }

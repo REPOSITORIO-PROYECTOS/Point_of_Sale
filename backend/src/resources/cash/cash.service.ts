@@ -5,19 +5,26 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, Not } from 'typeorm';
 import { CashSessionEntity } from './cash-session.entity';
 import { CloseCashSessionDto } from './dto/close-cash-session.dto';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 import { StartCashSessionDto } from './dto/start-cash-session.dto';
 import { CashMovementEntity } from './cash-movement.entity';
+import { SaleEntity } from '../sales/sale.entity';
+
+export type CashSessionCloser = {
+  username: string;
+  role: string;
+};
 
 export type CashSessionResponse = {
   id: string;
   startTime: string;
   endTime?: string;
   initialBalance: number;
-  finalBalance?: number;
+  expectedBalance?: number;
+  countedAmount?: number;
   totalSales: number;
   salesByPaymentMethod?: {
     cash: number;
@@ -25,6 +32,10 @@ export type CashSessionResponse = {
     transfer: number;
     qr: number;
   };
+  isOpen?: boolean;
+  closedByUsername?: string;
+  closedByRole?: string;
+  transactionsCount?: number;
 };
 
 type PaymentBreakdown = NonNullable<CashSessionResponse['salesByPaymentMethod']>;
@@ -36,6 +47,8 @@ export class CashService {
     private readonly movementRepository: Repository<CashMovementEntity>,
     @InjectRepository(CashSessionEntity)
     private readonly sessionRepository: Repository<CashSessionEntity>,
+    @InjectRepository(SaleEntity)
+    private readonly saleRepository: Repository<SaleEntity>,
   ) {}
 
   findAllMovements() {
@@ -91,7 +104,36 @@ export class CashService {
     return toSessionResponse(saved);
   }
 
-  async closeSession(payload: CloseCashSessionDto) {
+  async listClosedSessions(limit = 100): Promise<CashSessionResponse[]> {
+    const closedSessions = await this.sessionRepository.find({
+      where: { endTime: Not(IsNull()) },
+      order: { endTime: 'DESC' },
+      take: limit,
+    });
+
+    if (closedSessions.length === 0) {
+      return [];
+    }
+
+    const sessionIds = closedSessions.map((session) => session.id);
+    const saleCounts = await this.saleRepository
+      .createQueryBuilder('sale')
+      .select('sale.cashSessionId', 'sessionId')
+      .addSelect('COUNT(*)', 'count')
+      .where('sale.cashSessionId IN (:...sessionIds)', { sessionIds })
+      .groupBy('sale.cashSessionId')
+      .getRawMany<{ sessionId: string; count: string }>();
+
+    const countBySession = new Map(
+      saleCounts.map((row) => [row.sessionId, Number.parseInt(row.count, 10)]),
+    );
+
+    return closedSessions.map((session) =>
+      toSessionResponse(session, countBySession.get(session.id) ?? 0),
+    );
+  }
+
+  async closeSession(payload: CloseCashSessionDto, closedBy?: CashSessionCloser) {
     const session = await this.getOpenSession();
 
     if (!session) {
@@ -104,8 +146,17 @@ export class CashService {
     session.finalBalance = expectedBalance;
     session.countedAmount = payload.countedAmount;
 
+    if (closedBy) {
+      session.closedByUsername = closedBy.username;
+      session.closedByRole = closedBy.role;
+    }
+
     const saved = await this.sessionRepository.save(session);
-    return toSessionResponse(saved);
+    const transactionsCount = await this.saleRepository.count({
+      where: { cashSessionId: saved.id },
+    });
+
+    return toSessionResponse(saved, transactionsCount);
   }
 
   async recordSale(
@@ -158,16 +209,29 @@ function parsePaymentBreakdown(value: string | null | undefined): PaymentBreakdo
   }
 }
 
-function toSessionResponse(entity: CashSessionEntity): CashSessionResponse {
+function toSessionResponse(
+  entity: CashSessionEntity,
+  transactionsCount?: number,
+): CashSessionResponse {
   const breakdown = parsePaymentBreakdown(entity.salesByPaymentMethod);
+  const isOpen = entity.endTime == null;
+  const expectedBalance =
+    entity.finalBalance ?? entity.initialBalance + entity.totalSales;
 
   return {
     id: entity.id,
     startTime: entity.startTime.toISOString(),
     ...(entity.endTime ? { endTime: entity.endTime.toISOString() } : {}),
     initialBalance: entity.initialBalance,
-    ...(entity.countedAmount != null ? { finalBalance: entity.countedAmount } : {}),
+    ...(!isOpen ? { expectedBalance } : {}),
+    ...(entity.countedAmount != null
+      ? { countedAmount: entity.countedAmount, finalBalance: entity.countedAmount }
+      : {}),
     totalSales: entity.totalSales,
     salesByPaymentMethod: breakdown,
+    isOpen,
+    ...(entity.closedByUsername ? { closedByUsername: entity.closedByUsername } : {}),
+    ...(entity.closedByRole ? { closedByRole: entity.closedByRole } : {}),
+    ...(transactionsCount != null ? { transactionsCount } : {}),
   };
 }

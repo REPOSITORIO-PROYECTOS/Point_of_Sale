@@ -1,23 +1,15 @@
 import { toast } from "sonner";
-import { isElectronEnvironment, printReceiptElectron, printReceiptInBrowser } from "./desktop-api";
-import { PosAPI } from "./pos-api";
-import { normalizeProduct } from "./product-categories";
-import { buildReceiptHtml } from "./receipt-template";
-import { resolveReceiptLogoUrl } from "./theme-logo";
+import { isElectronEnvironment } from "./desktop-api";
+import { printReceipt as dispatchPrintReceipt, previewReceipt, type PrintReceiptPayload } from "./print-receipt";
+import type { ReceiptVoucherType, ReceiptWidthMm } from "./receipt-template";
+
 declare global {
   interface Window {
     go?: {
       main?: {
         App?: {
           PrintReceipt: (data: string) => Promise<void>;
-          GetProducts: () => Promise<Product[]>;
-          SaveTransaction: (transaction: Transaction) => Promise<void>;
-          GetParcels: () => Promise<Parcel[]>;
-          SaveParcel: (parcel: Parcel) => Promise<void>;
           OpenCashDrawer: () => Promise<void>;
-          GetCashSession: () => Promise<CashSession | null>;
-          StartCashSession: (initialBalance: number) => Promise<void>;
-          CloseCashSession: (finalBalance: number, countedAmount: number) => Promise<void>;
           GetThemeConfig: () => Promise<ThemeConfig>;
           SaveThemeConfig: (config: ThemeConfig) => Promise<void>;
           UploadLogo: (base64Image: string) => Promise<string>;
@@ -84,9 +76,7 @@ export interface PaymentMethod {
 
 export interface ThemeConfig {
   primaryColor: string;
-  /** Effective logo for display (custom or system default). */
   logoUrl?: string;
-  /** Set only when the store uploaded a custom logo via theme settings. */
   customLogoUrl?: string;
   receiptWidthMm?: 55 | 80;
 }
@@ -94,220 +84,119 @@ export interface ThemeConfig {
 export type PrintReceiptOptions = {
   businessName?: string;
   logoUrl?: string;
-  receiptWidthMm?: 55 | 80;
+  receiptWidthMm?: ReceiptWidthMm;
+  ticketId?: string;
+  voucherType?: ReceiptVoucherType;
+  payments?: PaymentMethod[];
+  adjustments?: Array<{ type: "charge" | "discount"; label: string; amount: number; isPercentage?: boolean }>;
+  subtotal?: number;
+  afipCae?: string;
+  previewOnly?: boolean;
 };
 
 const isWailsEnvironment = (): boolean => {
   return typeof window !== "undefined" && !!window.go?.main?.App;
 };
 
-// Mock cash session storage for demo mode
-let mockCashSession: CashSession | null = null;
+function requireWailsApp() {
+  if (!isWailsEnvironment()) {
+    throw new Error("Función disponible solo en entorno Wails");
+  }
+  return window.go!.main!.App!;
+}
 
-const mockProducts: Product[] = [
-  { id: "1", name: "Café Espresso", price: 2.5, cost: 1.2, categories: ["Cafetería", "Bebidas"], stock: 50, minStock: 10, unit: "unidad" },
-  { id: "2", name: "Capuchino", price: 3.5, cost: 1.8, categories: ["Cafetería", "Bebidas"], stock: 45, minStock: 10, unit: "unidad" },
-  { id: "3", name: "Café con Leche", price: 4.0, cost: 2.0, categories: ["Cafetería"], stock: 40, minStock: 10, unit: "unidad" },
-  { id: "4", name: "Café Americano", price: 2.8, cost: 1.5, categories: ["Cafetería", "Bebidas"], stock: 55, minStock: 10, unit: "unidad" },
-  { id: "5", name: "Croissant", price: 3.0, cost: 1.5, categories: ["Panadería", "Comida"], stock: 25, minStock: 5, unit: "unidad" },
-  { id: "6", name: "Muffin", price: 2.5, cost: 1.2, categories: ["Panadería", "Snacks"], stock: 30, minStock: 5, unit: "unidad" },
-  { id: "7", name: "Galleta", price: 1.5, cost: 0.7, categories: ["Panadería", "Snacks"], stock: 8, minStock: 10, unit: "unidad" },
-  { id: "8", name: "Jugo de Naranja", price: 3.5, cost: 1.5, categories: ["Bebidas"], stock: 35, minStock: 10, unit: "unidad" },
-  { id: "9", name: "Agua Mineral", price: 1.0, cost: 0.5, categories: ["Bebidas"], stock: 60, minStock: 15, unit: "unidad" },
-  { id: "10", name: "Sándwich", price: 6.5, cost: 3.0, categories: ["Comida"], stock: 20, minStock: 5, unit: "unidad" },
-  { id: "11", name: "Jamón", price: 12.5, cost: 8.0, categories: ["Fiambrería", "Comida"], stock: 15, minStock: 3, unit: "kilogramos", barcodes: ["7891234567890"] },
-  { id: "12", name: "Queso", price: 15.0, cost: 10.0, categories: ["Fiambrería"], stock: 10, minStock: 2, unit: "kilogramos", barcodes: ["7891234567891"] },
-  { id: "13", name: "Salame", price: 18.0, cost: 12.0, categories: ["Fiambrería"], stock: 8, minStock: 2, unit: "kilogramos", barcodes: ["7891234567892"] },
-];
-
-let mockProductsStore: Product[] = mockProducts.map((product) => normalizeProduct(product));
-
+/** Capa de hardware local: impresión y cajón. Datos de negocio → PosAPI. */
 export const WailsAPI = {
   async printReceipt(
     cartItems: CartItem[],
     total: number,
     printOptions: PrintReceiptOptions = {},
   ): Promise<void> {
-    const widthMm = printOptions.receiptWidthMm ?? 80;
-    const html = buildReceiptHtml(
-      cartItems.map((item) => ({
+    const payload: PrintReceiptPayload = {
+      items: cartItems.map((item) => ({
         name: item.name,
         quantity: item.quantity,
         price: item.price,
+        unit: item.unit,
       })),
       total,
-      {
-        widthMm,
-        businessName: printOptions.businessName ?? "Sistema Punto de Venta",
-        logoUrl: resolveReceiptLogoUrl(printOptions.logoUrl),
-      },
-    );
-
-    if (isWailsEnvironment()) {
-      const data = JSON.stringify({ html, widthMm });
-      await window.go!.main!.App!.PrintReceipt(data);
-      return;
-    }
-
-    if (isElectronEnvironment()) {
-      await printReceiptElectron(html, widthMm);
-      return;
-    }
+      subtotal: printOptions.subtotal,
+      adjustments: printOptions.adjustments,
+      payments: printOptions.payments?.map((payment) => ({
+        type: payment.type,
+        amount: payment.amount,
+        label: payment.label,
+      })),
+      ticketId: printOptions.ticketId,
+      voucherType: printOptions.voucherType,
+      businessName: printOptions.businessName,
+      logoUrl: printOptions.logoUrl,
+      receiptWidthMm: printOptions.receiptWidthMm,
+      afipCae: printOptions.afipCae,
+      previewOnly: printOptions.previewOnly,
+    };
 
     try {
-      printReceiptInBrowser(html);
+      await dispatchPrintReceipt(payload);
     } catch (error) {
-      toast.error("No se pudo abrir el diálogo de impresión");
-      console.error("Browser print fallback:", error, { items: cartItems, total });
+      toast.error("No se pudo imprimir el ticket");
+      console.error("Print receipt failed:", error);
+      throw error;
     }
   },
 
-  async getProducts(): Promise<Product[]> {
-    if (isWailsEnvironment()) {
-      const products = await window.go!.main!.App!.GetProducts();
-      return products.map((product) => normalizeProduct(product));
-    }
-    return new Promise((resolve) => {
-      setTimeout(() => resolve([...mockProductsStore]), 100);
+  previewReceipt(
+    cartItems: CartItem[],
+    total: number,
+    printOptions: PrintReceiptOptions = {},
+  ): void {
+    previewReceipt({
+      items: cartItems.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        unit: item.unit,
+      })),
+      total,
+      subtotal: printOptions.subtotal,
+      adjustments: printOptions.adjustments,
+      payments: printOptions.payments?.map((payment) => ({
+        type: payment.type,
+        amount: payment.amount,
+        label: payment.label,
+      })),
+      ticketId: printOptions.ticketId,
+      voucherType: printOptions.voucherType,
+      businessName: printOptions.businessName,
+      logoUrl: printOptions.logoUrl,
+      receiptWidthMm: printOptions.receiptWidthMm,
+      previewOnly: true,
     });
-  },
-
-  async saveProduct(product: Product): Promise<Product> {
-    const normalized = normalizeProduct(product);
-    if (isWailsEnvironment()) {
-      // Desktop persistence is handled by the Electron shell (not yet exposed).
-      const index = mockProductsStore.findIndex((item) => item.id === normalized.id);
-      if (index >= 0) {
-        mockProductsStore[index] = normalized;
-      } else {
-        mockProductsStore.push(normalized);
-      }
-      return normalized;
-    }
-    const index = mockProductsStore.findIndex((item) => item.id === normalized.id);
-    if (index >= 0) {
-      mockProductsStore[index] = normalized;
-    } else {
-      mockProductsStore.push(normalized);
-    }
-    return normalized;
-  },
-
-  async deleteProduct(productId: string): Promise<void> {
-    if (isWailsEnvironment()) {
-      mockProductsStore = mockProductsStore.filter((item) => item.id !== productId);
-      return;
-    }
-    mockProductsStore = mockProductsStore.filter((item) => item.id !== productId);
-  },
-
-  async replaceProducts(products: Product[]): Promise<Product[]> {
-    const normalized = products.map((product) => normalizeProduct(product));
-    mockProductsStore = normalized;
-    return [...mockProductsStore];
-  },
-
-  async saveTransaction(transaction: Transaction): Promise<void> {
-    if (isWailsEnvironment()) {
-      await window.go!.main!.App!.SaveTransaction(transaction);
-    } else {
-      // Update mock cash session total sales
-      if (mockCashSession && !mockCashSession.endTime) {
-        mockCashSession = {
-          ...mockCashSession,
-          totalSales: mockCashSession.totalSales + transaction.total,
-        };
-      }
-      toast.success("Transacción guardada (modo demostración)");
-      console.log("Mock transaction:", transaction);
-    }
-  },
-
-  async getParcels(): Promise<Parcel[]> {
-    if (isWailsEnvironment()) {
-      return await window.go!.main!.App!.GetParcels();
-    }
-    return PosAPI.getParcels();
-  },
-
-  async saveParcel(parcel: Parcel): Promise<void> {
-    if (isWailsEnvironment()) {
-      await window.go!.main!.App!.SaveParcel(parcel);
-      return;
-    }
-    await PosAPI.createParcel(parcel);
   },
 
   async openCashDrawer(): Promise<void> {
     if (isWailsEnvironment()) {
-      await window.go!.main!.App!.OpenCashDrawer();
-    } else {
-      toast.success("Cajón abierto (modo demostración)");
+      await requireWailsApp().OpenCashDrawer();
+      return;
     }
-  },
 
-  async getCashSession(): Promise<CashSession | null> {
-    if (isWailsEnvironment()) {
-      return await window.go!.main!.App!.GetCashSession();
-    } else {
-      return mockCashSession;
+    if (isElectronEnvironment()) {
+      toast.info("Apertura de cajón no configurada en Electron");
+      return;
     }
-  },
 
-  async startCashSession(initialBalance: number): Promise<void> {
-    if (isWailsEnvironment()) {
-      await window.go!.main!.App!.StartCashSession(initialBalance);
-    } else {
-      mockCashSession = {
-        id: Date.now().toString(),
-        startTime: new Date().toISOString(),
-        initialBalance,
-        totalSales: 0,
-      };
-      toast.success(`Sesión iniciada con $${initialBalance.toFixed(2)} (modo demostración)`);
-    }
-  },
-
-  async closeCashSession(finalBalance: number, countedAmount: number): Promise<void> {
-    if (isWailsEnvironment()) {
-      await window.go!.main!.App!.CloseCashSession(finalBalance, countedAmount);
-    } else {
-      if (mockCashSession) {
-        mockCashSession = {
-          ...mockCashSession,
-          endTime: new Date().toISOString(),
-          finalBalance: countedAmount,
-        };
-      }
-      toast.success(`Sesión cerrada con $${countedAmount.toFixed(2)} (modo demostración)`);
-    }
+    toast.info("Cajón de dinero: requiere hardware conectado");
   },
 
   async getThemeConfig(): Promise<ThemeConfig> {
-    if (isWailsEnvironment()) {
-      return await window.go!.main!.App!.GetThemeConfig();
-    } else {
-      return {
-        primaryColor: "#030213",
-        receiptWidthMm: 80,
-      };
-    }
+    return requireWailsApp().GetThemeConfig();
   },
 
   async saveThemeConfig(config: ThemeConfig): Promise<void> {
-    if (isWailsEnvironment()) {
-      await window.go!.main!.App!.SaveThemeConfig(config);
-    } else {
-      toast.success("Configuración de tema guardada (modo demostración)");
-    }
+    await requireWailsApp().SaveThemeConfig(config);
   },
 
   async uploadLogo(base64Image: string): Promise<string> {
-    if (isWailsEnvironment()) {
-      return await window.go!.main!.App!.UploadLogo(base64Image);
-    } else {
-      toast.success("Logo cargado (modo demostración)");
-      return base64Image;
-    }
+    return requireWailsApp().UploadLogo(base64Image);
   },
 };

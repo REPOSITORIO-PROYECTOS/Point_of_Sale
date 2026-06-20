@@ -1,7 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/AppShell';
+import { DeveloperRoute } from '@/components/DeveloperRoute';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthProvider } from '@/lib/auth-context';
+import { AccountPage } from '@/pages/AccountPage';
 import { ClientsPage } from '@/pages/ClientsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -17,10 +19,13 @@ export function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route index element={<DashboardPage />} />
-              <Route path="clients" element={<ClientsPage />} />
-              <Route path="clients/:clientNumber/registers/:registerId" element={<RegisterDetailPage />} />
+              <Route path="registers/:registerId" element={<RegisterDetailPage />} />
+              <Route element={<DeveloperRoute />}>
+                <Route path="clients" element={<ClientsPage />} />
+                <Route path="clients/:clientNumber/registers/:registerId" element={<RegisterDetailPage />} />
+              </Route>
               <Route path="pairing" element={<PairingPage />} />
-              <Route path="registers/:registerId" element={<Navigate to="/" replace />} />
+              <Route path="account" element={<AccountPage />} />
               <Route path="assign" element={<Navigate to="/clients" replace />} />
             </Route>
           </Route>

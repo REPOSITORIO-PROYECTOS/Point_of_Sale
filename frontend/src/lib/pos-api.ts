@@ -13,6 +13,15 @@ export type AuthUser = {
   role: UserRole;
 };
 
+export type BusinessSettings = {
+  businessName?: string;
+  taxId?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  parcelsEnabled: boolean;
+};
+
 export type LoginResponse = {
   accessToken: string;
   user: AuthUser;
@@ -198,6 +207,12 @@ export const PosAPI = {
       body: JSON.stringify({ isActive }),
     }),
 
+  createUser: (username: string, password: string, role: "admin" | "cashier") =>
+    request<AuthUser & { isActive: boolean; createdAt: string }>("/users", {
+      method: "POST",
+      body: JSON.stringify({ username, password, role }),
+    }),
+
   getProductByBarcode: (code: string) =>
     request<Product>(`/products/by-barcode/${encodeURIComponent(code)}`).then((product) =>
       normalizeProduct(product),
@@ -234,6 +249,28 @@ export const PosAPI = {
     }).then((saved) => saved.map((product) => normalizeProduct(product))),
 
   getCashSession: () => request<CashSession | null>("/cash/session"),
+
+  getCashSessionHistory: () =>
+    request<
+      Array<
+        CashSession & {
+          expectedBalance?: number;
+          countedAmount?: number;
+          endTime?: string;
+          closedByUsername?: string;
+          closedByRole?: string;
+          transactionsCount?: number;
+        }
+      >
+    >("/cash/sessions/history"),
+
+  getBusinessSettings: () => request<BusinessSettings>("/settings/business"),
+
+  updateBusinessSettings: (payload: Partial<BusinessSettings>) =>
+    request<BusinessSettings>("/settings/business", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
 
   startCashSession: (initialBalance: number) =>
     request<CashSession>("/cash/session/start", {
@@ -367,10 +404,44 @@ export const PosAPI = {
 
   getParcels: () => request<Parcel[]>("/parcels"),
 
+  getSales: () => request<Transaction[]>("/sales"),
+
+  getCashMovements: () =>
+    request<Array<{ id: number; description: string; amount: number; createdAt: string }>>("/cash"),
+
   createParcel: (parcel: Parcel) =>
     request<Parcel>("/parcels", {
       method: "POST",
       body: JSON.stringify(parcel),
+    }),
+
+  getRemoteStatus: () =>
+    request<{
+      enabled: boolean;
+      paired: boolean;
+      connected: boolean;
+      relayUrl: string;
+      lastSeen: string | null;
+      registerLabel: string | null;
+    }>("/remote/status"),
+
+  getRemoteConfig: () =>
+    request<{
+      paired: boolean;
+      clientNumber: string | null;
+      registerId: string | null;
+      registerLabel: string | null;
+    }>("/remote/config"),
+
+  pairRemote: (pairingCode: string) =>
+    request<{
+      paired: boolean;
+      clientNumber: string;
+      registerId: string;
+      registerLabel: string;
+    }>("/remote/pair", {
+      method: "POST",
+      body: JSON.stringify({ pairingCode }),
     }),
 };
 

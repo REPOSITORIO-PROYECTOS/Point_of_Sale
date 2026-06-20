@@ -11,6 +11,7 @@ import path from 'node:path';
 import WebSocket from 'ws';
 import { env } from '@/config/env.config';
 import type { RegisterSnapshot } from './remote-snapshot.builder';
+import { RemoteCommandService } from './remote-command.service';
 import { RemoteSnapshotService } from './remote-snapshot.service';
 
 type RemoteDeviceConfig = {
@@ -38,7 +39,10 @@ export class RemoteAgentService implements OnModuleInit, OnModuleDestroy {
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private snapshotTimer: NodeJS.Timeout | null = null;
 
-  constructor(private readonly snapshotService: RemoteSnapshotService) {}
+  constructor(
+    private readonly snapshotService: RemoteSnapshotService,
+    private readonly commandService: RemoteCommandService,
+  ) {}
 
   onModuleInit(): void {
     fs.mkdirSync(path.dirname(this.deviceFilePath), { recursive: true });
@@ -159,7 +163,12 @@ export class RemoteAgentService implements OnModuleInit, OnModuleDestroy {
     this.ws.on('open', () => {
       this.logger.log('Remote agent connected to relay');
       void this.pushSnapshot();
+      void this.pushRemoteData();
       this.sendHeartbeat();
+    });
+
+    this.ws.on('message', (raw) => {
+      void this.handleInboundMessage(raw.toString());
     });
 
     this.ws.on('error', (error) => {
@@ -178,6 +187,7 @@ export class RemoteAgentService implements OnModuleInit, OnModuleDestroy {
     this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), 30_000);
     this.snapshotTimer = setInterval(() => {
       void this.pushSnapshot();
+      void this.pushRemoteData();
     }, 60_000);
   }
 
@@ -214,6 +224,87 @@ export class RemoteAgentService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.ws.send(JSON.stringify({ type: 'snapshot', payload: snapshot }));
+  }
+
+  private async pushRemoteData(): Promise<void> {
+    const config = this.deviceConfig ?? this.loadDeviceConfig();
+    if (!config || this.ws?.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      const [catalog, cashHistory] = await Promise.all([
+        this.commandService.handleCommand('get_catalog', undefined),
+        this.commandService.handleCommand('get_cash_history', { limit: 50 }),
+      ]);
+
+      this.ws.send(
+        JSON.stringify({
+          type: 'data_push',
+          payload: {
+            catalog,
+            cashHistory,
+            pushedAt: new Date().toISOString(),
+          },
+        }),
+      );
+
+      this.logger.debug('Remote data push sent (catalog + cash history)');
+    } catch (error) {
+      this.logger.warn(`Remote data push failed: ${String(error)}`);
+    }
+  }
+
+  private async handleInboundMessage(raw: string): Promise<void> {
+    try {
+      const message = JSON.parse(raw) as {
+        type?: string;
+        commandId?: string;
+        action?: string;
+        payload?: unknown;
+      };
+
+      if (message.type !== 'command' || !message.commandId || !message.action) {
+        return;
+      }
+
+      try {
+        const result = await this.commandService.handleCommand(message.action, message.payload);
+        this.sendCommandResponse(message.commandId, true, result);
+
+        if (message.action === 'increase_prices_by_category') {
+          void this.pushSnapshot();
+          void this.pushRemoteData();
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Command failed';
+        this.logger.warn(`Remote command failed (${message.action}): ${errorMessage}`);
+        this.sendCommandResponse(message.commandId, false, undefined, errorMessage);
+      }
+    } catch {
+      // ignore malformed inbound payloads
+    }
+  }
+
+  private sendCommandResponse(
+    commandId: string,
+    ok: boolean,
+    payload?: unknown,
+    error?: string,
+  ): void {
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    this.ws.send(
+      JSON.stringify({
+        type: 'command_response',
+        commandId,
+        ok,
+        ...(payload !== undefined ? { payload } : {}),
+        ...(error ? { error } : {}),
+      }),
+    );
   }
 }
 

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 import type { UserEntity } from '@/auth/user.entity';
 import { UsersService } from './users.service';
 
 type MockRepository = {
   find: (options: { order: Record<string, string> }) => Promise<UserEntity[]>;
-  findOne: (options: { where: { id: string } }) => Promise<UserEntity | null>;
+  findOne: (options: { where: { id?: string; username?: string } }) => Promise<UserEntity | null>;
+  create: (payload: Partial<UserEntity>) => UserEntity;
   save: (entity: UserEntity) => Promise<UserEntity>;
 };
 
@@ -15,7 +16,22 @@ function createUsersService(users: UserEntity[]) {
 
   const repository: MockRepository = {
     find: async () => [...store].sort((a, b) => a.username.localeCompare(b.username)),
-    findOne: async ({ where }) => store.find((user) => user.id === where.id) ?? null,
+    findOne: async ({ where }) => {
+      if (where.id) {
+        return store.find((user) => user.id === where.id) ?? null;
+      }
+
+      if (where.username) {
+        return store.find((user) => user.username === where.username) ?? null;
+      }
+
+      return null;
+    },
+    create: (payload) =>
+      ({
+        ...payload,
+        createdAt: payload.createdAt ?? new Date('2026-03-01T00:00:00.000Z'),
+      }) as UserEntity,
     save: async (entity) => {
       const index = store.findIndex((user) => user.id === entity.id);
       if (index >= 0) {
@@ -71,4 +87,32 @@ test('update throws NotFoundException for missing user', async () => {
   const { service } = createUsersService(sampleUsers);
 
   await assert.rejects(() => service.update('missing-id', { isActive: false }), NotFoundException);
+});
+
+test('create adds a new active user', async () => {
+  const { service, store } = createUsersService(sampleUsers);
+  const created = await service.create({
+    username: 'cajero2',
+    password: 'secret123',
+    role: 'cashier',
+  });
+
+  assert.equal(created.username, 'cajero2');
+  assert.equal(created.role, 'cashier');
+  assert.equal(created.isActive, true);
+  assert.equal(store.length, 3);
+});
+
+test('create throws ConflictException for duplicate username', async () => {
+  const { service } = createUsersService(sampleUsers);
+
+  await assert.rejects(
+    () =>
+      service.create({
+        username: 'admin',
+        password: 'secret123',
+        role: 'cashier',
+      }),
+    ConflictException,
+  );
 });

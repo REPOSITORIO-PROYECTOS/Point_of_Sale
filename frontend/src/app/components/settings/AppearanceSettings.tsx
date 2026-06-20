@@ -3,8 +3,9 @@ import { useTheme } from "../../../lib/theme-context";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
-import { Upload } from "lucide-react";
+import { Upload, Printer, Eye } from "lucide-react";
 import { toast } from "sonner";
+import { buildReceiptHtml, openReceiptPreview } from "../../../lib/receipt-template";
 
 export function AppearanceSettings() {
   const { themeConfig, updateTheme, uploadLogo, removeLogo } = useTheme();
@@ -130,6 +131,68 @@ export function AppearanceSettings() {
                   {width} mm
                 </Button>
               ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Printer className="size-5" />
+                Vista previa del ticket
+              </CardTitle>
+              <CardDescription>
+                Ejemplo con el ancho seleccionado ({themeConfig.receiptWidthMm ?? 80} mm)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border bg-white p-4 overflow-auto max-h-80">
+                <iframe
+                  title="Vista previa ticket"
+                  className="mx-auto border-0"
+                  style={{ width: `${themeConfig.receiptWidthMm ?? 80}mm`, minHeight: "280px" }}
+                  srcDoc={buildReceiptHtml(
+                    [
+                      { name: "Café Espresso", quantity: 2, price: 2.5 },
+                      { name: "Medialuna", quantity: 1, price: 0.8 },
+                    ],
+                    5.8,
+                    {
+                      widthMm: themeConfig.receiptWidthMm ?? 80,
+                      businessName: "Mi Negocio",
+                      logoUrl: themeConfig.logoUrl,
+                      voucherType: "comprobante",
+                      ticketId: "DEMO-001",
+                      payments: [{ type: "cash", amount: 5.8, label: "Efectivo" }],
+                      subtotal: 5.8,
+                    },
+                  )}
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  openReceiptPreview(
+                    buildReceiptHtml(
+                      [
+                        { name: "Café Espresso", quantity: 2, price: 2500 },
+                        { name: "Medialuna", quantity: 1, price: 800 },
+                      ],
+                      5800,
+                      {
+                        widthMm: themeConfig.receiptWidthMm ?? 80,
+                        businessName: "Mi Negocio",
+                        logoUrl: themeConfig.logoUrl,
+                        voucherType: "comprobante",
+                        ticketId: "DEMO-001",
+                        subtotal: 5800,
+                      },
+                    ),
+                  );
+                }}
+              >
+                <Eye className="size-4 mr-2" />
+                Abrir en ventana nueva
+              </Button>
             </CardContent>
           </Card>
 

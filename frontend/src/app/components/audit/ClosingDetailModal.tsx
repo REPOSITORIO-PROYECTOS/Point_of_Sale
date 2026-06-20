@@ -33,10 +33,11 @@ import {
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  mockTransactions,
-  mockAuditEvents,
   type CashClosing,
-} from "../../../lib/mock-data";
+} from "../../../lib/pos-domain-types";
+
+const auditTransactions: never[] = [];
+const auditEvents: never[] = [];
 
 interface ClosingDetailModalProps {
   closing: CashClosing;
@@ -310,7 +311,7 @@ export function ClosingDetailModal({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockTransactions.map((transaction) => (
+                    {auditTransactions.map((transaction) => (
                       <TableRow key={transaction.id}>
                         <TableCell className="font-medium">
                           {transaction.time}
@@ -355,7 +356,7 @@ export function ClosingDetailModal({
             <div>
               <h3 className="text-lg font-semibold mb-3">Log de Eventos</h3>
               <div className="space-y-2">
-                {mockAuditEvents.map((event) => (
+                {auditEvents.map((event) => (
                   <div
                     key={event.id}
                     className={`p-4 border rounded-lg ${

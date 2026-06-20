@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { POSScreenEnhanced } from "./components/pos/POSScreenEnhanced";
 
@@ -26,6 +26,8 @@ import { ThemeProvider } from "../lib/theme-context";
 
 import { AuthProvider, useAuth } from "../lib/auth-context";
 
+import { BusinessSettingsProvider, useBusinessSettings } from "../lib/business-settings-context";
+
 import { LicenseExpiryBanner, LicenseGate } from "../lib/license-context";
 
 import { HeldOrder } from "./components/pos/OrderQueuePanel";
@@ -35,6 +37,8 @@ import { HeldOrder } from "./components/pos/OrderQueuePanel";
 function AppContent() {
 
   const { user, isLoading } = useAuth();
+
+  const { settings: businessSettings } = useBusinessSettings();
 
   const [activeTab, setActiveTab] = useState("pos");
 
@@ -49,6 +53,12 @@ function AppContent() {
     setHeldOrders([]);
 
   };
+
+  useEffect(() => {
+    if (activeTab === "parcels" && !businessSettings.parcelsEnabled) {
+      setActiveTab("pos");
+    }
+  }, [activeTab, businessSettings.parcelsEnabled]);
 
 
 
@@ -126,7 +136,9 @@ function AppContent() {
 
               )}
 
-              {activeTab === "parcels" && user.role === "admin" && <ParcelsView />}
+              {activeTab === "parcels" &&
+                user.role === "admin" &&
+                businessSettings.parcelsEnabled && <ParcelsView />}
 
               {activeTab === "inventory" && user.role === "admin" && <ImportExportView />}
 
@@ -179,7 +191,11 @@ export default function App() {
 
         <AuthProvider>
 
-          <AppContent />
+          <BusinessSettingsProvider>
+
+            <AppContent />
+
+          </BusinessSettingsProvider>
 
         </AuthProvider>
 

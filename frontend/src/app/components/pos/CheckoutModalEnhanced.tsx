@@ -19,8 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { DollarSign, CreditCard, Smartphone, Wallet, X, Plus, Calculator, FileText, Receipt, FileEdit } from "lucide-react";
+import { DollarSign, CreditCard, Smartphone, Wallet, X, Plus, Calculator, FileText, Receipt, FileEdit, Eye } from "lucide-react";
 import { toast } from "sonner";
+import type { Adjustment } from "./AdjustmentsPanel";
 
 export type VoucherType = "factura" | "comprobante" | "presupuesto";
 
@@ -29,7 +30,9 @@ interface CheckoutModalEnhancedProps {
   onOpenChange: (open: boolean) => void;
   items: CartItem[];
   subtotal: number;
+  adjustments?: Adjustment[];
   onConfirm: (payments: PaymentMethod[], voucherType: VoucherType) => void;
+  onPreviewTicket?: (voucherType: VoucherType) => void;
 }
 
 export function CheckoutModalEnhanced({
@@ -37,7 +40,9 @@ export function CheckoutModalEnhanced({
   onOpenChange,
   items,
   subtotal,
+  adjustments = [],
   onConfirm,
+  onPreviewTicket,
 }: CheckoutModalEnhancedProps) {
   const [payments, setPayments] = useState<PaymentMethod[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod["type"]>("cash");
@@ -391,47 +396,59 @@ export function CheckoutModalEnhanced({
             <Separator />
             <div className="space-y-3">
               <Label className="text-base font-semibold">Tipo de Comprobante</Label>
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  type="button"
-                  variant={voucherType === "factura" ? "default" : "outline"}
-                  onClick={() => setVoucherType("factura")}
-                  className="h-20 flex-col gap-2"
-                >
-                  <FileText className="size-6" />
-                  <span className="text-sm">Factura</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant={voucherType === "comprobante" ? "default" : "outline"}
-                  onClick={() => setVoucherType("comprobante")}
-                  className="h-20 flex-col gap-2"
-                >
-                  <Receipt className="size-6" />
-                  <span className="text-sm">Comprobante</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant={voucherType === "presupuesto" ? "default" : "outline"}
-                  onClick={() => setVoucherType("presupuesto")}
-                  className="h-20 flex-col gap-2"
-                >
-                  <FileEdit className="size-6" />
-                  <span className="text-sm">Presupuesto</span>
-                </Button>
+              <div className="grid grid-cols-3 gap-3">
+                {(
+                  [
+                    { type: "factura" as const, label: "Factura", icon: FileText, hint: "Fiscal AFIP" },
+                    { type: "comprobante" as const, label: "Comprobante", icon: Receipt, hint: "Ticket de venta" },
+                    { type: "presupuesto" as const, label: "Presupuesto", icon: FileEdit, hint: "Sin stock" },
+                  ] as const
+                ).map((option) => {
+                  const Icon = option.icon;
+                  const selected = voucherType === option.type;
+                  return (
+                    <button
+                      key={option.type}
+                      type="button"
+                      onClick={() => setVoucherType(option.type)}
+                      className={`flex h-24 flex-col items-center justify-center gap-1.5 rounded-xl border-2 px-2 transition-all ${
+                        selected
+                          ? "border-primary bg-primary text-primary-foreground shadow-md scale-[1.02]"
+                          : "border-border bg-card hover:border-primary/40 hover:bg-muted/50"
+                      }`}
+                    >
+                      <Icon className={`size-7 ${selected ? "" : "text-primary"}`} />
+                      <span className="text-sm font-semibold">{option.label}</span>
+                      <span className={`text-[10px] ${selected ? "opacity-90" : "text-muted-foreground"}`}>
+                        {option.hint}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               {voucherType === "presupuesto" && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
                   <strong>Nota:</strong> Los presupuestos no descontarán stock del inventario
                 </div>
               )}
+              {onPreviewTicket ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => onPreviewTicket(voucherType)}
+                >
+                  <Eye className="size-4 mr-2" />
+                  Vista previa del ticket
+                </Button>
+              ) : null}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
               <Button onClick={handleConfirm} disabled={remaining > 0.01}>
-                Confirmar Pago (F8)
+                Confirmar e imprimir (F8)
               </Button>
             </DialogFooter>
           </>
