@@ -7,7 +7,7 @@ const desktopRoot = path.resolve(import.meta.dirname, '..');
 const srcDir = path.join(desktopRoot, 'src');
 
 test('desktop shell source files exist', () => {
-  for (const file of ['main.ts', 'preload.ts', 'local-services.ts', 'paths.ts']) {
+  for (const file of ['main.ts', 'preload.ts', 'local-services.ts', 'paths.ts', 'auto-updater.ts']) {
     assert.ok(fs.existsSync(path.join(srcDir, file)), `missing ${file}`);
   }
 });
@@ -22,5 +22,6 @@ test('desktop package exposes compiled entrypoint', () => {
 test('preload exposes print bridge contract', () => {
   const preloadSource = fs.readFileSync(path.join(srcDir, 'preload.ts'), 'utf8');
   assert.match(preloadSource, /printReceipt/);
+  assert.match(preloadSource, /checkForUpdates/);
   assert.match(preloadSource, /contextBridge/);
 });

@@ -14,6 +14,7 @@ import { SetupView } from "./components/auth/SetupView";
 import { Header } from "./components/layout/Header";
 
 import { AppVersionFooter } from "./components/layout/AppVersionFooter";
+import { UpdateBanner } from "./components/layout/UpdateBanner";
 
 import { LicenseRequiredView } from "./components/license/LicenseRequiredView";
 
@@ -32,6 +33,7 @@ import { useBusinessSettings } from "../lib/business-settings-context";
 import { BusinessSettingsProvider } from "../lib/business-settings-provider";
 
 import { LicenseExpiryBanner, LicenseGate } from "../lib/license-context";
+import { AppUpdateProvider } from "../lib/app-update-provider";
 
 import { HeldOrder } from "./components/pos/OrderQueuePanel";
 
@@ -137,6 +139,8 @@ function AppContent() {
 
             {license && <LicenseExpiryBanner license={license} />}
 
+            <UpdateBanner />
+
             <Header activeTab={activeTab} onTabChange={setActiveTab} />
 
 
@@ -202,7 +206,11 @@ export default function App() {
 
           <BusinessSettingsProvider>
 
-            <AppContent />
+            <AppUpdateProvider>
+
+              <AppContent />
+
+            </AppUpdateProvider>
 
           </BusinessSettingsProvider>
 

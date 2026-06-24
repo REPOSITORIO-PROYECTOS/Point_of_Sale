@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { isElectronEnvironment } from "../../../lib/desktop-api";
+import { useAppUpdate } from "../../../lib/app-update-provider";
 
-const APP_VERSION = "0.0.1";
 const CLICKS_TO_OPEN = 5;
 
 type AppVersionFooterProps = {
@@ -11,8 +12,19 @@ type AppVersionFooterProps = {
 
 export function AppVersionFooter({ onOpenRecovery, clientNumberMasked }: AppVersionFooterProps) {
   const [clickCount, setClickCount] = useState(0);
+  const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
   const clickTimer = useRef<number | null>(null);
   const isRecoveryAvailable = isElectronEnvironment() || import.meta.env.DEV;
+  const { checkForUpdates, status: updateStatus } = useAppUpdate();
+  const displayVersion = desktopVersion ?? __APP_VERSION__;
+
+  useEffect(() => {
+    if (!isElectronEnvironment() || !window.desktop?.getAppVersion) {
+      return;
+    }
+
+    void window.desktop.getAppVersion().then(setDesktopVersion).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!isRecoveryAvailable) return;
@@ -51,8 +63,21 @@ export function AppVersionFooter({ onOpenRecovery, clientNumberMasked }: AppVers
   return (
     <footer className="border-t px-4 py-1 text-xs text-muted-foreground flex items-center justify-center gap-3 select-none">
       <button type="button" className="hover:underline" onClick={handleClick}>
-        v{APP_VERSION}
+        v{displayVersion}
       </button>
+      {isElectronEnvironment() && (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 hover:underline disabled:opacity-50"
+          disabled={updateStatus === "checking" || updateStatus === "downloading"}
+          onClick={() => void checkForUpdates()}
+        >
+          <RefreshCw
+            className={`size-3 ${updateStatus === "checking" || updateStatus === "downloading" ? "animate-spin" : ""}`}
+          />
+          Buscar actualización
+        </button>
+      )}
       {clientNumberMasked && (
         <span className="text-muted-foreground/80">Cliente {clientNumberMasked}</span>
       )}

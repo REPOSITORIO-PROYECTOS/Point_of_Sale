@@ -1,4 +1,5 @@
 # Config para empaquetado de release: usa backend/.pack-staging (solo prod deps).
+extends: ./electron-builder.common.yml
 appId: com.pointofsale.desktop
 productName: Point of Sale
 directories:
@@ -14,8 +15,6 @@ extraResources:
     to: icon.png
   - from: resources/icon.ico
     to: icon.ico
-  - from: resources/nodejs/node.exe
-    to: nodejs/node.exe
   - from: ../backend/.pack-staging/dist
     to: backend/dist
     filter:

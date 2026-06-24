@@ -15,6 +15,17 @@ export function isElectronEnvironment(): boolean {
   return typeof window !== "undefined" && typeof window.desktop?.printReceipt === "function";
 }
 
+export type AppUpdateEvent = {
+  status: "checking" | "available" | "not-available" | "progress" | "downloaded" | "error";
+  payload?: unknown;
+};
+
+export type AppUpdateCheckResult = {
+  ok: boolean;
+  version?: string | null;
+  message?: string;
+};
+
 export async function printReceiptElectron(payload: ElectronPrintPayload): Promise<void> {
   if (!isElectronEnvironment()) {
     throw new Error("Impresión Electron no disponible");
@@ -66,6 +77,10 @@ declare global {
         chrome: string;
         electron: string;
       };
+      getAppVersion?: () => Promise<string>;
+      checkForUpdates?: () => Promise<AppUpdateCheckResult>;
+      installUpdate?: () => Promise<void>;
+      onUpdateStatus?: (callback: (event: AppUpdateEvent) => void) => () => void;
       printReceipt?: (payload: ElectronPrintPayload) => Promise<void>;
       listPrinters?: () => Promise<SystemPrinterInfo[]>;
     };

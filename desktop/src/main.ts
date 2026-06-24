@@ -17,6 +17,7 @@ import {
   type ReceiptWidthMm,
 } from './thermal-print';
 import type { ElectronPrintPayload, PrinterPrintOptions } from './receipt-print-types';
+import { setupAutoUpdater } from './auto-updater';
 
 function resolvePrintBaseUrl(isDev: boolean, isPackaged: boolean): string {
   if (isDev) {
@@ -204,6 +205,8 @@ async function bootstrap() {
     isPackaged: app.isPackaged,
     apiPort,
   });
+
+  setupAutoUpdater(() => mainWindow);
 
   await createWindow();
 }

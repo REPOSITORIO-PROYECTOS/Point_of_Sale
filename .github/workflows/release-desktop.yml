@@ -1,0 +1,91 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'Variante del instalador'
+        required: true
+        default: standard
+        type: choice
+        options:
+          - standard
+          - fiscal
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+            backend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          npm ci
+          npm ci --prefix frontend
+          npm ci --prefix backend
+          npm ci --prefix desktop
+
+      - name: Set version from tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -match '^refs/tags/') { $tag = $tag -replace '^refs/tags/', '' }
+          if ($tag -match '^v') { $tag = $tag.Substring(1) }
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = (Get-Content package.json | ConvertFrom-Json).version
+          }
+          node scripts/set-version.mjs $tag
+
+      - name: Embed Node.js for desktop
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path desktop/resources/nodejs | Out-Null
+          Copy-Item (Get-Command node).Source desktop/resources/nodejs/node.exe -Force
+
+      - name: Build stack
+        shell: pwsh
+        run: npm run build:all
+
+      - name: Prepare backend pack
+        shell: pwsh
+        run: npm run prepare:backend-pack
+
+      - name: Build AFIP sidecar (fiscal)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.variant == 'fiscal'
+        shell: pwsh
+        run: npm run build:afip-sidecar
+
+      - name: Publish standard installer
+        if: github.event_name == 'push' || github.event.inputs.variant == 'standard'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:win:publish --prefix desktop
+
+      - name: Publish fiscal installer
+        if: github.event.inputs.variant == 'fiscal'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:win:fiscal:publish --prefix desktop

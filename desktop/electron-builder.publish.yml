@@ -1,0 +1,6 @@
+# Fragmento compartido: publicación en GitHub Releases (electron-updater).
+publish:
+  - provider: github
+    owner: REPOSITORIO-PROYECTOS
+    repo: Point_of_Sale
+    releaseType: release

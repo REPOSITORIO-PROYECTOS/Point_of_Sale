@@ -1,17 +1,28 @@
-# Empaqueta el instalador Windows del POS (win-unpacked + LEEME; opcional NSIS/portable).
+# Empaqueta el POS para llevar a otra PC.
+#
+# Modos (elige UNO):
+#   (default)     Carpeta portable win-unpacked — RÁPIDO (~5-8 min), sin NSIS
+#   -Nsis         Instalador .exe un-clic — LENTO (~10-18 min), para distribución formal
+#   -Zip          Además comprime en ZIP (lento; solo si necesitás un solo archivo)
+#   -WithDbSetup  Incluye scripts backend-init para init BD sin el repo
+#
 # Uso:
 #   powershell -ExecutionPolicy Bypass -File scripts/export-installer.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts/export-installer.ps1 -Nsis
 #   powershell -ExecutionPolicy Bypass -File scripts/export-installer.ps1 -SkipBuild
-#   powershell -ExecutionPolicy Bypass -File scripts/export-installer.ps1 -Fiscal
-#   powershell -ExecutionPolicy Bypass -File scripts/export-installer.ps1 -Installers
+#   powershell -ExecutionPolicy Bypass -File scripts/export-installer.ps1 -Fiscal -Nsis
 #
-# Por defecto usa electron-builder --dir (rápido). -Installers genera NSIS + portable.
-# Salida: exports/Point_of_Sale-Setup-YYYYMMDD-HHmmss.zip
+# Salida en exports/:
+#   Point-of-Sale-portable/     (default)
+#   Point-of-Sale-Setup.exe     (-Nsis)
+#   Point_of_Sale-Setup-*.zip     (-Zip)
 
 param(
     [switch]$SkipBuild,
     [switch]$Fiscal,
-    [switch]$Installers
+    [switch]$Nsis,
+    [switch]$Zip,
+    [switch]$WithDbSetup
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,13 +31,13 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $desktopDir = Join-Path $repoRoot 'desktop'
 $backendDir = Join-Path $repoRoot 'backend'
 $stamp = Get-Date -Format 'yyyy-MM-dd-HHmmss'
-$exportName = "Point_of_Sale-Setup-$stamp"
 $exportsDir = Join-Path $repoRoot 'exports'
-$bundleDir = Join-Path $exportsDir $exportName
-$zipPath = Join-Path $exportsDir "$exportName.zip"
 $buildOut = Join-Path $env:TEMP "pos-build-$stamp"
+$dirOnlyMode = -not $Nsis
 
 function Ensure-NodeEmbedded {
+    # Opcional: solo si USE_EMBEDDED_NODE=true (legacy; por defecto el backend usa Electron como Node).
+    if ($env:USE_EMBEDDED_NODE -ne 'true') { return }
     $nodeDest = Join-Path $desktopDir 'resources\nodejs\node.exe'
     if (Test-Path $nodeDest) { return }
     $nodeSrc = (Get-Command node -ErrorAction Stop).Source
@@ -37,7 +48,7 @@ function Ensure-NodeEmbedded {
 }
 
 function Invoke-PosBuild {
-    Write-Host "Compilando frontend, backend y desktop..." -ForegroundColor Cyan
+    Write-Host "Compilando frontend, backend y desktop (paralelo)..." -ForegroundColor Cyan
     Push-Location $repoRoot
     try {
         npm run build:all
@@ -54,21 +65,24 @@ function Invoke-PrepareBackendPack {
 }
 
 function Invoke-ElectronPackage {
-    param([string]$OutputDir, [switch]$WithFiscal, [switch]$WithInstallers)
+    param([string]$OutputDir, [switch]$WithFiscal, [switch]$DirOnlyMode)
 
     Ensure-NodeEmbedded
     Invoke-PrepareBackendPack
 
     $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
     $config = if ($WithFiscal) {
-        if ($WithInstallers) { 'electron-builder.fiscal.yml' } else { 'electron-builder.pack.fiscal.yml' }
+        if ($DirOnlyMode) { 'electron-builder.pack.fiscal.yml' } else { 'electron-builder.fiscal.yml' }
     } else {
-        if ($WithInstallers) { 'electron-builder.yml' } else { 'electron-builder.pack.yml' }
+        if ($DirOnlyMode) { 'electron-builder.pack.yml' } else { 'electron-builder.yml' }
     }
 
     $builderArgs = @('--win', '--config', $config, "--config.directories.output=$OutputDir")
-    if (-not $WithInstallers) {
+    if ($DirOnlyMode) {
         $builderArgs += '--dir'
+        Write-Host "Modo rápido: carpeta win-unpacked (sin NSIS)" -ForegroundColor Yellow
+    } else {
+        Write-Host "Modo NSIS: comprimiendo instalador (puede tardar varios minutos)..." -ForegroundColor Yellow
     }
 
     Write-Host "Empaquetando con electron-builder ($config) -> $OutputDir" -ForegroundColor Cyan
@@ -89,77 +103,78 @@ function Find-InstallerArtifacts {
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
-    $portable = Get-ChildItem -Path $ReleaseDir -Filter '*-portable.exe' -File -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-
     $unpackedExe = Join-Path $ReleaseDir 'win-unpacked\Point of Sale.exe'
 
     [PSCustomObject]@{
         NsisInstaller = $nsis
-        PortableExe   = $portable
         UnpackedExe   = if (Test-Path $unpackedExe) { Get-Item $unpackedExe } else { $null }
         UnpackedDir   = Join-Path $ReleaseDir 'win-unpacked'
     }
 }
 
-# --- main ---
+function Publish-PortableExport {
+    param([string]$SourceDir)
 
-New-Item -ItemType Directory -Force -Path $exportsDir | Out-Null
-if (Test-Path $bundleDir) { Remove-Item -Recurse -Force $bundleDir }
-New-Item -ItemType Directory -Force -Path $bundleDir | Out-Null
+    $dest = Join-Path $exportsDir 'Point-of-Sale-portable'
+    if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
 
-if (-not $SkipBuild) {
-    Invoke-PosBuild
-    if (Test-Path $buildOut) {
-        try { Remove-Item -Recurse -Force $buildOut -ErrorAction Stop }
-        catch { Write-Host "No se pudo limpiar $buildOut (archivos en uso); usando carpeta nueva." -ForegroundColor Yellow }
+    Write-Host "Publicando carpeta portable en exports (junction, sin copiar ~200 MB)..." -ForegroundColor Cyan
+    try {
+        New-Item -ItemType Junction -Path $dest -Target $SourceDir | Out-Null
+    } catch {
+        Write-Host "Junction no disponible; copiando con robocopy..." -ForegroundColor Yellow
+        robocopy $SourceDir $dest /E /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+        if ($LASTEXITCODE -gt 7) { throw "robocopy portable falló" }
     }
-    if (-not (Test-Path $buildOut)) {
-        New-Item -ItemType Directory -Force -Path $buildOut | Out-Null
+
+    $sizeMb = [math]::Round((Get-ChildItem $SourceDir -Recurse -File -ErrorAction SilentlyContinue |
+        Measure-Object -Property Length -Sum).Sum / 1MB, 2)
+    Write-Host ""
+    Write-Host "Portable listo (ejecutá Point of Sale.exe):" -ForegroundColor Green
+    Write-Host "  $dest"
+    Write-Host "  Tamaño referencia: ${sizeMb} MB"
+    Write-Host "  Origen build:      $SourceDir"
+}
+
+function Write-Leeme {
+    param([string]$Path, [bool]$IsNsis, [switch]$FiscalMode)
+
+    $variant = if ($FiscalMode) { 'con AFIP fiscal embebido' } else { 'sin AFIP embebido (solo POS local)' }
+    $body = if ($IsNsis) {
+@"
+Point of Sale — Instalador NSIS
+Generado: $stamp
+Variante: $variant
+
+1. Ejecutá Point-of-Sale-Setup.exe (doble clic).
+2. Al terminar, el POS crea la base en %APPDATA%\PointOfSale\.
+3. Creá el usuario administrador en el primer uso.
+
+Datos: %APPDATA%\PointOfSale\
+Requisitos: Windows 10/11 64 bits
+"@
+    } else {
+@"
+Point of Sale — Portable (carpeta)
+Generado: $stamp
+Variante: $variant
+
+1. Abrí exports\Point-of-Sale-portable\Point of Sale.exe
+2. Si es la primera vez en esta PC, inicializá la BD:
+   cd backend (desde el repo) o usá setup con -WithDbSetup
+   `$env:APP_DATA_DIR = "`$env:APPDATA\PointOfSale"; npm run db:init
+
+Datos: %APPDATA%\PointOfSale\
+Requisitos: Windows 10/11 64 bits
+"@
     }
-    Invoke-ElectronPackage -OutputDir $buildOut -WithFiscal:$Fiscal -WithInstallers:$Installers
-    $releaseDir = $buildOut
-} else {
-    $candidates = @(
-        (Get-ChildItem -Path $env:TEMP -Directory -Filter 'pos-build-*' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName),
-        'C:\Temp\pos-build',
-        (Join-Path $desktopDir 'release')
-    ) | Where-Object { $_ -and (Test-Path $_) }
-
-    if (-not $candidates) {
-        throw "No hay build previo. Ejecutá sin -SkipBuild o corré npm run dist:win"
-    }
-    $releaseDir = $candidates[0]
-    Write-Host "Usando build existente: $releaseDir" -ForegroundColor Yellow
+    Set-Content -Path $Path -Value $body.TrimEnd() -Encoding UTF8
 }
 
-$artifacts = Find-InstallerArtifacts -ReleaseDir $releaseDir
+function Write-DbSetupBundle {
+    param([string]$SetupDir)
 
-if (-not $artifacts.NsisInstaller -and -not $artifacts.PortableExe -and -not $artifacts.UnpackedExe) {
-    throw "No se encontró instalador ni win-unpacked en $releaseDir. Corré el build completo."
-}
-
-$installDir = Join-Path $bundleDir 'instalador'
-New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-
-if ($artifacts.NsisInstaller) {
-    Copy-Item $artifacts.NsisInstaller.FullName (Join-Path $installDir $artifacts.NsisInstaller.Name)
-    Write-Host "Incluido: $($artifacts.NsisInstaller.Name)"
-}
-if ($artifacts.PortableExe) {
-    Copy-Item $artifacts.PortableExe.FullName (Join-Path $installDir $artifacts.PortableExe.Name)
-    Write-Host "Incluido: $($artifacts.PortableExe.Name)"
-}
-if (-not $artifacts.NsisInstaller -and $artifacts.UnpackedDir -and (Test-Path $artifacts.UnpackedDir)) {
-    $portableBundle = Join-Path $installDir 'Point-of-Sale-portable'
-    robocopy $artifacts.UnpackedDir $portableBundle /E /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
-    if ($LASTEXITCODE -gt 7) { throw "robocopy portable falló" }
-    Write-Host "Incluido: carpeta portable (win-unpacked)"
-}
-
-# Script de init BD para la PC destino (sin requerir repo)
-$initDbPs1 = @'
+    $initDbPs1 = @'
 # Inicializa la base de datos en %APPDATA%\PointOfSale (ejecutar UNA vez antes del primer uso).
 $ErrorActionPreference = 'Stop'
 $appData = Join-Path $env:APPDATA 'PointOfSale'
@@ -168,132 +183,112 @@ $env:APP_DATA_DIR = $appData
 
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
-    Write-Host "Node.js no está en PATH. Instalá Node 20+ o usá el instalador NSIS del POS." -ForegroundColor Yellow
+    Write-Host "Node.js no está en PATH. Instalá Node 20+." -ForegroundColor Yellow
     exit 1
 }
 
-$initScript = Join-Path $PSScriptRoot 'init-db-standalone.mjs'
-if (-not (Test-Path $initScript)) {
-    Write-Host "Falta init-db-standalone.mjs en esta carpeta." -ForegroundColor Red
-    exit 1
-}
-
-Push-Location (Split-Path $initScript -Parent)
-node $initScript
+Push-Location (Join-Path $PSScriptRoot 'backend-init')
+npm install --omit=dev
+npm run db:init
 Pop-Location
 
-Write-Host ""
 Write-Host "Listo. Base de datos en: $appData\database.sqlite" -ForegroundColor Green
-Write-Host "Ahora ejecutá el instalador Point of Sale-*.exe" -ForegroundColor Green
 '@
 
-$initDbMjs = @'
-import { mkdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+    New-Item -ItemType Directory -Force -Path $SetupDir | Out-Null
+    Set-Content -Path (Join-Path $SetupDir 'inicializar-base-datos.ps1') -Value $initDbPs1 -Encoding UTF8
 
-const appDataDir = process.env.APP_DATA_DIR || join(process.env.APPDATA || '', 'PointOfSale');
-mkdirSync(appDataDir, { recursive: true });
-
-const repoBackend = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'backend');
-const installedBackend = join(process.env.LOCALAPPDATA || '', 'Programs', 'point-of-sale-desktop', 'resources', 'backend');
-
-let backendDir = repoBackend;
-if (!existsSync(join(backendDir, 'package.json')) && existsSync(join(installedBackend, 'package.json'))) {
-  backendDir = installedBackend;
-}
-
-const result = spawnSync('npm', ['run', 'db:init'], {
-  cwd: backendDir,
-  env: { ...process.env, APP_DATA_DIR: appDataDir },
-  stdio: 'inherit',
-  shell: true,
-});
-
-process.exit(result.status ?? 1);
-'@
-
-# Versión simplificada: copiar solo el script del backend si existe dist
-$backendInitAvailable = Test-Path (Join-Path $backendDir 'package.json')
-$setupDir = Join-Path $bundleDir 'setup'
-New-Item -ItemType Directory -Force -Path $setupDir | Out-Null
-Set-Content -Path (Join-Path $setupDir 'inicializar-base-datos.ps1') -Value $initDbPs1 -Encoding UTF8
-
-if ($backendInitAvailable) {
-    # Copiar mínimo para db:init offline en máquina con Node
-    $dbSetupBackend = Join-Path $setupDir 'backend-init'
+    $dbSetupBackend = Join-Path $SetupDir 'backend-init'
     New-Item -ItemType Directory -Force -Path $dbSetupBackend | Out-Null
-    robocopy $backendDir $dbSetupBackend /E /XD node_modules storage dist /XF .env database.sqlite `
+    robocopy $backendDir $dbSetupBackend /E /XD node_modules storage dist .pack-staging /XF .env database.sqlite `
         /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
     if ($LASTEXITCODE -gt 7) { throw "robocopy backend-init falló" }
-    # Incluir dist compilado para no requerir build en destino
     if (Test-Path (Join-Path $backendDir 'dist')) {
         robocopy (Join-Path $backendDir 'dist') (Join-Path $dbSetupBackend 'dist') /E /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
     }
     Copy-Item (Join-Path $backendDir 'package.json') (Join-Path $dbSetupBackend 'package.json') -Force
     Copy-Item (Join-Path $backendDir 'package-lock.json') (Join-Path $dbSetupBackend 'package-lock.json') -Force -ErrorAction SilentlyContinue
+    Write-Host "Scripts de init BD en: $SetupDir"
 }
 
-$variant = if ($Fiscal) { 'con AFIP fiscal embebido' } else { 'sin AFIP embebido (solo POS local)' }
-$hasNsis = [bool]$artifacts.NsisInstaller
-$hasPortable = [bool]$artifacts.PortableExe
+# --- main ---
 
-$leeme = @"
-Point of Sale — Paquete de instalación
-Generado: $stamp
-Variante: $variant
+New-Item -ItemType Directory -Force -Path $exportsDir | Out-Null
 
-CONTENIDO
----------
-instalador/     Ejecutables para instalar o correr el POS
-setup/          Scripts de primera configuración
+if (-not $SkipBuild) {
+    Invoke-PosBuild
+    if (Test-Path $buildOut) {
+        try { Remove-Item -Recurse -Force $buildOut -ErrorAction Stop }
+        catch { Write-Host "No se pudo limpiar $buildOut; usando carpeta nueva." -ForegroundColor Yellow }
+    }
+    New-Item -ItemType Directory -Force -Path $buildOut | Out-Null
+    Invoke-ElectronPackage -OutputDir $buildOut -WithFiscal:$Fiscal -DirOnlyMode:$dirOnlyMode
+    $releaseDir = $buildOut
+} else {
+    $candidates = @(
+        (Get-ChildItem -Path $env:TEMP -Directory -Filter 'pos-build-*' -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName),
+        'C:\Temp\pos-build',
+        (Join-Path $desktopDir 'release')
+    ) | Where-Object { $_ -and (Test-Path $_) }
 
-INSTALACIÓN (PC nueva)
-----------------------
-1. Descomprimí este ZIP en cualquier carpeta.
+    if (-not $candidates) {
+        throw "No hay build previo. Ejecutá sin -SkipBuild."
+    }
+    $releaseDir = $candidates[0]
+    Write-Host "Usando build existente: $releaseDir" -ForegroundColor Yellow
+}
 
-2. Inicializar base de datos (UNA vez, antes del primer uso):
-   - Opción A — con Node.js 20+ instalado en la PC:
-     Abrir PowerShell en setup\ y ejecutar:
-       `$env:APP_DATA_DIR = "`$env:APPDATA\PointOfSale"
-       cd backend-init
-       npm install --omit=dev
-       npm run db:init
-   - Opción B — desde el repo de desarrollo (si lo tenés):
-       cd backend
-       `$env:APP_DATA_DIR = "`$env:APPDATA\PointOfSale"
-       npm run db:init
+$artifacts = Find-InstallerArtifacts -ReleaseDir $releaseDir
+if (-not $artifacts.NsisInstaller -and -not $artifacts.UnpackedExe) {
+    throw "No se encontró instalador ni win-unpacked en $releaseDir."
+}
 
-3. Instalar la aplicación:
-$(if ($hasNsis) { "   - Ejecutar instalador\Point of Sale-0.0.1-win-x64.exe (recomendado)" } else { "   - Usar la carpeta instalador\Point-of-Sale-portable\" })
-$(if ($hasPortable) { "   - O ejecutar instalador\Point of Sale-0.0.1-portable.exe (sin instalación)" } else { "" })
+$leemePath = Join-Path $exportsDir 'LEEME-instalacion.txt'
+Write-Leeme -Path $leemePath -IsNsis:$Nsis -FiscalMode:$Fiscal
 
-4. Al abrir por primera vez, crear usuario administrador desde la pantalla de setup.
+if ($WithDbSetup) {
+    Write-DbSetupBundle -SetupDir (Join-Path $exportsDir 'setup-db')
+}
 
-DATOS
------
-La base de datos y configuración quedan en:
-  %APPDATA%\PointOfSale\
+if ($artifacts.NsisInstaller) {
+    $setupExe = Join-Path $exportsDir 'Point-of-Sale-Setup.exe'
+    Copy-Item $artifacts.NsisInstaller.FullName $setupExe -Force
+    $setupMb = [math]::Round((Get-Item $setupExe).Length / 1MB, 2)
+    Write-Host ""
+    Write-Host "Instalador NSIS listo:" -ForegroundColor Green
+    Write-Host "  $setupExe"
+    Write-Host "  Tamaño: ${setupMb} MB"
+}
 
-REQUISITOS
-----------
-- Windows 10/11 64 bits
-$(if (-not $Fiscal) { "- Para facturación AFIP: usar variante fiscal o Docker en desarrollo" } else { "- AFIP: copiar user.crt y user.key a %APPDATA%\PointOfSale\afip\" })
+if ($dirOnlyMode -and $artifacts.UnpackedDir -and (Test-Path $artifacts.UnpackedDir)) {
+    Publish-PortableExport -SourceDir $artifacts.UnpackedDir
+}
 
-SOPORTE / DEV
--------------
-Documentación completa en el repositorio: docs/casos-de-uso/05-build-instalador.md
-"@
+if ($Zip) {
+    $zipPath = Join-Path $exportsDir "Point_of_Sale-Setup-$stamp.zip"
+    if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 
-Set-Content -Path (Join-Path $bundleDir 'LEEME.txt') -Value $leeme.TrimEnd() -Encoding UTF8
+    if ($artifacts.NsisInstaller) {
+        Write-Host "Comprimiendo solo el instalador NSIS..." -ForegroundColor Cyan
+        $zipStage = Join-Path $env:TEMP "pos-zip-$stamp"
+        if (Test-Path $zipStage) { Remove-Item -Recurse -Force $zipStage }
+        New-Item -ItemType Directory -Force -Path $zipStage | Out-Null
+        Copy-Item (Join-Path $exportsDir 'Point-of-Sale-Setup.exe') (Join-Path $zipStage 'Point-of-Sale-Setup.exe') -Force
+        Copy-Item $leemePath (Join-Path $zipStage 'LEEME-instalacion.txt') -Force
+        if ($WithDbSetup) {
+            robocopy (Join-Path $exportsDir 'setup-db') (Join-Path $zipStage 'setup-db') /E /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+        }
+        tar -a -cf $zipPath -C $zipStage .
+    } elseif ($artifacts.UnpackedDir) {
+        Write-Host "Comprimiendo carpeta portable (varios minutos)..." -ForegroundColor Cyan
+        tar -a -cf $zipPath -C (Split-Path $artifacts.UnpackedDir -Parent) (Split-Path $artifacts.UnpackedDir -Leaf)
+    }
 
-if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-Compress-Archive -Path $bundleDir -DestinationPath $zipPath -CompressionLevel Optimal
+    if ($LASTEXITCODE -ne 0) { throw "tar falló al crear ZIP" }
+    $zipMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
+    Write-Host "ZIP: $zipPath (${zipMb} MB)" -ForegroundColor Green
+}
 
 Write-Host ""
-Write-Host "Paquete de instalación listo:" -ForegroundColor Green
-Write-Host "  Carpeta: $bundleDir"
-Write-Host "  ZIP:     $zipPath"
-$zipSizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
-Write-Host "  Tamaño:  ${zipSizeMb} MB"
+Write-Host "Listo. Modo: $(if ($Nsis) { 'NSIS' } else { 'portable rápido' })$(if ($Zip) { ' + ZIP' } else { '' })" -ForegroundColor Green

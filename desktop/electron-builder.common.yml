@@ -1,0 +1,6 @@
+# Fragmento compartido: menos peso en el instalador.
+# - Solo idiomas ES/EN (~45 MB menos que 50+ locales de Chromium)
+# - Sin node.exe embebido: el backend usa Electron como Node (ELECTRON_RUN_AS_NODE)
+electronLanguages:
+  - es
+  - en-US
