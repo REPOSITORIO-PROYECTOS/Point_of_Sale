@@ -1,5 +1,4 @@
 import type { ReceiptWidthMm } from "./types";
-import { thermalPrintableWidthMm } from "../thermal-print";
 
 export function escapeHtml(value: string): string {
   return value
@@ -39,16 +38,23 @@ export function afipCodigoLabel(tipoAfip: number | undefined): string {
 }
 
 export function ticketWidthCss(widthMm: ReceiptWidthMm): string {
-  const printableWidth = thermalPrintableWidthMm(widthMm);
   const fontSize = widthMm === 55 ? "9px" : "10px";
 
   return `
     @page { margin: 0; size: ${widthMm}mm auto; }
     * { box-sizing: border-box; }
+    html {
+      margin: 0;
+      padding: 0;
+      background: #ececec;
+    }
     html, body {
       font-family: 'Courier New', Courier, monospace;
       font-size: ${fontSize};
-      margin: 0;
+      width: ${widthMm}mm;
+      max-width: ${widthMm}mm;
+      min-height: 100%;
+      margin: 0 auto;
       padding: 0;
       color: #000;
       background: #fff;
@@ -56,15 +62,19 @@ export function ticketWidthCss(widthMm: ReceiptWidthMm): string {
       print-color-adjust: exact;
     }
     .ticket {
-      width: ${printableWidth};
-      max-width: ${printableWidth};
-      padding: 2mm;
-      box-sizing: border-box;
-      margin: 0 auto;
+      width: 100%;
+      max-width: 100%;
+      padding: 2mm 3mm;
+      margin: 0;
     }
     @media print {
-      html, body { width: ${printableWidth}; }
-      .ticket { width: ${printableWidth}; max-width: ${printableWidth}; padding: 1mm 2mm; }
+      html { background: #fff; }
+      html, body {
+        width: ${widthMm}mm !important;
+        max-width: ${widthMm}mm !important;
+        margin: 0 !important;
+      }
+      .ticket { padding: 1mm 2mm; }
     }
   `.trim();
 }

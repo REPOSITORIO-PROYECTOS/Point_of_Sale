@@ -5,7 +5,11 @@ import {
   AFIP_TIPO_COMPROBANTE_OPTIONS,
   AFIP_TIPO_DOCUMENTO_OPTIONS,
   DEFAULT_AFIP_BILLING_DEFAULTS,
+  isValidAfipCuit,
   normalizeAfipBillingDefaults,
+  normalizeAfipCuit,
+  validateAfipCertificatePem,
+  validateAfipPrivateKeyPem,
 } from "../../../lib/afip-fiscal";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -22,7 +26,7 @@ import {
   SelectValue,
 } from "../ui/select";
 import { toast } from "sonner";
-import { Copy, Download, FileKey, FileText, KeyRound, ShieldCheck, Upload } from "lucide-react";
+import { ClipboardPaste, Copy, Download, FileKey, FileText, KeyRound, ShieldCheck, Upload } from "lucide-react";
 
 function downloadTextFile(filename: string, content: string) {
   const blob = new Blob([content], { type: "application/x-pem-file" });
@@ -91,7 +95,28 @@ export function AfipCredentialsSettings() {
   const handlePrivateKeyFile = async (file: File | undefined) => {
     if (!file) return;
     const content = await readFileAsText(file);
-    setClavePrivada(content);
+    const validation = validateAfipPrivateKeyPem(content);
+    if (!validation.ok) {
+      toast.error(validation.message);
+      return;
+    }
+    setClavePrivada(validation.pem);
+    toast.success(`Clave cargada desde ${file.name}`);
+  };
+
+  const handlePastePrivateKey = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const validation = validateAfipPrivateKeyPem(text);
+      if (!validation.ok) {
+        toast.error(validation.message);
+        return;
+      }
+      setClavePrivada(validation.pem);
+      toast.success("Clave pegada desde el portapapeles");
+    } catch {
+      toast.error("No se pudo leer el portapapeles");
+    }
   };
 
   const handleGenerateCsr = async () => {
@@ -135,12 +160,23 @@ export function AfipCredentialsSettings() {
   };
 
   const handleSavePrivateKey = async () => {
+    if (!isValidAfipCuit(cuit)) {
+      toast.error("Completá el CUIT emisor (11 dígitos) en la sección superior");
+      return;
+    }
+
+    const keyValidation = validateAfipPrivateKeyPem(clavePrivada);
+    if (!keyValidation.ok) {
+      toast.error(keyValidation.message);
+      return;
+    }
+
     setIsSavingKey(true);
 
     try {
       const result = await PosAPI.saveAfipPrivateKey({
-        cuit,
-        clavePrivada,
+        cuit: normalizeAfipCuit(cuit),
+        clavePrivada: keyValidation.pem,
         puntoVenta: Number(puntoVenta),
         production,
       });
@@ -155,10 +191,16 @@ export function AfipCredentialsSettings() {
   };
 
   const handleImportCertificate = async () => {
+    const certValidation = validateAfipCertificatePem(certificado);
+    if (!certValidation.ok) {
+      toast.error(certValidation.message);
+      return;
+    }
+
     setIsSavingCert(true);
 
     try {
-      const result = await PosAPI.importAfipCertificate({ certificado });
+      const result = await PosAPI.importAfipCertificate({ certificado: certValidation.pem });
 
       setStatus(result.status);
       setCsr("");
@@ -171,13 +213,30 @@ export function AfipCredentialsSettings() {
   };
 
   const handleSaveAll = async () => {
+    if (!isValidAfipCuit(cuit)) {
+      toast.error("Completá el CUIT emisor (11 dígitos) en la sección superior");
+      return;
+    }
+
+    const keyValidation = validateAfipPrivateKeyPem(clavePrivada);
+    if (!keyValidation.ok) {
+      toast.error(keyValidation.message);
+      return;
+    }
+
+    const certValidation = validateAfipCertificatePem(certificado);
+    if (!certValidation.ok) {
+      toast.error(certValidation.message);
+      return;
+    }
+
     setIsSavingAll(true);
 
     try {
       const result = await PosAPI.importAfipCredentials({
-        cuit,
-        certificado,
-        clavePrivada,
+        cuit: normalizeAfipCuit(cuit),
+        certificado: certValidation.pem,
+        clavePrivada: keyValidation.pem,
         puntoVenta: Number(puntoVenta),
         production,
       });
@@ -212,6 +271,15 @@ export function AfipCredentialsSettings() {
   };
 
   const showCertificateStep = Boolean(status?.pendingCertificate || (status?.hasPrivateKey && !status?.hasCertificate));
+  const privateKeyValidation = validateAfipPrivateKeyPem(clavePrivada);
+  const canSavePrivateKey = isValidAfipCuit(cuit) && privateKeyValidation.ok;
+  const privateKeySaveHint = !isValidAfipCuit(cuit)
+    ? "Completá el CUIT emisor (11 dígitos) arriba"
+    : !privateKeyValidation.ok && clavePrivada.trim()
+      ? privateKeyValidation.message
+      : !clavePrivada.trim()
+        ? "Elegí un archivo .key o pegá el PEM completo abajo"
+        : null;
 
   return (
     <div className="space-y-6">
@@ -452,12 +520,13 @@ export function AfipCredentialsSettings() {
             Paso 1 alternativo — Importar clave existente
           </CardTitle>
           <CardDescription>
-            Si ya generaste la clave con OpenSSL u otra herramienta, importala manualmente.
+            Si ya generaste la clave con OpenSSL u otra herramienta, podés subir el archivo .key o pegar el PEM
+            completo. No hace falta elegir archivo si pegás el texto.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="afip-key-file">Clave privada (.key)</Label>
+            <Label htmlFor="afip-key-file">Archivo de clave privada (opcional)</Label>
             <Input
               id="afip-key-file"
               type="file"
@@ -465,21 +534,42 @@ export function AfipCredentialsSettings() {
               className="mt-1"
               onChange={(event) => void handlePrivateKeyFile(event.target.files?.[0])}
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Formatos aceptados: PKCS#8 (<code className="text-[11px]">BEGIN PRIVATE KEY</code>) o RSA (
+              <code className="text-[11px]">BEGIN RSA PRIVATE KEY</code>). Sin contraseña.
+            </p>
           </div>
 
           <div>
-            <Label htmlFor="afip-key-text">Contenido clave privada PEM</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="afip-key-text">Contenido clave privada PEM</Label>
+              <div className="flex items-center gap-2">
+                {privateKeyValidation.ok && (
+                  <Badge variant="outline" className="text-xs">
+                    PEM válido
+                  </Badge>
+                )}
+                <Button type="button" variant="outline" size="sm" onClick={() => void handlePastePrivateKey()}>
+                  <ClipboardPaste className="size-3.5 mr-1.5" />
+                  Pegar
+                </Button>
+              </div>
+            </div>
             <Textarea
               id="afip-key-text"
               value={clavePrivada}
               onChange={(event) => setClavePrivada(event.target.value)}
-              placeholder="-----BEGIN PRIVATE KEY-----"
+              placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
               className="mt-1 min-h-28 font-mono text-xs"
             />
           </div>
 
+          {privateKeySaveHint && (
+            <p className="text-sm text-amber-700 dark:text-amber-400">{privateKeySaveHint}</p>
+          )}
+
           <div className="flex justify-end">
-            <Button onClick={() => void handleSavePrivateKey()} disabled={isSavingKey || !cuit || !clavePrivada}>
+            <Button onClick={() => void handleSavePrivateKey()} disabled={isSavingKey || !canSavePrivateKey}>
               <Upload className="size-4 mr-2" />
               {isSavingKey ? "Guardando..." : "Guardar clave privada"}
             </Button>

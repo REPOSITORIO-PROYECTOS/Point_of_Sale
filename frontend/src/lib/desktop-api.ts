@@ -1,5 +1,6 @@
 import type { ReceiptPrintDocument } from "./receipt-print-document";
 import type { PrinterPrintOptions, SystemPrinterInfo } from "./printer-settings";
+import { thermalPreviewWindowWidth } from "./thermal-print";
 
 export type ReceiptWidthMm = 55 | 80;
 
@@ -30,8 +31,9 @@ export async function listSystemPrinters(): Promise<SystemPrinterInfo[]> {
   return window.desktop.listPrinters();
 }
 
-export function printReceiptInBrowser(html: string): void {
-  const printWindow = window.open("", "_blank", "width=420,height=720");
+export function printReceiptInBrowser(html: string, widthMm: ReceiptWidthMm = 80): void {
+  const windowWidth = thermalPreviewWindowWidth(widthMm);
+  const printWindow = window.open("", "_blank", `width=${windowWidth},height=720`);
   if (!printWindow) {
     throw new Error("No se pudo abrir ventana de impresión");
   }
@@ -45,6 +47,7 @@ export function printReceiptInBrowser(html: string): void {
   };
 
   printWindow.onload = () => {
+    printWindow.resizeTo(windowWidth, Math.min(printWindow.document.documentElement.scrollHeight + 48, 900));
     printWindow.focus();
     if ("onafterprint" in printWindow) {
       printWindow.onafterprint = closeAfterPrint;

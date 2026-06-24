@@ -177,8 +177,8 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
 
   return (
     <>
-      <div className="flex flex-col h-full">
-        <div className="p-6 border-b bg-background">
+      <div className="flex flex-col h-full min-h-0">
+        <div className="p-6 border-b bg-background shrink-0">
           <div className="flex items-center gap-3">
             <ClipboardList className="size-6" />
             <div>
@@ -190,19 +190,22 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
           </div>
         </div>
 
-        <Tabs defaultValue="cash" className="flex-1 flex flex-col">
-          <div className="px-6 pt-4">
+        <Tabs defaultValue="cash" className="flex-1 flex flex-col min-h-0">
+          <div className="px-6 pt-4 shrink-0">
             <TabsList>
               <TabsTrigger value="cash">Caja Activa</TabsTrigger>
               <TabsTrigger value="history">Historial de Cierres</TabsTrigger>
             </TabsList>
           </div>
 
-          <TabsContent value="cash" className="flex-1 overflow-hidden m-0">
+          <TabsContent
+            value="cash"
+            className="flex-1 min-h-0 overflow-hidden m-0 data-[state=active]:flex data-[state=active]:flex-col"
+          >
             <CashViewAdvanced heldOrdersCount={heldOrdersCount} onRequestClearOrders={onRequestClearOrders} />
           </TabsContent>
 
-          <TabsContent value="history" className="flex-1 overflow-auto p-6 m-0">
+          <TabsContent value="history" className="flex-1 min-h-0 overflow-auto p-6 m-0">
             <div className="max-w-7xl mx-auto space-y-6">
               <Card>
                 <CardHeader>

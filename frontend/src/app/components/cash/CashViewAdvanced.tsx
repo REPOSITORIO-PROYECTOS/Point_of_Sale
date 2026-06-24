@@ -362,8 +362,8 @@ export function CashViewAdvanced({
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-6 border-b bg-background">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="p-6 border-b bg-background shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <DollarSign className="size-6" />
@@ -423,7 +423,7 @@ export function CashViewAdvanced({
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 min-h-0 overflow-auto p-6">
         {session && !session.endTime ? (
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

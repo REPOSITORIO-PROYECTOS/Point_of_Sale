@@ -6,13 +6,6 @@ import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -66,6 +59,58 @@ type ManagedUser = {
 
 const ROLE_OPTIONS: AccessLevel[] = ["admin", "manager", "cashier", "auditor"];
 
+function getRoleIcon(accessLevel: string) {
+  switch (accessLevel) {
+    case "admin":
+      return <ShieldAlert className="size-5 text-red-600" />;
+    case "manager":
+      return <ShieldCheck className="size-5 text-blue-600" />;
+    case "cashier":
+      return <User className="size-5 text-green-600" />;
+    case "auditor":
+      return <Shield className="size-5 text-purple-600" />;
+    default:
+      return <User className="size-5" />;
+  }
+}
+
+type RolePickerProps = {
+  value: UserRole;
+  onChange: (role: UserRole) => void;
+};
+
+function RolePicker({ value, onChange }: RolePickerProps) {
+  return (
+    <div className="space-y-2" role="radiogroup" aria-label="Rol">
+      {ROLE_OPTIONS.map((level) => {
+        const isSelected = value === level;
+        return (
+          <button
+            key={level}
+            type="button"
+            role="radio"
+            aria-checked={isSelected ? "true" : "false"}
+            onClick={() => onChange(level)}
+            className={`flex w-full items-start gap-3 rounded-md border p-3 text-left transition-colors ${
+              isSelected
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/50"
+            }`}
+          >
+            <div className="mt-0.5 shrink-0">{getRoleIcon(level)}</div>
+            <div className="min-w-0">
+              <p className="font-medium leading-tight">{ACCESS_LEVEL_LABELS[level]}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {ACCESS_LEVEL_SUMMARIES[level]}
+              </p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function UserRolesSettings() {
   const { user: currentUser } = useAuth();
   const [selectedRole, setSelectedRole] = useState<RoleDefinition | null>(null);
@@ -112,21 +157,6 @@ export function UserRolesSettings() {
       isActive: editUser.isActive,
     });
   }, [editUser]);
-
-  const getRoleIcon = (accessLevel: string) => {
-    switch (accessLevel) {
-      case "admin":
-        return <ShieldAlert className="size-5 text-red-600" />;
-      case "manager":
-        return <ShieldCheck className="size-5 text-blue-600" />;
-      case "cashier":
-        return <User className="size-5 text-green-600" />;
-      case "auditor":
-        return <Shield className="size-5 text-purple-600" />;
-      default:
-        return <User className="size-5" />;
-    }
-  };
 
   const getRoleBadgeVariant = (accessLevel: string) => {
     switch (accessLevel) {
@@ -363,42 +393,10 @@ export function UserRolesSettings() {
             ))}
           </div>
         </section>
-
-        <section className="space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold">Niveles de Acceso</h3>
-            <p className="text-sm text-muted-foreground">
-              Guía rápida para elegir el rol adecuado al crear una cuenta
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {ROLE_OPTIONS.map((level) => (
-              <div
-                key={level}
-                className="flex items-start gap-3 rounded-lg border bg-card p-4 shadow-sm"
-              >
-                <div className="mt-0.5 shrink-0">{getRoleIcon(level)}</div>
-                <div className="min-w-0">
-                  <p className="font-semibold leading-tight">{ACCESS_LEVEL_LABELS[level]}</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {ACCESS_LEVEL_SUMMARIES[level]}
-                  </p>
-                  <Badge
-                    variant={getRoleBadgeVariant(level) as "default"}
-                    className="mt-2 text-xs"
-                  >
-                    {level}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="size-5" />
@@ -435,26 +433,10 @@ export function UserRolesSettings() {
 
             <div className="space-y-2">
               <Label>Rol</Label>
-              <Select
+              <RolePicker
                 value={createForm.role}
-                onValueChange={(value) =>
-                  setCreateForm((prev) => ({ ...prev, role: value as UserRole }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLE_OPTIONS.map((level) => (
-                    <SelectItem key={level} value={level}>
-                      {ACCESS_LEVEL_LABELS[level]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {ACCESS_LEVEL_SUMMARIES[createForm.role as AccessLevel]}
-              </p>
+                onChange={(role) => setCreateForm((prev) => ({ ...prev, role }))}
+              />
             </div>
           </div>
 
@@ -470,7 +452,7 @@ export function UserRolesSettings() {
       </Dialog>
 
       <Dialog open={!!editUser} onOpenChange={(open) => !open && setEditUser(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <KeyRound className="size-5" />
@@ -485,23 +467,10 @@ export function UserRolesSettings() {
             <div className="space-y-4 py-2">
               <div className="space-y-2">
                 <Label>Rol</Label>
-                <Select
+                <RolePicker
                   value={editForm.role}
-                  onValueChange={(value) =>
-                    setEditForm((prev) => ({ ...prev, role: value as UserRole }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLE_OPTIONS.map((level) => (
-                      <SelectItem key={level} value={level}>
-                        {ACCESS_LEVEL_LABELS[level]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(role) => setEditForm((prev) => ({ ...prev, role }))}
+                />
               </div>
 
               <div className="space-y-2">

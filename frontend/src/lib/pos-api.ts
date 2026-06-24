@@ -147,6 +147,15 @@ export type CashClosingsQuery = {
   dateTo?: string;
 };
 
+export type BusinessSettings = {
+  businessName?: string;
+  taxId?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  parcelsEnabled: boolean;
+};
+
 function buildCashClosingsQuery(params: CashClosingsQuery): string {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
@@ -531,6 +540,14 @@ export const PosAPI = {
 
   savePrinterSettings: (settings: PrinterSettings) =>
     request<PrinterSettings>("/settings/printer", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
+
+  getBusinessSettings: () => request<BusinessSettings>("/settings/business"),
+
+  updateBusinessSettings: (settings: Partial<BusinessSettings>) =>
+    request<BusinessSettings>("/settings/business", {
       method: "PUT",
       body: JSON.stringify(settings),
     }),

@@ -23,6 +23,7 @@ import {
 } from "../../../lib/printer-settings-store";
 import { printReceipt, previewReceiptText } from "../../../lib/print-receipt";
 import type { PrinterType } from "../../../lib/printer-settings";
+import type { ReceiptVoucherType } from "../../../lib/receipt-template";
 
 const PRINTER_TYPES: { value: PrinterType; label: string }[] = [
   { value: "epson", label: "Epson" },
@@ -33,18 +34,86 @@ const PRINTER_TYPES: { value: PrinterType; label: string }[] = [
   { value: "custom", label: "Otra / genérica" },
 ];
 
+const DEMO_RECEIPT_ITEMS = [
+  { name: "Café Espresso", quantity: 2, price: 2.5 },
+  { name: "Medialuna", quantity: 1, price: 0.8 },
+] as const;
+
+const DEMO_RECEIPT_TOTAL = 5.8;
+
+const VOUCHER_PREVIEW_OPTIONS: {
+  type: ReceiptVoucherType;
+  label: string;
+}[] = [
+  { type: "comprobante", label: "Comprobante" },
+  { type: "factura", label: "Factura" },
+  { type: "presupuesto", label: "Presupuesto" },
+];
+
+function buildDemoReceiptOptions(
+  voucherType: ReceiptVoucherType,
+  receiptWidthMm: number,
+  logoUrl: string,
+) {
+  const base = {
+    widthMm: (receiptWidthMm === 55 ? 55 : 80) as 55 | 80,
+    businessName: "Mi Negocio",
+    logoUrl,
+    voucherType,
+    ticketId: "DEMO-001",
+    subtotal: DEMO_RECEIPT_TOTAL,
+    payments: [{ type: "cash", amount: DEMO_RECEIPT_TOTAL, label: "Efectivo" }],
+  };
+
+  if (voucherType === "factura") {
+    return {
+      ...base,
+      mostrarDesgloseIva: true,
+      receptor: {
+        nombreRazonSocial: "Consumidor Final",
+        cuitODni: "S/D",
+        condicionIva: "Consumidor Final",
+      },
+      afip: {
+        tipoComprobanteNombre: "FACTURA",
+        tipoComprobanteLetra: "B",
+        neto: 4.79,
+        iva: 1.01,
+        ivaRateLabel: "21%",
+        cae: "00000000000000",
+        vencimientoCae: "31/12/2026",
+      },
+    };
+  }
+
+  return base;
+}
+
 export function AppearanceSettings() {
   const { themeConfig, updateTheme, uploadLogo, removeLogo } = useTheme();
   const [selectedColor, setSelectedColor] = useState(themeConfig.primaryColor);
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(DEFAULT_PRINTER_SETTINGS);
   const [systemPrinters, setSystemPrinters] = useState<Array<{ name: string; isDefault: boolean }>>([]);
   const [isLoadingPrinters, setIsLoadingPrinters] = useState(false);
-  const [isSavingPrinter, setIsSavingPrinter] = useState(false);
   const [isTestPrinting, setIsTestPrinting] = useState(false);
+  const [previewVoucherType, setPreviewVoucherType] = useState<ReceiptVoucherType>("comprobante");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const printerHydratedRef = useRef(false);
+  const printerSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    void loadPrinterSettings().then(setPrinterSettings);
+    void loadPrinterSettings().then((settings) => {
+      setPrinterSettings(settings);
+      printerHydratedRef.current = true;
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (printerSaveTimerRef.current) {
+        clearTimeout(printerSaveTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -95,37 +164,59 @@ export function AppearanceSettings() {
     }
   };
 
-  const updatePrinterField = <K extends keyof PrinterSettings>(key: K, value: PrinterSettings[K]) => {
-    setPrinterSettings((current) => ({ ...current, [key]: value }));
+  const schedulePrinterSave = (next: PrinterSettings) => {
+    if (!printerHydratedRef.current) return;
+
+    if (printerSaveTimerRef.current) {
+      clearTimeout(printerSaveTimerRef.current);
+    }
+
+    printerSaveTimerRef.current = setTimeout(() => {
+      void savePrinterSettings(next).catch((error) => {
+        toast.error(error instanceof Error ? error.message : "No se pudo guardar la impresora");
+      });
+    }, 400);
   };
 
-  const handleSavePrinterSettings = async () => {
-    setIsSavingPrinter(true);
-    try {
-      const saved = await savePrinterSettings(printerSettings);
-      setPrinterSettings(saved);
-      toast.success("Configuración de impresora guardada para esta caja");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo guardar la impresora");
-    } finally {
-      setIsSavingPrinter(false);
-    }
+  const updatePrinterField = <K extends keyof PrinterSettings>(key: K, value: PrinterSettings[K]) => {
+    setPrinterSettings((current) => {
+      const next = { ...current, [key]: value };
+      schedulePrinterSave(next);
+      return next;
+    });
   };
 
   const handleTestPrint = async () => {
     setIsTestPrinting(true);
     try {
+      if (printerSaveTimerRef.current) {
+        clearTimeout(printerSaveTimerRef.current);
+        printerSaveTimerRef.current = null;
+      }
       await savePrinterSettings(printerSettings);
+      const receiptWidthMm = themeConfig.receiptWidthMm ?? 80;
+      const demoOptions = buildDemoReceiptOptions(
+        previewVoucherType,
+        receiptWidthMm,
+        themeConfig.logoUrl,
+      );
       await printReceipt({
-        items: [{ name: "Prueba de impresión", quantity: 1, price: 1 }],
-        total: 1,
-        subtotal: 1,
+        items: [...DEMO_RECEIPT_ITEMS],
+        total: DEMO_RECEIPT_TOTAL,
+        subtotal: DEMO_RECEIPT_TOTAL,
         businessName: "Mi Negocio",
         logoUrl: themeConfig.logoUrl,
-        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
-        voucherType: "comprobante",
+        receiptWidthMm,
+        voucherType: previewVoucherType,
         ticketId: "TEST-PRINT",
-        payments: [{ type: "cash", amount: 1, label: "Efectivo" }],
+        payments: [{ type: "cash", amount: DEMO_RECEIPT_TOTAL, label: "Efectivo" }],
+        ...(previewVoucherType === "factura"
+          ? {
+              mostrarDesgloseIva: true,
+              receptor: demoOptions.receptor,
+              afip: demoOptions.afip,
+            }
+          : {}),
       });
       toast.success("Ticket de prueba enviado a la impresora");
     } catch (error) {
@@ -147,6 +238,17 @@ export function AppearanceSettings() {
   ];
 
   const selectedPrinterValue = printerSettings.printerName ?? "__default__";
+  const receiptWidthMm = themeConfig.receiptWidthMm ?? 80;
+  const demoReceiptOptions = buildDemoReceiptOptions(
+    previewVoucherType,
+    receiptWidthMm,
+    themeConfig.logoUrl,
+  );
+  const demoReceiptHtml = buildReceiptHtml(
+    [...DEMO_RECEIPT_ITEMS],
+    DEMO_RECEIPT_TOTAL,
+    demoReceiptOptions,
+  );
 
   return (
     <div className="space-y-6">
@@ -212,7 +314,7 @@ export function AppearanceSettings() {
                 Impresora de esta caja
               </CardTitle>
               <CardDescription>
-                La configuración se guarda en esta instalación (cada PC de mostrador tiene la suya).
+                La configuración se guarda automáticamente en esta instalación (cada PC de mostrador tiene la suya).
                 En el navegador de desarrollo solo podés ver la vista previa.
               </CardDescription>
             </CardHeader>
@@ -335,17 +437,21 @@ export function AppearanceSettings() {
                   variant="outline"
                   onClick={() => {
                     previewReceiptText({
-                      items: [
-                        { name: "Café Espresso", quantity: 2, price: 2.5 },
-                        { name: "Medialuna", quantity: 1, price: 0.8 },
-                      ],
-                      total: 5.8,
-                      subtotal: 5.8,
+                      items: [...DEMO_RECEIPT_ITEMS],
+                      total: DEMO_RECEIPT_TOTAL,
+                      subtotal: DEMO_RECEIPT_TOTAL,
                       businessName: "Mi Negocio",
-                      receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
-                      voucherType: "comprobante",
+                      receiptWidthMm,
+                      voucherType: previewVoucherType,
                       ticketId: "DEMO-TEXT",
-                      payments: [{ type: "cash", amount: 5.8, label: "Efectivo" }],
+                      payments: [{ type: "cash", amount: DEMO_RECEIPT_TOTAL, label: "Efectivo" }],
+                      ...(previewVoucherType === "factura"
+                        ? {
+                            mostrarDesgloseIva: true,
+                            receptor: demoReceiptOptions.receptor,
+                            afip: demoReceiptOptions.afip,
+                          }
+                        : {}),
                     });
                   }}
                 >
@@ -361,13 +467,6 @@ export function AppearanceSettings() {
                   <Printer className="size-4 mr-2" />
                   {isTestPrinting ? "Imprimiendo..." : "Imprimir prueba"}
                 </Button>
-                <Button
-                  type="button"
-                  onClick={() => void handleSavePrinterSettings()}
-                  disabled={isSavingPrinter}
-                >
-                  {isSavingPrinter ? "Guardando..." : "Guardar impresora"}
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -379,53 +478,38 @@ export function AppearanceSettings() {
                 Vista previa del ticket
               </CardTitle>
               <CardDescription>
-                Ejemplo con el ancho seleccionado ({themeConfig.receiptWidthMm ?? 80} mm)
+                Ejemplo con el ancho seleccionado ({receiptWidthMm} mm). Cambiá el tipo para ver el mismo
+                formato que se imprime en caja.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-lg border bg-white p-4 overflow-auto max-h-80">
+              <div>
+                <Label className="mb-2 block">Tipo de comprobante</Label>
+                <div className="flex flex-wrap gap-3">
+                  {VOUCHER_PREVIEW_OPTIONS.map((option) => (
+                    <Button
+                      key={option.type}
+                      type="button"
+                      variant={previewVoucherType === option.type ? "default" : "outline"}
+                      onClick={() => setPreviewVoucherType(option.type)}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-center overflow-auto max-h-80 rounded-lg border bg-muted p-4">
                 <iframe
                   title="Vista previa ticket"
-                  className="mx-auto border-0"
-                  style={{ width: `${themeConfig.receiptWidthMm ?? 80}mm`, minHeight: "280px" }}
-                  srcDoc={buildReceiptHtml(
-                    [
-                      { name: "Café Espresso", quantity: 2, price: 2.5 },
-                      { name: "Medialuna", quantity: 1, price: 0.8 },
-                    ],
-                    5.8,
-                    {
-                      widthMm: themeConfig.receiptWidthMm ?? 80,
-                      businessName: "Mi Negocio",
-                      logoUrl: themeConfig.logoUrl,
-                      voucherType: "comprobante",
-                      ticketId: "DEMO-001",
-                      payments: [{ type: "cash", amount: 5.8, label: "Efectivo" }],
-                      subtotal: 5.8,
-                    },
-                  )}
+                  className="border border-border bg-white"
+                  style={{ width: `${receiptWidthMm}mm`, minHeight: "280px" }}
+                  srcDoc={demoReceiptHtml}
                 />
               </div>
               <Button
                 variant="outline"
                 onClick={() => {
-                  openReceiptPreview(
-                    buildReceiptHtml(
-                      [
-                        { name: "Café Espresso", quantity: 2, price: 2500 },
-                        { name: "Medialuna", quantity: 1, price: 800 },
-                      ],
-                      5800,
-                      {
-                        widthMm: themeConfig.receiptWidthMm ?? 80,
-                        businessName: "Mi Negocio",
-                        logoUrl: themeConfig.logoUrl,
-                        voucherType: "comprobante",
-                        ticketId: "DEMO-001",
-                        subtotal: 5800,
-                      },
-                    ),
-                  );
+                  openReceiptPreview(demoReceiptHtml, receiptWidthMm);
                 }}
               >
                 <Eye className="size-4 mr-2" />

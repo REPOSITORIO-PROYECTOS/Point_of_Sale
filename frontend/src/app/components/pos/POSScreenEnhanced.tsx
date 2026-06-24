@@ -5,7 +5,7 @@ import { useAuth } from "../../../lib/auth-context";
 import { useBusinessSettings } from "../../../lib/business-settings-context";
 import type { Product, CartItem, Transaction, PaymentMethod, CashSession } from "../../../lib/wails-bridge";
 import { WailsAPI } from "../../../lib/wails-bridge";
-import { getExpectedCashInDrawer } from "../../../lib/cash-expected";
+import { getExpectedCashBreakdown, getExpectedCashInDrawer } from "../../../lib/cash-expected";
 import type { VoucherType } from "./CheckoutModalEnhanced";
 import { ProductCatalog } from "./ProductCatalog";
 import { ShoppingCartEnhanced } from "./ShoppingCartEnhanced";
@@ -123,6 +123,12 @@ export function POSScreenEnhanced({
     }
   }, [cashSession]);
 
+  useEffect(() => {
+    if (closeCashDialogOpen) {
+      void loadCashSession();
+    }
+  }, [closeCashDialogOpen]);
+
   const loadProducts = async () => {
     try {
       const data = await PosAPI.getProducts();
@@ -141,6 +147,7 @@ export function POSScreenEnhanced({
       setCashSession(session);
     } catch (error) {
       console.error("Failed to load cash session:", error);
+      setCashSession(null);
     }
   };
 
@@ -422,16 +429,34 @@ export function POSScreenEnhanced({
   };
 
   const handleCloseCash = async () => {
+    const parsedCounted = parseFloat(countedAmount);
+    if (countedAmount === "" || isNaN(parsedCounted) || parsedCounted < 0) {
+      toast.error("Ingresá el efectivo contado en el arqueo");
+      return;
+    }
+
+    let latestSession: CashSession | null;
     try {
-      if (!cashSession) return;
+      latestSession = await PosAPI.getCashSession();
+    } catch (error) {
+      console.error("Failed to verify cash session:", error);
+      setCashSession(null);
+      setCloseCashDialogOpen(false);
+      setCountedAmount("");
+      toast.error("No se pudo conectar con la API. Ejecutá npm run dev:stack y recargá la página.");
+      return;
+    }
 
-      const parsedCounted = parseFloat(countedAmount);
-      if (countedAmount === "" || isNaN(parsedCounted) || parsedCounted < 0) {
-        toast.error("Ingresá el efectivo contado en el arqueo");
-        return;
-      }
+    if (!latestSession || latestSession.endTime) {
+      setCashSession(latestSession);
+      setCloseCashDialogOpen(false);
+      setCountedAmount("");
+      toast.error("No hay una sesión de caja abierta");
+      return;
+    }
 
-      const expectedCash = getExpectedCashInDrawer(cashSession);
+    try {
+      const expectedCash = getExpectedCashInDrawer(latestSession);
 
       await PosAPI.closeCashSession(expectedCash, parsedCounted);
       const newSession = await PosAPI.getCashSession();
@@ -449,6 +474,19 @@ export function POSScreenEnhanced({
       }
     } catch (error) {
       console.error("Failed to close cash:", error);
+      const message = error instanceof Error ? error.message : "";
+      if (message.toLowerCase().includes("no open cash session")) {
+        try {
+          const refreshedSession = await PosAPI.getCashSession();
+          setCashSession(refreshedSession);
+        } catch {
+          setCashSession(null);
+        }
+        setCloseCashDialogOpen(false);
+        setCountedAmount("");
+        toast.error("La caja ya está cerrada o no hay sesión abierta");
+        return;
+      }
       toast.error("Error al cerrar caja");
     }
   };
@@ -729,47 +767,77 @@ export function POSScreenEnhanced({
               Cerrar Caja — Arqueo
             </DialogTitle>
             <DialogDescription>
-              Contá el efectivo del cajón. Tarjeta, transferencia y QR son solo referencia del sistema.
+              Contá solo el efectivo del cajón. El sistema compara contra el saldo inicial, ventas en
+              efectivo y movimientos. Tarjeta, transferencia y QR no entran al arqueo.
             </DialogDescription>
           </DialogHeader>
 
           {cashSession && (() => {
             const salesByMethod = getSalesByMethod(cashSession);
-            const expectedCash = getExpectedCashInDrawer(cashSession);
+            const { initialBalance, cashSales, cashNet, expectedCash } =
+              getExpectedCashBreakdown(cashSession);
             const parsedCounted = parseFloat(countedAmount);
             const hasCounted = countedAmount !== "" && !isNaN(parsedCounted);
             const variance = hasCounted ? parsedCounted - expectedCash : null;
+            const nonCashMethods = PAYMENT_METHOD_ORDER.filter(
+              (method) => method !== "cash" && toCashAmount(salesByMethod[method]) > 0,
+            );
 
             return (
               <div className="space-y-4">
                 <div className="p-4 bg-muted rounded-lg space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Ventas por medio de pago
+                    Efectivo esperado en cajón
                   </p>
-                  {PAYMENT_METHOD_ORDER.map((method) => {
-                    const amount = toCashAmount(salesByMethod[method]);
-                    if (amount <= 0) return null;
-
-                    return (
-                      <div key={method} className="flex justify-between text-sm">
-                        <span className={method === "cash" ? "font-medium" : "text-muted-foreground"}>
-                          {PAYMENT_METHOD_LABELS[method]}
-                          {method !== "cash" && (
-                            <span className="text-xs ml-1">(referencia)</span>
-                          )}
-                        </span>
-                        <span className={method === "cash" ? "font-medium" : "text-muted-foreground"}>
-                          ${formatMoney(amount)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {PAYMENT_METHOD_ORDER.every(
-                    (method) => toCashAmount(salesByMethod[method]) <= 0,
-                  ) && (
-                    <p className="text-xs text-muted-foreground">Sin ventas registradas aún</p>
+                  <div className="flex justify-between text-sm">
+                    <span>Saldo inicial al abrir</span>
+                    <span>${formatMoney(initialBalance)}</span>
+                  </div>
+                  {cashSales > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span>+ Ventas en efectivo</span>
+                      <span>${formatMoney(cashSales)}</span>
+                    </div>
                   )}
+                  {Math.abs(cashNet) >= 0.01 && (
+                    <div className="flex justify-between text-sm">
+                      <span>{cashNet >= 0 ? "+ Movimientos en efectivo" : "− Movimientos en efectivo"}</span>
+                      <span>
+                        {cashNet >= 0 ? "" : "−"}${formatMoney(Math.abs(cashNet))}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-semibold border-t pt-2 mt-2">
+                    <span>Efectivo esperado</span>
+                    <span>${formatMoney(expectedCash)}</span>
+                  </div>
                 </div>
+
+                {(nonCashMethods.length > 0 || cashSales > 0) && (
+                  <div className="p-4 bg-muted/60 rounded-lg space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Ventas por medio de pago
+                    </p>
+                    {PAYMENT_METHOD_ORDER.map((method) => {
+                      const amount = toCashAmount(salesByMethod[method]);
+                      if (amount <= 0) return null;
+
+                      return (
+                        <div key={method} className="flex justify-between text-sm">
+                          <span className={method === "cash" ? "font-medium" : "text-muted-foreground"}>
+                            {PAYMENT_METHOD_LABELS[method]}
+                            {method !== "cash" && (
+                              <span className="text-xs ml-1">(no va al cajón)</span>
+                            )}
+                          </span>
+                          <span className={method === "cash" ? "font-medium" : "text-muted-foreground"}>
+                            ${formatMoney(amount)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="countedAmount">Efectivo Contado en Cajón ($)</Label>
@@ -819,8 +887,9 @@ export function POSScreenEnhanced({
                         {variance > 0 ? "+" : ""}${variance.toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm mt-2 text-muted-foreground">
-                      <span>Contado: ${parsedCounted.toFixed(2)}</span>
+                    <div className="grid grid-cols-2 gap-2 text-sm mt-2 text-muted-foreground">
+                      <span>Esperado: ${expectedCash.toFixed(2)}</span>
+                      <span className="text-right">Contado: ${parsedCounted.toFixed(2)}</span>
                     </div>
                   </div>
                 )}

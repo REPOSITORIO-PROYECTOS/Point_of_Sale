@@ -292,43 +292,13 @@ export class CashService {
 
 
   async getSession(): Promise<CashSessionResponse | null> {
+    const openSession = await this.getOpenSession();
 
-    const openSession = await this.sessionRepository.findOne({
-
-      where: { endTime: IsNull() },
-
-      order: { startTime: 'DESC' },
-
-    });
-
-
-
-    if (openSession) {
-
-      return toSessionResponse(openSession, await this.getMovementTotalsForSession(openSession.id));
-
+    if (!openSession) {
+      return null;
     }
 
-
-
-    const latestSession = await this.sessionRepository.find({
-
-      order: { startTime: 'DESC' },
-
-      take: 1,
-
-    });
-
-
-
-    const latest = latestSession[0];
-
-    return latest
-
-      ? toSessionResponse(latest, await this.getMovementTotalsForSession(latest.id))
-
-      : null;
-
+    return toSessionResponse(openSession, await this.getMovementTotalsForSession(openSession.id));
   }
 
 
@@ -1075,27 +1045,19 @@ export class CashService {
   private async getClosingCashiers(): Promise<Array<{ id: string; username: string; role: UserRole }>> {
 
     const rows = await this.sessionRepository
-
       .createQueryBuilder('session')
-
       .leftJoin(
         UserEntity,
         'user',
         'user.id = COALESCE(session.closedByUserId, session.openedByUserId)',
       )
-
-      .select('DISTINCT user.id', 'id')
-
+      .select('user.id', 'id')
       .addSelect('user.username', 'username')
-
       .addSelect('user.role', 'role')
-
+      .distinct(true)
       .where('session.endTime IS NOT NULL')
-
       .andWhere('user.id IS NOT NULL')
-
       .orderBy('user.username', 'ASC')
-
       .getRawMany<{ id: string; username: string; role: UserRole }>();
 
 

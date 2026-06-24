@@ -13,6 +13,15 @@ export function thermalPrintableWidthMm(widthMm: ReceiptWidthMm): string {
   return widthMm === 55 ? "54mm" : "72mm";
 }
 
+/** Ancho de ventana de vista previa / impresión HTML (~96 dpi). */
+export function thermalPreviewWindowWidth(widthMm: ReceiptWidthMm): number {
+  return widthMm === 55 ? 240 : 320;
+}
+
+export function cssPixelsToMicrons(px: number): number {
+  return Math.ceil(px * (25.4 / 96) * 1000);
+}
+
 /** Solo URLs que cargan en ventana oculta / data: URL de impresión. */
 export function sanitizePrintableImageUrl(url?: string | null): string | undefined {
   if (!url?.trim()) {

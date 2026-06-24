@@ -185,3 +185,60 @@ export function formatAfipBuyerSummary(buyer: AfipCheckoutBuyer): string {
 
   return `${docLabel} ${buyer.documento} · ${ivaLabel}`;
 }
+
+export function normalizeAfipCuit(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+export function isValidAfipCuit(value: string): boolean {
+  return /^\d{11}$/.test(normalizeAfipCuit(value));
+}
+
+export type AfipPemValidationResult =
+  | { ok: true; pem: string }
+  | { ok: false; message: string };
+
+export function validateAfipPrivateKeyPem(content: string): AfipPemValidationResult {
+  const normalized = content.replace(/\r\n/g, "\n").trim();
+
+  if (!normalized) {
+    return { ok: false, message: "Ingresá el contenido PEM de la clave privada" };
+  }
+
+  if (normalized.includes("BEGIN ENCRYPTED PRIVATE KEY")) {
+    return {
+      ok: false,
+      message:
+        "La clave está cifrada con contraseña. Convertila a PKCS#8 sin passphrase (openssl pkcs8 -topk8 -nocrypt).",
+    };
+  }
+
+  const hasPkcs8 = normalized.includes("BEGIN PRIVATE KEY") && normalized.includes("END PRIVATE KEY");
+  const hasRsa = normalized.includes("BEGIN RSA PRIVATE KEY") && normalized.includes("END RSA PRIVATE KEY");
+
+  if (!hasPkcs8 && !hasRsa) {
+    return {
+      ok: false,
+      message: "Pegá el bloque PEM completo (desde -----BEGIN… hasta -----END…)",
+    };
+  }
+
+  return { ok: true, pem: `${normalized}\n` };
+}
+
+export function validateAfipCertificatePem(content: string): AfipPemValidationResult {
+  const normalized = content.replace(/\r\n/g, "\n").trim();
+
+  if (!normalized) {
+    return { ok: false, message: "Ingresá el contenido PEM del certificado" };
+  }
+
+  if (!normalized.includes("BEGIN CERTIFICATE") || !normalized.includes("END CERTIFICATE")) {
+    return {
+      ok: false,
+      message: "Pegá el bloque PEM completo del certificado (desde -----BEGIN CERTIFICATE-----)",
+    };
+  }
+
+  return { ok: true, pem: `${normalized}\n` };
+}

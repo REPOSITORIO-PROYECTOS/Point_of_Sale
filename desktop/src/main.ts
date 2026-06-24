@@ -10,8 +10,8 @@ import {
   shouldUseEscposPrint,
 } from './escpos-print';
 import {
-  THERMAL_PAGE_HEIGHT_MICRONS,
   THERMAL_PAGE_WIDTH_MICRONS,
+  cssPixelsToMicrons,
   thermalBrowserWindowWidth,
   type ReceiptWidthMm,
 } from './thermal-print';
@@ -57,9 +57,16 @@ async function printReceiptHtml(payload: {
     baseURLForDataURL,
   });
 
+  const contentHeightPx = await printWindow.webContents.executeJavaScript<number>(
+    `new Promise((resolve) => {
+      requestAnimationFrame(() => resolve(document.documentElement.scrollHeight));
+    })`,
+  );
+
   const silent = resolvePrintSilent(payload.printer);
   const deviceName = resolvePrintDeviceName(payload.printer);
   const pageWidth = THERMAL_PAGE_WIDTH_MICRONS[payload.widthMm];
+  const pageHeight = Math.max(50_000, cssPixelsToMicrons(contentHeightPx));
 
   await new Promise<void>((resolve, reject) => {
     printWindow.webContents.print(
@@ -70,7 +77,7 @@ async function printReceiptHtml(payload: {
         margins: { marginType: 'none' },
         pageSize: {
           width: pageWidth,
-          height: THERMAL_PAGE_HEIGHT_MICRONS,
+          height: pageHeight,
         },
       },
       (success, failureReason) => {

@@ -1,4 +1,4 @@
-import { sanitizePrintableImageUrl } from "./thermal-print";
+import { sanitizePrintableImageUrl, thermalPreviewWindowWidth } from "./thermal-print";
 import {
   buildReceiptFromContext,
   type ReceiptAfip,
@@ -73,14 +73,19 @@ export function buildReceiptHtml(
 }
 
 /** Abre vista previa del ticket en una ventana del navegador (sin imprimir). */
-export function openReceiptPreview(html: string): void {
-  const previewWindow = window.open("", "_blank", "width=420,height=720");
+export function openReceiptPreview(html: string, widthMm: import("./receipt-templates/types").ReceiptWidthMm = 80): void {
+  const windowWidth = thermalPreviewWindowWidth(widthMm);
+  const previewWindow = window.open("", "_blank", `width=${windowWidth},height=720`);
   if (!previewWindow) {
     throw new Error("No se pudo abrir la vista previa del ticket");
   }
   previewWindow.document.open();
   previewWindow.document.write(html);
   previewWindow.document.close();
+  previewWindow.onload = () => {
+    const contentHeight = previewWindow.document.documentElement.scrollHeight;
+    previewWindow.resizeTo(windowWidth, Math.min(contentHeight + 32, 900));
+  };
 }
 
 /** Vista previa en texto plano (formato ESC/POS) — útil sin impresora o para depuración. */

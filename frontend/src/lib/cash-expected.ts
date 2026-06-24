@@ -31,8 +31,27 @@ export function getExpectedSessionBalance(session: CashSession): number {
   return toAmount(session.initialBalance) + toAmount(session.totalSales) + movementTotals.netTotal;
 }
 
-export function getExpectedCashInDrawer(session: CashSession): number {
+export type ExpectedCashBreakdown = {
+  initialBalance: number;
+  cashSales: number;
+  cashNet: number;
+  expectedCash: number;
+};
+
+export function getExpectedCashBreakdown(session: CashSession): ExpectedCashBreakdown {
   const movementTotals = getSessionMovementTotals(session);
+  const initialBalance = toAmount(session.initialBalance);
   const cashSales = toAmount(session.salesByPaymentMethod?.cash);
-  return toAmount(session.initialBalance) + cashSales + movementTotals.cashNet;
+  const cashNet = movementTotals.cashNet;
+
+  return {
+    initialBalance,
+    cashSales,
+    cashNet,
+    expectedCash: initialBalance + cashSales + cashNet,
+  };
+}
+
+export function getExpectedCashInDrawer(session: CashSession): number {
+  return getExpectedCashBreakdown(session).expectedCash;
 }

@@ -100,7 +100,7 @@ export async function printThermalHtml(
   previewOnly = false,
 ): Promise<void> {
   if (previewOnly) {
-    openReceiptPreview(html);
+    openReceiptPreview(html, receiptWidthMm);
     return;
   }
 
@@ -114,7 +114,7 @@ export async function printThermalHtml(
     throw new Error("Use printReceipt() con documento ESC/POS en Electron");
   }
 
-  printReceiptInBrowser(html);
+  printReceiptInBrowser(html, receiptWidthMm);
 }
 
 export function buildPrintReceiptDocument(payload: PrintReceiptPayload): ReceiptPrintDocument {
@@ -146,7 +146,7 @@ export async function printReceipt(payload: PrintReceiptPayload): Promise<void> 
   const document = buildPrintReceiptDocument(payload);
 
   if (payload.previewOnly) {
-    openReceiptPreview(html);
+    openReceiptPreview(html, widthMm);
     return;
   }
 
@@ -179,11 +179,12 @@ export async function printReceipt(payload: PrintReceiptPayload): Promise<void> 
   }
 
   console.info("[print] navegador — abriendo diálogo HTML (sin ESC/POS)\n", renderReceiptPrintText(document));
-  printReceiptInBrowser(html);
+  printReceiptInBrowser(html, widthMm);
 }
 
 export function previewReceipt(payload: PrintReceiptPayload): void {
-  openReceiptPreview(buildPrintReceiptHtml(payload));
+  const widthMm = payload.receiptWidthMm ?? 80;
+  openReceiptPreview(buildPrintReceiptHtml(payload), widthMm);
 }
 
 export function previewReceiptText(payload: PrintReceiptPayload): void {
