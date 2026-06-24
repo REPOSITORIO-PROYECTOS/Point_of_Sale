@@ -18,11 +18,27 @@ if (-not (Test-Path $distSrc)) {
     throw "Falta backend/dist. Ejecutá npm run build:api primero."
 }
 
+function Get-Sha256Hex {
+    param([string]$Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $bytes = $sha.ComputeHash($stream)
+        } finally {
+            $stream.Close()
+        }
+        return ([BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Get-PackFingerprint {
     $lockHash = if (Test-Path $lockFile) {
-        (Get-FileHash $lockFile -Algorithm SHA256).Hash
+        Get-Sha256Hex $lockFile
     } else {
-        (Get-FileHash (Join-Path $BackendDir 'package.json') -Algorithm SHA256).Hash
+        Get-Sha256Hex (Join-Path $BackendDir 'package.json')
     }
 
     $latestDist = Get-ChildItem -Path $distSrc -Recurse -File -ErrorAction SilentlyContinue |

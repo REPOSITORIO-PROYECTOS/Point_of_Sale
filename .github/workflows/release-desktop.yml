@@ -67,7 +67,7 @@ jobs:
 
       - name: Prepare backend pack
         shell: pwsh
-        run: npm run prepare:backend-pack
+        run: ./scripts/prepare-backend-pack.ps1
 
       - name: Build AFIP sidecar (fiscal)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.variant == 'fiscal'
