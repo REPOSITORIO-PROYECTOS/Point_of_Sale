@@ -1,8 +1,6 @@
+import { getApiBaseUrl, getApiOrigin } from './api-base-url';
+
 const viteEnv = import.meta.env ?? {};
-const DEFAULT_BASE_URL = viteEnv.VITE_API_BASE_URL ?? '/api';
-const DEFAULT_API_ORIGIN =
-  viteEnv.VITE_API_ORIGIN ??
-  (typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3001');
 
 /** Vite static asset — works in dev and production (base `./`). */
 export const DEFAULT_SYSTEM_LOGO_PATH = `${viteEnv.BASE_URL ?? '/'}branding/default-logo.png`;
@@ -77,17 +75,17 @@ export function resolveThemeLogoUrl(logoUrl?: string): string | undefined {
   }
 
   const normalizedPath = logoUrl.startsWith('/') ? logoUrl : `/${logoUrl}`;
-  const apiBase = DEFAULT_BASE_URL.endsWith('/') ? DEFAULT_BASE_URL.slice(0, -1) : DEFAULT_BASE_URL;
+  const apiBase = getApiBaseUrl();
 
   if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
     return `${apiBase}${normalizedPath}`;
   }
 
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && window.location.origin.startsWith('http')) {
     return `${window.location.origin}${apiBase}${normalizedPath}`;
   }
 
-  return `${DEFAULT_API_ORIGIN}${apiBase}${normalizedPath}`;
+  return `${getApiOrigin()}${apiBase}${normalizedPath}`;
 }
 
 export function resolveReceiptLogoUrl(logoUrl?: string): string | undefined {
@@ -104,11 +102,11 @@ export function resolveReceiptLogoUrl(logoUrl?: string): string | undefined {
   }
 
   const normalizedPath = logoUrl.startsWith("/") ? logoUrl : `/${logoUrl}`;
-  const apiBase = DEFAULT_BASE_URL.endsWith("/") ? DEFAULT_BASE_URL.slice(0, -1) : DEFAULT_BASE_URL;
+  const apiBase = getApiBaseUrl();
   const origin =
     typeof window !== "undefined" && window.location.origin.startsWith("http")
       ? window.location.origin
-      : DEFAULT_API_ORIGIN;
+      : getApiOrigin();
 
   return resolveAbsoluteAssetUrl(`${origin}${apiBase.startsWith("/") ? apiBase : `/${apiBase}`}${normalizedPath}`);
 }
@@ -121,7 +119,7 @@ function resolveAbsoluteAssetUrl(url: string): string | undefined {
   const origin =
     typeof window !== "undefined" && window.location.origin.startsWith("http")
       ? window.location.origin
-      : DEFAULT_API_ORIGIN;
+      : getApiOrigin();
 
   try {
     return new URL(url, `${origin}/`).href;

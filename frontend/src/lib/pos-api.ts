@@ -4,8 +4,7 @@ import type { AfipBillingDefaults } from "./afip-fiscal";
 import { normalizeProduct } from "./product-categories";
 import type { PrinterSettings } from "./printer-settings";
 import { mapThemeConfigFromApi } from "./theme-logo";
-
-const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
+import { getApiBaseUrl } from "./api-base-url";
 const AUTH_TOKEN_KEY = "pos.auth.token";
 
 export type UserRole = "admin" | "manager" | "cashier" | "auditor";
@@ -208,7 +207,7 @@ function normalizeCashSession(session: CashSession | null): CashSession | null {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAuthToken();
-  const response = await fetch(`${DEFAULT_BASE_URL}${path}`, {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -519,7 +518,7 @@ export const PosAPI = {
     formData.append("file", file);
 
     const token = getAuthToken();
-    const response = await fetch(`${DEFAULT_BASE_URL}/settings/theme/logo`, {
+    const response = await fetch(`${getApiBaseUrl()}/settings/theme/logo`, {
       method: "POST",
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
