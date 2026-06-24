@@ -8,10 +8,7 @@ directories:
   output: release
   buildResources: resources
 forceCodeSigning: false
-files:
-  - dist/**/*
-  - package.json
-  - "!node_modules/**"
+compression: maximum
 extraResources:
   - from: resources/icon.png
     to: icon.png
@@ -38,12 +35,11 @@ win:
   signAndEditExecutable: false
   target:
     - nsis
-  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+  artifactName: Point-of-Sale-Setup.${ext}
 nsis:
   oneClick: true
   perMachine: false
   allowToChangeInstallationDirectory: false
-  compression: maximum
   createDesktopShortcut: true
   createStartMenuShortcut: true
   runAfterFinish: true
