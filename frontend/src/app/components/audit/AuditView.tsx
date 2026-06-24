@@ -51,15 +51,12 @@ import {
 } from "../../../lib/pos-api";
 import { CashViewAdvanced } from "../cash/CashViewAdvanced";
 import { ClosingDetailModal } from "./ClosingDetailModal";
-
-interface AuditViewProps {
-  heldOrdersCount?: number;
-  onRequestClearOrders?: () => void;
-}
+import { CASH_SESSION_CLOSED_EVENT } from "../../../lib/cash-session";
 
 const PAGE_SIZE = 10;
 
-export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditViewProps = {}) {
+export function AuditView() {
+  const [cashAuditTab, setCashAuditTab] = useState("cash");
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<string>("all");
@@ -85,13 +82,14 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
     setPage(1);
   }, [debouncedSearch, selectedUser, dateRange]);
 
-  const loadClosings = useCallback(async () => {
+  const loadClosings = useCallback(async (pageOverride?: number) => {
+    const activePage = pageOverride ?? page;
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await PosAPI.getCashClosings({
-        page,
+        page: activePage,
         pageSize: PAGE_SIZE,
         search: debouncedSearch || undefined,
         userId: selectedUser,
@@ -116,6 +114,24 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
   useEffect(() => {
     void loadClosings();
   }, [loadClosings]);
+
+  useEffect(() => {
+    const handleCashSessionClosed = () => {
+      setPage(1);
+      void loadClosings(1);
+    };
+
+    window.addEventListener(CASH_SESSION_CLOSED_EVENT, handleCashSessionClosed);
+    return () => window.removeEventListener(CASH_SESSION_CLOSED_EVENT, handleCashSessionClosed);
+  }, [loadClosings]);
+
+  const handleCashAuditTabChange = (value: string) => {
+    setCashAuditTab(value);
+    if (value === "history") {
+      setPage(1);
+      void loadClosings(1);
+    }
+  };
 
   const getStatusBadge = (status: CashClosingStatus, difference: number) => {
     switch (status) {
@@ -182,15 +198,15 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
           <div className="flex items-center gap-3">
             <ClipboardList className="size-6" />
             <div>
-              <h1 className="text-2xl font-semibold">Auditoría y Caja</h1>
+              <h1 className="text-2xl font-semibold">Auditoría</h1>
               <p className="text-sm text-muted-foreground">
-                Gestión de caja activa e historial de cierres
+                Monitoreo de caja activa e historial de cierres
               </p>
             </div>
           </div>
         </div>
 
-        <Tabs defaultValue="cash" className="flex-1 flex flex-col min-h-0">
+        <Tabs value={cashAuditTab} onValueChange={handleCashAuditTabChange} className="flex-1 flex flex-col min-h-0">
           <div className="px-6 pt-4 shrink-0">
             <TabsList>
               <TabsTrigger value="cash">Caja Activa</TabsTrigger>
@@ -202,7 +218,7 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
             value="cash"
             className="flex-1 min-h-0 overflow-hidden m-0 data-[state=active]:flex data-[state=active]:flex-col"
           >
-            <CashViewAdvanced heldOrdersCount={heldOrdersCount} onRequestClearOrders={onRequestClearOrders} />
+            <CashViewAdvanced />
           </TabsContent>
 
           <TabsContent value="history" className="flex-1 min-h-0 overflow-auto p-6 m-0">
@@ -288,11 +304,28 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
               </Card>
 
               <Card>
-                <CardHeader>
-                  <CardTitle>Historial de Cierres de Caja</CardTitle>
-                  <CardDescription>
-                    {isLoading ? "Cargando cierres..." : `${total} cierre(s) encontrado(s)`}
-                  </CardDescription>
+                <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                  <div>
+                    <CardTitle>Historial de Cierres de Caja</CardTitle>
+                    <CardDescription>
+                      {isLoading ? "Cargando cierres..." : `${total} cierre(s) encontrado(s)`}
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isLoading}
+                    onClick={() => {
+                      setPage(1);
+                      void loadClosings(1);
+                    }}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      "Actualizar"
+                    )}
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   {error && (
@@ -326,7 +359,9 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
                         ) : closings.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                              No se encontraron cierres de caja con los filtros aplicados
+                              {hasActiveFilters
+                                ? "No se encontraron cierres de caja con los filtros aplicados"
+                                : "No hay cierres de caja registrados. Cerrá la caja desde el Mostrador para que aparezcan aquí."}
                             </TableCell>
                           </TableRow>
                         ) : (

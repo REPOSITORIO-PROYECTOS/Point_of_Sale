@@ -6,6 +6,7 @@ import { useBusinessSettings } from "../../../lib/business-settings-context";
 import type { Product, CartItem, Transaction, PaymentMethod, CashSession } from "../../../lib/wails-bridge";
 import { WailsAPI } from "../../../lib/wails-bridge";
 import { getExpectedCashBreakdown, getExpectedCashInDrawer } from "../../../lib/cash-expected";
+import { isCashSessionOpen, notifyCashDataUpdated, notifyCashSessionClosed } from "../../../lib/cash-session";
 import type { VoucherType } from "./CheckoutModalEnhanced";
 import { ProductCatalog } from "./ProductCatalog";
 import { ShoppingCartEnhanced } from "./ShoppingCartEnhanced";
@@ -118,7 +119,7 @@ export function POSScreenEnhanced({
   }, []);
 
   useEffect(() => {
-    if (cashSession && !cashSession.endTime) {
+    if (isCashSessionOpen(cashSession)) {
       checkSessionDuration(cashSession);
     }
   }, [cashSession]);
@@ -167,7 +168,7 @@ export function POSScreenEnhanced({
   };
 
   const handleAddToCart = (product: Product, weight?: number) => {
-    if (!cashSession || cashSession.endTime) {
+    if (!isCashSessionOpen(cashSession)) {
       setNoCashDialogOpen(true);
       toast.error("Debes abrir caja antes de realizar ventas");
       return;
@@ -323,6 +324,7 @@ export function POSScreenEnhanced({
 
       if (voucherType !== "presupuesto") {
         await PosAPI.createSale(transaction, payments, voucherType);
+        notifyCashDataUpdated();
       }
 
       if (voucherType === "factura" && afipBuyer) {
@@ -421,11 +423,27 @@ export function POSScreenEnhanced({
       setCashSession(newSession);
       setOpenCashDialogOpen(false);
       setInitialBalance("");
+      notifyCashDataUpdated();
       toast.success("Caja abierta exitosamente");
     } catch (error) {
       console.error("Failed to open cash:", error);
       toast.error("Error al abrir caja");
     }
+  };
+
+  const resetAfterCashClose = () => {
+    setCashSession(null);
+    setCloseCashDialogOpen(false);
+    setCountedAmount("");
+    setCartItems([]);
+    setAdjustments([]);
+    setCheckoutOpen(false);
+    setMovementDialogOpen(false);
+    setMovementAmount("");
+    setMovementDescription("");
+    setMovementMethod("cash");
+    setWeeklyWarningShown(false);
+    onHeldOrdersChange([]);
   };
 
   const handleCloseCash = async () => {
@@ -447,10 +465,8 @@ export function POSScreenEnhanced({
       return;
     }
 
-    if (!latestSession || latestSession.endTime) {
-      setCashSession(latestSession);
-      setCloseCashDialogOpen(false);
-      setCountedAmount("");
+    if (!latestSession || !isCashSessionOpen(latestSession)) {
+      resetAfterCashClose();
       toast.error("No hay una sesión de caja abierta");
       return;
     }
@@ -459,10 +475,8 @@ export function POSScreenEnhanced({
       const expectedCash = getExpectedCashInDrawer(latestSession);
 
       await PosAPI.closeCashSession(expectedCash, parsedCounted);
-      const newSession = await PosAPI.getCashSession();
-      setCashSession(newSession);
-      setCloseCashDialogOpen(false);
-      setCountedAmount("");
+      resetAfterCashClose();
+      notifyCashSessionClosed();
 
       const variance = parsedCounted - expectedCash;
       if (Math.abs(variance) < 0.01) {
@@ -476,14 +490,7 @@ export function POSScreenEnhanced({
       console.error("Failed to close cash:", error);
       const message = error instanceof Error ? error.message : "";
       if (message.toLowerCase().includes("no open cash session")) {
-        try {
-          const refreshedSession = await PosAPI.getCashSession();
-          setCashSession(refreshedSession);
-        } catch {
-          setCashSession(null);
-        }
-        setCloseCashDialogOpen(false);
-        setCountedAmount("");
+        resetAfterCashClose();
         toast.error("La caja ya está cerrada o no hay sesión abierta");
         return;
       }
@@ -503,7 +510,7 @@ export function POSScreenEnhanced({
       return;
     }
 
-    if (!cashSession || cashSession.endTime) {
+    if (!isCashSessionOpen(cashSession)) {
       toast.error("No hay una sesión de caja abierta");
       return;
     }
@@ -526,6 +533,7 @@ export function POSScreenEnhanced({
 
       const updatedSession = await PosAPI.getCashSession();
       setCashSession(updatedSession);
+      notifyCashDataUpdated();
 
       await WailsAPI.printMovementVoucher(
         {

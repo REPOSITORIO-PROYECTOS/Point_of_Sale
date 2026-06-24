@@ -234,11 +234,8 @@ export class CashService {
   findAllMovements(sessionId?: string) {
 
     return this.movementRepository.find({
-
       where: sessionId ? { cashSessionId: sessionId } : undefined,
-
-      order: { id: 'DESC' },
-
+      order: { createdAt: 'DESC' },
     });
 
   }
@@ -416,30 +413,18 @@ export class CashService {
 
 
     const qb = this.sessionRepository
-
       .createQueryBuilder('session')
+      .where('session.endTime IS NOT NULL');
 
-      .leftJoin(
+    if (query.search?.trim()) {
+      qb.leftJoin(
         UserEntity,
         'user',
         'user.id = COALESCE(session.closedByUserId, session.openedByUserId)',
-      )
-
-      .where('session.endTime IS NOT NULL');
-
-
-
-    if (query.search?.trim()) {
-
-      qb.andWhere('LOWER(user.username) LIKE LOWER(:search)', {
-
+      ).andWhere('LOWER(user.username) LIKE LOWER(:search)', {
         search: `%${query.search.trim()}%`,
-
       });
-
     }
-
-
 
     if (query.userId && query.userId !== 'all') {
 

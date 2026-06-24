@@ -26,8 +26,13 @@ export class SalesService {
     private readonly productsService: ProductsService,
   ) {}
 
-  findAll() {
-    return this.repository.find({ order: { timestamp: 'DESC' } }).then((items) => items.map(toSaleResponse));
+  findAll(sessionId?: string) {
+    return this.repository
+      .find({
+        where: sessionId ? { cashSessionId: sessionId } : undefined,
+        order: { timestamp: 'DESC' },
+      })
+      .then((items) => items.map(toSaleResponse));
   }
 
   async create(payload: CreateSaleDto, userId?: string) {

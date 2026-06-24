@@ -8,6 +8,8 @@ files:
   - dist/**/*
   - package.json
 extraResources:
+  - from: resources/nodejs/node.exe
+    to: nodejs/node.exe
   - from: ../backend/dist
     to: backend/dist
     filter:

@@ -57,11 +57,11 @@ async function printReceiptHtml(payload: {
     baseURLForDataURL,
   });
 
-  const contentHeightPx = await printWindow.webContents.executeJavaScript<number>(
+  const contentHeightPx = (await printWindow.webContents.executeJavaScript(
     `new Promise((resolve) => {
       requestAnimationFrame(() => resolve(document.documentElement.scrollHeight));
     })`,
-  );
+  )) as number;
 
   const silent = resolvePrintSilent(payload.printer);
   const deviceName = resolvePrintDeviceName(payload.printer);

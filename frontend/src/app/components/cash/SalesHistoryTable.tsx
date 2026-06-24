@@ -13,22 +13,29 @@ import {
 } from "../ui/table";
 import { RotateCcw } from "lucide-react";
 import { PosAPI } from "../../../lib/pos-api";
-import type { Transaction } from "../../../lib/wails-bridge";
+import type { SaleHistoryItem } from "../../../lib/pos-domain-types";
+import { CASH_DATA_UPDATED_EVENT } from "../../../lib/cash-session";
 import { ReturnModal } from "./ReturnModal";
 import { toast } from "sonner";
 
-export function SalesHistoryTable() {
+type SalesHistoryTableProps = {
+  sessionId?: string;
+  refreshKey?: number;
+};
+
+export function SalesHistoryTable({ sessionId, refreshKey = 0 }: SalesHistoryTableProps) {
   const [returnModalOpen, setReturnModalOpen] = useState(false);
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [selectedTransaction, setSelectedTransaction] = useState<SaleHistoryItem | null>(null);
+  const [transactions, setTransactions] = useState<SaleHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadSales() {
+      setIsLoading(true);
       try {
-        const data = await PosAPI.getSales();
+        const data = await PosAPI.getSales(sessionId);
         if (!cancelled) {
           setTransactions(data);
         }
@@ -48,10 +55,26 @@ export function SalesHistoryTable() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sessionId, refreshKey]);
 
-  const getPaymentMethodLabel = (transaction: Transaction) => {
-    const payments = (transaction as Transaction & { payments?: Array<{ type: string }> }).payments;
+  useEffect(() => {
+    const handleCashDataUpdated = () => {
+      void (async () => {
+        try {
+          const data = await PosAPI.getSales(sessionId);
+          setTransactions(data);
+        } catch (error) {
+          console.error("Failed to refresh sales history:", error);
+        }
+      })();
+    };
+
+    window.addEventListener(CASH_DATA_UPDATED_EVENT, handleCashDataUpdated);
+    return () => window.removeEventListener(CASH_DATA_UPDATED_EVENT, handleCashDataUpdated);
+  }, [sessionId]);
+
+  const getPaymentMethodLabel = (transaction: SaleHistoryItem) => {
+    const payments = transaction.payments;
     if (!payments?.length) {
       return "—";
     }
@@ -68,7 +91,7 @@ export function SalesHistoryTable() {
     return labels[payments[0].type] ?? payments[0].type;
   };
 
-  const handleReturnClick = (transaction: Transaction) => {
+  const handleReturnClick = (transaction: SaleHistoryItem) => {
     setSelectedTransaction(transaction);
     setReturnModalOpen(true);
   };
@@ -87,13 +110,19 @@ export function SalesHistoryTable() {
     }
   };
 
+  const emptyMessage = sessionId
+    ? "No hay ventas registradas en este turno"
+    : "No hay ventas registradas todavía";
+
   return (
     <>
       <Card>
         <CardHeader>
           <CardTitle>Historial de Ventas</CardTitle>
           <CardDescription>
-            Ventas persistidas en SQLite vía API
+            {sessionId
+              ? "Ventas del turno de caja actual"
+              : "Ventas persistidas en la base de datos"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -120,7 +149,7 @@ export function SalesHistoryTable() {
                   ) : transactions.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                        No hay ventas registradas todavía
+                        {emptyMessage}
                       </TableCell>
                     </TableRow>
                   ) : (

@@ -12,23 +12,29 @@ if (-not (Test-Path $SourceDir)) {
   git clone --depth 1 https://github.com/REPOSITORIO-PROYECTOS/servicio_afip.git $SourceDir
 }
 
+$PythonCmd = 'python'
 $Python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $Python) {
-  throw "Python 3.11+ requerido. Instalalo y reintentá."
+  $PyLauncher = Get-Command py -ErrorAction SilentlyContinue
+  if ($PyLauncher) {
+    $PythonCmd = 'py -3'
+  } else {
+    throw "Python 3.11+ requerido. Instalalo y reintentá."
+  }
 }
 
 Push-Location $SourceDir
 try {
-  python -m pip install --upgrade pip
-  python -m pip install -r requirements.txt pyinstaller
+  Invoke-Expression "$PythonCmd -m pip install --upgrade pip"
+  Invoke-Expression "$PythonCmd -m pip install -r requirements.txt pyinstaller"
 
-  python -m PyInstaller `
+  Invoke-Expression "$PythonCmd -m PyInstaller `
     --noconfirm `
     --onefile `
     --name afip-service `
-    --add-data "gunicorn_conf.py;." `
+    --add-data `"gunicorn_conf.py;.`" `
     --hidden-import gunicorn `
-    wsgi.py
+    wsgi.py"
 
   New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
   Copy-Item (Join-Path $SourceDir "dist/afip-service.exe") (Join-Path $DistDir "afip-service.exe") -Force

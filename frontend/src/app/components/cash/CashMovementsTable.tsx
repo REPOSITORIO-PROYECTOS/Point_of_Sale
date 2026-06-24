@@ -18,6 +18,7 @@ import { useAuth } from "../../../lib/auth-context";
 import { useBusinessSettings } from "../../../lib/business-settings-context";
 import { useTheme } from "../../../lib/theme-context";
 import type { CashMovementRecord } from "../../../lib/pos-domain-types";
+import { CASH_DATA_UPDATED_EVENT } from "../../../lib/cash-session";
 import { toast } from "sonner";
 
 type CashMovementsTableProps = {
@@ -111,11 +112,43 @@ export function CashMovementsTable({ sessionId, refreshKey = 0 }: CashMovementsT
     };
   }, [sessionId, refreshKey]);
 
+  useEffect(() => {
+    const handleCashDataUpdated = () => {
+      void (async () => {
+        try {
+          const data = await PosAPI.getCashMovements(sessionId);
+          setMovements(
+            data.map((movement) => ({
+              ...movement,
+              createdAt:
+                typeof movement.createdAt === "string"
+                  ? movement.createdAt
+                  : new Date(movement.createdAt).toISOString(),
+            })),
+          );
+        } catch (error) {
+          console.error("Failed to refresh cash movements:", error);
+        }
+      })();
+    };
+
+    window.addEventListener(CASH_DATA_UPDATED_EVENT, handleCashDataUpdated);
+    return () => window.removeEventListener(CASH_DATA_UPDATED_EVENT, handleCashDataUpdated);
+  }, [sessionId]);
+
+  const emptyMessage = sessionId
+    ? "No hay movimientos registrados en este turno"
+    : "No hay movimientos de caja registrados";
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Movimientos de Caja</CardTitle>
-        <CardDescription>Ingresos y egresos manuales del turno actual</CardDescription>
+        <CardDescription>
+          {sessionId
+            ? "Ingresos y egresos manuales del turno actual"
+            : "Ingresos y egresos manuales registrados en la base de datos"}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="border rounded-lg">
@@ -139,7 +172,7 @@ export function CashMovementsTable({ sessionId, refreshKey = 0 }: CashMovementsT
                 ) : movements.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                      No hay movimientos registrados en este turno
+                      {emptyMessage}
                     </TableCell>
                   </TableRow>
                 ) : (

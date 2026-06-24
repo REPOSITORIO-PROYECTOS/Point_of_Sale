@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { AuthUser } from '@/auth/auth.types';
@@ -13,8 +13,8 @@ export class SalesController {
   constructor(private readonly service: SalesService) {}
 
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@Query('sessionId') sessionId?: string) {
+    return this.service.findAll(sessionId);
   }
 
   @Post()

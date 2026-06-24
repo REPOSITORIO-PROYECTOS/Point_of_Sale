@@ -51,12 +51,6 @@ function AppContent() {
 
 
 
-  const handleClearOrders = () => {
-
-    setHeldOrders([]);
-
-  };
-
   useEffect(() => {
     if (activeTab === "parcels" && !businessSettings.parcelsEnabled) {
       setActiveTab("pos");
@@ -167,17 +161,7 @@ function AppContent() {
 
               {activeTab === "inventory" && user.role === "admin" && <ImportExportView />}
 
-              {activeTab === "audit" && user.role === "admin" && (
-
-                <AuditView
-
-                  heldOrdersCount={heldOrders.length}
-
-                  onRequestClearOrders={handleClearOrders}
-
-                />
-
-              )}
+              {activeTab === "audit" && user.role === "admin" && <AuditView />}
 
             </div>
 

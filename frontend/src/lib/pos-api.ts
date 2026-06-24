@@ -1,5 +1,5 @@
 import type { CashSession, PaymentMethod, Parcel, Product, ThemeConfig, Transaction } from "./wails-bridge";
-import type { CashMovementRecord } from "./pos-domain-types";
+import type { CashMovementRecord, SaleHistoryItem } from "./pos-domain-types";
 import type { AfipBillingDefaults } from "./afip-fiscal";
 import { normalizeProduct } from "./product-categories";
 import type { PrinterSettings } from "./printer-settings";
@@ -452,6 +452,11 @@ export const PosAPI = {
         voucherType,
       }),
     }),
+
+  getSales: (sessionId?: string) => {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
+    return request<SaleHistoryItem[]>(`/sales${query}`);
+  },
 
   getAfipConfig: () => request<AfipConfigStatus>("/integrations/afip/config"),
   updateAfipBillingDefaults: (payload: UpdateAfipBillingDefaultsPayload) =>

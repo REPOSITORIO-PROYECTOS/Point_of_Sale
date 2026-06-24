@@ -9,7 +9,8 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
-import { Search, Plus, Weight, DollarSign, Lock, Unlock, ArrowUpDown } from "lucide-react";
+import { Search, Plus, Weight, Lock, Unlock, ArrowUpDown } from "lucide-react";
+import { isCashSessionOpen } from "../../../lib/cash-session";
 import {
   Dialog,
   DialogContent,
@@ -109,7 +110,7 @@ export function ProductCatalog({
     setSearchQuery("");
     handleProductClick(match);
   };
-  const isCashOpen = cashSession && !cashSession.endTime;
+  const isOpen = isCashSessionOpen(cashSession);
 
   return (
     <div className="flex flex-col h-full">
@@ -129,7 +130,7 @@ export function ProductCatalog({
 
         {/* Botones de Caja */}
         <div className="flex gap-2">
-          {isCashOpen ? (
+          {isOpen ? (
             <>
               <Button
                 variant="outline"
@@ -166,12 +167,12 @@ export function ProductCatalog({
         {/* Indicador de estado de caja */}
         <div
           className={`p-2 rounded-lg text-sm text-center ${
-            isCashOpen
+            isOpen
               ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
               : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100"
           }`}
         >
-          {isCashOpen ? (
+          {isOpen ? (
             <div className="flex items-center justify-center gap-2">
               <div className="size-2 rounded-full bg-green-600 animate-pulse" />
               Caja Abierta
