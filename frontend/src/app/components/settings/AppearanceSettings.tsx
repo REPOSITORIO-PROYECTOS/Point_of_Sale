@@ -21,7 +21,7 @@ import {
   savePrinterSettings,
   type PrinterSettings,
 } from "../../../lib/printer-settings-store";
-import { printReceipt } from "../../../lib/print-receipt";
+import { printReceipt, previewReceiptText } from "../../../lib/print-receipt";
 import type { PrinterType } from "../../../lib/printer-settings";
 
 const PRINTER_TYPES: { value: PrinterType; label: string }[] = [
@@ -129,7 +129,9 @@ export function AppearanceSettings() {
       });
       toast.success("Ticket de prueba enviado a la impresora");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo imprimir la prueba");
+      const message = error instanceof Error ? error.message : "No se pudo imprimir la prueba";
+      console.error("[print] prueba fallida:", error);
+      toast.error(message, { duration: 8000 });
     } finally {
       setIsTestPrinting(false);
     }
@@ -326,6 +328,28 @@ export function AppearanceSettings() {
               )}
 
               <div className="flex flex-wrap gap-3 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    previewReceiptText({
+                      items: [
+                        { name: "Café Espresso", quantity: 2, price: 2.5 },
+                        { name: "Medialuna", quantity: 1, price: 0.8 },
+                      ],
+                      total: 5.8,
+                      subtotal: 5.8,
+                      businessName: "Mi Negocio",
+                      receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+                      voucherType: "comprobante",
+                      ticketId: "DEMO-TEXT",
+                      payments: [{ type: "cash", amount: 5.8, label: "Efectivo" }],
+                    });
+                  }}
+                >
+                  <Eye className="size-4 mr-2" />
+                  Vista previa texto
+                </Button>
                 <Button
                   type="button"
                   variant="outline"

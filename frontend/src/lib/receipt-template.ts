@@ -83,6 +83,40 @@ export function openReceiptPreview(html: string): void {
   previewWindow.document.close();
 }
 
+/** Vista previa en texto plano (formato ESC/POS) — útil sin impresora o para depuración. */
+export function openReceiptTextPreview(text: string, widthMm: 55 | 80 = 80): void {
+  const previewWindow = window.open("", "_blank", "width=480,height=720");
+  if (!previewWindow) {
+    throw new Error("No se pudo abrir la vista previa de texto");
+  }
+
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  previewWindow.document.open();
+  previewWindow.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Vista previa texto (${widthMm} mm)</title>
+  <style>
+    body { font-family: "Consolas", "Courier New", monospace; font-size: 12px; margin: 0; padding: 16px; background: #f8f8f8; }
+    pre { background: #fff; border: 1px dashed #ccc; padding: 12px; white-space: pre-wrap; word-break: break-word; max-width: ${widthMm === 55 ? "280px" : "380px"}; margin: 0 auto; }
+    h1 { font: 600 14px system-ui; text-align: center; color: #444; }
+    p { font: 12px system-ui; text-align: center; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Ticket — modo texto ESC/POS</h1>
+  <p>Ancho ${widthMm} mm · ${widthMm === 55 ? 32 : 48} columnas</p>
+  <pre>${escaped}</pre>
+</body>
+</html>`);
+  previewWindow.document.close();
+}
+
 export {
   buildCierreLoteHtml,
   buildEgresoHtml,

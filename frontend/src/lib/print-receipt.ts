@@ -1,10 +1,8 @@
 import { isElectronEnvironment, printReceiptElectron, printReceiptInBrowser } from "./desktop-api";
-import {
-  getCachedPrinterSettings,
-  toPrinterPrintOptions,
-} from "./printer-settings-store";
+import { getCachedPrinterSettings, toPrinterPrintOptions } from "./printer-settings";
 import {
   buildReceiptPrintDocument,
+  renderReceiptPrintText,
   type ReceiptPrintDocument,
 } from "./receipt-print-document";
 import {
@@ -12,6 +10,7 @@ import {
   buildEgresoHtml,
   buildIngresoHtml,
   openReceiptPreview,
+  openReceiptTextPreview,
   type ReceiptAdjustment,
   type ReceiptLineItem,
   type ReceiptPaymentLine,
@@ -144,6 +143,7 @@ export function buildPrintReceiptDocument(payload: PrintReceiptPayload): Receipt
 export async function printReceipt(payload: PrintReceiptPayload): Promise<void> {
   const widthMm = payload.receiptWidthMm ?? 80;
   const html = buildPrintReceiptHtml(payload);
+  const document = buildPrintReceiptDocument(payload);
 
   if (payload.previewOnly) {
     openReceiptPreview(html);
@@ -152,9 +152,16 @@ export async function printReceipt(payload: PrintReceiptPayload): Promise<void> 
 
   if (isElectronEnvironment()) {
     const printerSettings = getCachedPrinterSettings();
+    console.info("[print] Electron", {
+      mode: printerSettings.printMode,
+      printer: printerSettings.printerName ?? "(predeterminada)",
+      type: printerSettings.printerType,
+      widthMm,
+      voucherType: document.voucherType,
+    });
     await printReceiptElectron({
       widthMm,
-      document: buildPrintReceiptDocument(payload),
+      document,
       html,
       printer: toPrinterPrintOptions(printerSettings),
     });
@@ -164,16 +171,23 @@ export async function printReceipt(payload: PrintReceiptPayload): Promise<void> 
   if (isWailsEnvironment()) {
     const data = JSON.stringify({
       widthMm,
-      document: buildPrintReceiptDocument(payload),
+      document,
       html,
     });
     await window.go!.main!.App!.PrintReceipt(data);
     return;
   }
 
+  console.info("[print] navegador — abriendo diálogo HTML (sin ESC/POS)\n", renderReceiptPrintText(document));
   printReceiptInBrowser(html);
 }
 
 export function previewReceipt(payload: PrintReceiptPayload): void {
   openReceiptPreview(buildPrintReceiptHtml(payload));
+}
+
+export function previewReceiptText(payload: PrintReceiptPayload): void {
+  const document = buildPrintReceiptDocument(payload);
+  const widthMm = payload.receiptWidthMm ?? 80;
+  openReceiptTextPreview(renderReceiptPrintText(document), widthMm);
 }

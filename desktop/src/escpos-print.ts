@@ -9,6 +9,7 @@ import {
   type PrinterPrintOptions,
   type ReceiptPrintDocument,
 } from './receipt-print-types';
+import { renderReceiptPrintText } from './receipt-print-text';
 
 function resolvePrinterInterface(options?: PrinterPrintOptions): string {
   const configured = process.env.POS_PRINTER_INTERFACE?.trim();
@@ -77,10 +78,13 @@ function voucherTitle(voucherType: ReceiptPrintDocument['voucherType']): string 
 async function createPrinter(
   widthMm: 55 | 80,
   options?: PrinterPrintOptions,
-): Promise<ThermalPrinter> {
+): Promise<{ printer: ThermalPrinter; interfaceId: string; printerType: string }> {
+  const interfaceId = resolvePrinterInterface(options);
+  const printerType = resolvePrinterType(options);
+
   const printer = new ThermalPrinter({
-    type: resolvePrinterType(options),
-    interface: resolvePrinterInterface(options),
+    type: printerType,
+    interface: interfaceId,
     characterSet: CharacterSet.PC858_EURO,
     removeSpecialCharacters: false,
     lineCharacter: '-',
@@ -91,14 +95,38 @@ async function createPrinter(
     },
   });
 
-  const isConnected = await printer.isPrinterConnected();
-  if (!isConnected) {
-    throw new Error(
-      'Impresora ESC/POS no disponible. Configure POS_PRINTER_NAME o POS_PRINTER_INTERFACE.',
-    );
+  let isConnected = false;
+  try {
+    isConnected = await printer.isPrinterConnected();
+  } catch (error) {
+    console.warn('[print][escpos] isPrinterConnected falló:', error);
   }
 
-  return printer;
+  if (!isConnected) {
+    console.warn(
+      `[print][escpos] sin confirmación de conexión (${interfaceId}, ${printerType}) — se intentará imprimir igualmente`,
+    );
+  } else {
+    console.info(`[print][escpos] conexión OK (${interfaceId}, ${printerType})`);
+  }
+
+  return { printer, interfaceId, printerType };
+}
+
+async function executePrintJob(
+  printer: ThermalPrinter,
+  interfaceId: string,
+  printerType: string,
+): Promise<void> {
+  try {
+    await printer.execute();
+    console.info(`[print][escpos] impresión OK (${interfaceId}, ${printerType})`);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `ESC/POS falló (${interfaceId}, ${printerType}): ${detail}. Revise nombre de impresora, cable/USB y driver.`,
+    );
+  }
 }
 
 export async function printEscposDocument(
@@ -106,7 +134,11 @@ export async function printEscposDocument(
   options?: PrinterPrintOptions,
 ): Promise<void> {
   const cols = escposColumnsForWidth(document.widthMm);
-  const printer = await createPrinter(document.widthMm, options);
+  const { printer, interfaceId, printerType } = await createPrinter(document.widthMm, options);
+
+  console.info(
+    `[print][escpos] enviando ticket ${document.voucherType} (${document.widthMm}mm, ${cols} cols)\n${renderReceiptPrintText(document)}`,
+  );
 
   printer.clear();
 
@@ -144,7 +176,7 @@ export async function printEscposDocument(
     printer.println(`Mov. #${document.movement.idMovimiento} · Sesion ${document.movement.idSesion}`);
     printer.println('Documento no valido como factura');
     printer.cut();
-    await printer.execute();
+    await executePrintJob(printer, interfaceId, printerType);
     return;
   }
 
@@ -247,7 +279,7 @@ export async function printEscposDocument(
   printer.newLine();
   printer.cut();
 
-  await printer.execute();
+  await executePrintJob(printer, interfaceId, printerType);
 }
 
 export function shouldUseEscposPrint(options?: PrinterPrintOptions): boolean {

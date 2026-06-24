@@ -3,6 +3,7 @@ import type { CashMovementRecord } from "./pos-domain-types";
 import type { AfipBillingDefaults } from "./afip-fiscal";
 import { normalizeProduct } from "./product-categories";
 import type { PrinterSettings } from "./printer-settings";
+import { mapThemeConfigFromApi } from "./theme-logo";
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 const AUTH_TOKEN_KEY = "pos.auth.token";

@@ -119,6 +119,12 @@ async function bootstrap() {
   ipcMain.handle('print-receipt', async (_event, payload: ElectronPrintPayload) => {
     const printerOptions = payload.printer;
     const preferEscpos = shouldUseEscposPrint(printerOptions) && payload.document;
+    const mode = preferEscpos ? 'escpos' : 'html';
+    const printerName = printerOptions?.printerName ?? process.env.POS_PRINTER_NAME ?? '(predeterminada)';
+
+    console.info(
+      `[print] inicio mode=${mode} width=${payload.widthMm}mm printer=${printerName} type=${printerOptions?.printerType ?? 'epson'}`,
+    );
 
     if (preferEscpos) {
       try {
@@ -126,8 +132,9 @@ async function bootstrap() {
         return;
       } catch (error) {
         const allowHtmlFallback = shouldAllowHtmlFallback(printerOptions);
+        console.warn('[print] ESC/POS falló:', error);
         if (allowHtmlFallback && payload.html) {
-          console.warn('[print] ESC/POS falló, usando HTML:', error);
+          console.info('[print] reintentando con HTML/driver del sistema');
           await printReceiptHtml({ html: payload.html, widthMm: payload.widthMm, printer: printerOptions });
           return;
         }
@@ -139,6 +146,7 @@ async function bootstrap() {
       throw new Error('Impresión requiere documento ESC/POS o HTML de respaldo');
     }
 
+    console.info('[print] modo HTML/driver del sistema');
     await printReceiptHtml({ html: payload.html, widthMm: payload.widthMm, printer: printerOptions });
   });
 
