@@ -10,13 +10,24 @@ import { registerTenantRoutes } from './routes/tenants.js';
 import { wsHub } from './ws/hub.js';
 import { store } from './store/memory-store.js';
 
+async function seedDeveloperAccount(): Promise<void> {
+  const email = process.env.DEV_PORTAL_EMAIL ?? 'developer@pos.local';
+  const password = process.env.DEV_PORTAL_PASSWORD ?? 'dev1234';
+
+  if (process.env.SEED_DEMO === 'false' && (!process.env.DEV_PORTAL_EMAIL || !process.env.DEV_PORTAL_PASSWORD)) {
+    throw new Error('Production requires DEV_PORTAL_EMAIL and DEV_PORTAL_PASSWORD when SEED_DEMO=false');
+  }
+
+  await store.seedDeveloperAccount(email, password, 'Desarrollador');
+}
+
 async function seedDemoData(): Promise<void> {
   try {
-    await store.seedDeveloperAccount(
-      process.env.DEV_PORTAL_EMAIL ?? 'developer@pos.local',
-      process.env.DEV_PORTAL_PASSWORD ?? 'dev1234',
-      'Desarrollador',
-    );
+    await seedDeveloperAccount();
+
+    if (process.env.SEED_DEMO === 'false') {
+      return;
+    }
 
     const tenant = await store.createTenant(
       'CLI-00001',
@@ -44,7 +55,10 @@ async function seedDemoData(): Promise<void> {
       agentVersion: '0.0.1-demo',
       currency: 'ARS',
     });
-  } catch {
+  } catch (error) {
+    if (process.env.SEED_DEMO === 'false' && error instanceof Error && error.message.includes('Production requires')) {
+      throw error;
+    }
     // demo tenant may already exist after hot reload
   }
 }

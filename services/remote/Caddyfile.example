@@ -1,0 +1,12 @@
+# Relay POS remoto — ejemplo Caddy (TLS + WebSocket)
+# Copiar a /etc/caddy/Caddyfile o incluir en tu stack.
+#
+# Requisitos:
+#   - docker compose -f docker-compose.remote.yml up -d
+#   - DNS relay.tu-dominio.com → este servidor
+#   - Portal PWA en otro host con VITE_REMOTE_API_URL=https://relay.tu-dominio.com
+
+relay.tu-dominio.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:5090
+}

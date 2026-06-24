@@ -117,10 +117,23 @@ services:
 
 Para producción MVP se recomienda VPS + PostgreSQL (fase posterior); el scaffold usa **memoria** reiniciada en cada deploy.
 
-## Producción
+## Producción (MVP)
 
-- Relay: Docker en VPS (Railway/Fly.io/VPS) con TLS (Caddy)
-- PWA: build estático en Cloudflare Pages / Vercel → `VITE_REMOTE_API_URL=https://relay.tu-dominio.com`
+```powershell
+# 1. Configurar relay
+cp services/remote/.env.example services/remote/.env
+# DEV_PORTAL_EMAIL, DEV_PORTAL_PASSWORD, CORS_ORIGINS=https://portal.tu-dominio.com
+
+# 2. Levantar relay
+docker compose -f docker-compose.remote.yml up -d --build
+
+# 3. TLS (Caddy) — ver Caddyfile.example
+# 4. Portal: npm run build:portal con VITE_REMOTE_API_URL=https://relay.tu-dominio.com
+```
+
+- Relay: Docker en VPS con TLS (Caddy/nginx) — ver `Caddyfile.example`
+- PWA: build estático → `VITE_REMOTE_API_URL=https://relay.tu-dominio.com`
+- `SEED_DEMO=false` en producción (sin tenant CLI-00001)
 
 ## No tocar
 

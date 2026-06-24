@@ -422,10 +422,23 @@ export function assignRegisters(registerIds: string[], portalUserId: string) {
   });
 }
 
+function getWebSocketBase(): string {
+  const explicit = import.meta.env.VITE_REMOTE_WS_URL as string | undefined;
+  if (explicit?.trim()) {
+    return explicit.trim().replace(/\/$/, '');
+  }
+
+  const apiUrl = import.meta.env.VITE_REMOTE_API_URL as string | undefined;
+  if (apiUrl?.trim()) {
+    return apiUrl.trim().replace(/\/$/, '').replace(/^http/i, 'ws');
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${protocol}://${window.location.hostname}:5090`;
+}
+
 export function createPortalWebSocket(clientNumber: string, onMessage: (data: unknown) => void): WebSocket {
-  const relayUrl = import.meta.env.VITE_REMOTE_WS_URL as string | undefined;
-  const wsBase = relayUrl ?? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:5090`;
-  const socket = new WebSocket(`${wsBase}/ws/portal`);
+  const socket = new WebSocket(`${getWebSocketBase()}/ws/portal`);
 
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'subscribe', clientNumber }));

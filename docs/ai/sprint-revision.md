@@ -283,7 +283,7 @@ npm run test:microservices
 | 7.1 | Heartbeat | Relay: presencia online/offline, `last_seen`, revocación device | 1.5 d | 🟡 MVP |
 | 7.1 | Heartbeat | Tabla `remote_outbox` + reintentos offline | 2 d | ⬜ |
 | **7.2** | PWA shell | `apps/remote-portal/`: Vite + vite-plugin-pwa + login + layout | 3 d | 🟡 MVP |
-| 7.2 | PWA shell | Deploy estático (Cloudflare Pages / Vercel) + env `VITE_RELAY_URL` | 1 d | 🟡 local dev |
+| 7.2 | PWA shell | Deploy estático (Cloudflare Pages / Vercel) + env `VITE_REMOTE_API_URL` | 1 d | 🟡 listo deploy |
 | **7.3** | Multi-local | Portal: selector tenant → local → caja; lista con estado 🟢🟡🔴 | 2.5 d | 🟡 parcial ✅ |
 | 7.3 | Multi-local | Relay: agregación snapshots por `location_id` | 2 d | ⬜ |
 | **7.4** | Resúmenes API | Agente: push snapshot precios + ventas día + estado caja | 2.5 d | 🟡 parcial ✅ |
@@ -292,7 +292,7 @@ npm run test:microservices
 | **7.5** | Usuarios remotos | Relay: comando `disable_user` + cola si offline + audit log | 2 d | ⬜ |
 | 7.5 | Usuarios remotos | Backend: `PATCH users/:id` con `active`; guard último admin | 1 d | ⬜ |
 | 7.5 | Usuarios remotos | Portal: pantalla usuarios por local, habilitar/deshabilitar | 2 d | ⬜ |
-| — | Infra | `services/remote/` Docker + `docker-compose.dev.yml` + scripts npm raíz | 2 d | 🟡 scripts `dev:remote` |
+| — | Infra | `services/remote/` Docker + `docker-compose.remote.yml` + scripts npm raíz | 2 d | 🟡 compose prod |
 | — | Tests | Smoke pairing mock + unit outbox + contract snapshot DTOs | 2 d | ⬜ |
 
 **Esfuerzo total estimado:** ~32 d-persona (MVP 7.0–7.4 ≈ 22 d; 7.5 + infra + tests ≈ 10 d adicionales).
