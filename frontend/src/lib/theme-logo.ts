@@ -90,26 +90,42 @@ export function resolveThemeLogoUrl(logoUrl?: string): string | undefined {
   return `${DEFAULT_API_ORIGIN}${apiBase}${normalizedPath}`;
 }
 
-/** Absolute URL for printing (Electron hidden window / data: HTML). */
 export function resolveReceiptLogoUrl(logoUrl?: string): string | undefined {
   if (!logoUrl) {
-    return getDefaultLogoUrl();
+    return resolveAbsoluteAssetUrl(getDefaultLogoUrl());
   }
 
-  if (logoUrl.startsWith('data:') || logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
+  if (logoUrl.startsWith("data:") || logoUrl.startsWith("http://") || logoUrl.startsWith("https://")) {
     return logoUrl;
   }
 
   if (isFrontendStaticLogoPath(logoUrl)) {
-    return getDefaultLogoUrl();
+    return resolveAbsoluteAssetUrl(getDefaultLogoUrl());
   }
 
-  const normalizedPath = logoUrl.startsWith('/') ? logoUrl : `/${logoUrl}`;
-  const apiBase = DEFAULT_BASE_URL.endsWith('/') ? DEFAULT_BASE_URL.slice(0, -1) : DEFAULT_BASE_URL;
+  const normalizedPath = logoUrl.startsWith("/") ? logoUrl : `/${logoUrl}`;
+  const apiBase = DEFAULT_BASE_URL.endsWith("/") ? DEFAULT_BASE_URL.slice(0, -1) : DEFAULT_BASE_URL;
   const origin =
-    typeof window !== 'undefined' && window.location.origin.startsWith('http')
+    typeof window !== "undefined" && window.location.origin.startsWith("http")
       ? window.location.origin
       : DEFAULT_API_ORIGIN;
 
-  return `${origin}${apiBase.startsWith('/') ? apiBase : `/${apiBase}`}${normalizedPath}`;
+  return resolveAbsoluteAssetUrl(`${origin}${apiBase.startsWith("/") ? apiBase : `/${apiBase}`}${normalizedPath}`);
+}
+
+function resolveAbsoluteAssetUrl(url: string): string | undefined {
+  if (url.startsWith("data:") || url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://")) {
+    return url;
+  }
+
+  const origin =
+    typeof window !== "undefined" && window.location.origin.startsWith("http")
+      ? window.location.origin
+      : DEFAULT_API_ORIGIN;
+
+  try {
+    return new URL(url, `${origin}/`).href;
+  } catch {
+    return undefined;
+  }
 }

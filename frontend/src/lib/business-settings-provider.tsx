@@ -1,19 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "./auth-context";
 import { PosAPI, type BusinessSettings } from "./pos-api";
-
-type BusinessSettingsContextValue = {
-  settings: BusinessSettings;
-  isLoading: boolean;
-  refresh: () => Promise<void>;
-  updateSettings: (payload: Partial<BusinessSettings>) => Promise<BusinessSettings>;
-};
+import { BusinessSettingsContext } from "./business-settings-context";
 
 const DEFAULT_SETTINGS: BusinessSettings = {
   parcelsEnabled: false,
 };
-
-const BusinessSettingsContext = createContext<BusinessSettingsContextValue | null>(null);
 
 export function BusinessSettingsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -61,13 +53,4 @@ export function BusinessSettingsProvider({ children }: { children: ReactNode }) 
   return (
     <BusinessSettingsContext.Provider value={value}>{children}</BusinessSettingsContext.Provider>
   );
-}
-
-export function useBusinessSettings(): BusinessSettingsContextValue {
-  const context = useContext(BusinessSettingsContext);
-  if (!context) {
-    throw new Error("useBusinessSettings must be used within BusinessSettingsProvider");
-  }
-
-  return context;
 }

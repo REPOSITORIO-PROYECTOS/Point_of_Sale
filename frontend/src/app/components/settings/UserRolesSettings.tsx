@@ -28,14 +28,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import { mockUserRoles, type UserRole as RoleDefinition } from "../../../lib/mock-data";
 import { PosAPI, type UserRole } from "../../../lib/pos-api";
 import { useAuth } from "../../../lib/auth-context";
 import {
   ACCESS_LEVEL_LABELS,
   ACCESS_LEVEL_SUMMARIES,
   getRoleLabel,
+  ROLE_DEFINITIONS,
   type AccessLevel,
+  type RoleDefinition,
 } from "../../../lib/user-roles";
 import {
   Shield,
@@ -68,7 +69,7 @@ const ROLE_OPTIONS: AccessLevel[] = ["admin", "manager", "cashier", "auditor"];
 export function UserRolesSettings() {
   const { user: currentUser } = useAuth();
   const [selectedRole, setSelectedRole] = useState<RoleDefinition | null>(null);
-  const [roles] = useState<RoleDefinition[]>(mockUserRoles);
+  const [roles] = useState<RoleDefinition[]>(ROLE_DEFINITIONS);
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);

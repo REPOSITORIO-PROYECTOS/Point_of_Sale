@@ -13,6 +13,9 @@ export interface CashMovementRecord {
   description: string;
   amount: number;
   createdAt: string;
+  type?: "income" | "expense";
+  paymentMethod?: "cash" | "card" | "transfer" | "qr";
+  cashSessionId?: string;
 }
 
 export interface CreditNote {

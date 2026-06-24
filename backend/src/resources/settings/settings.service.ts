@@ -5,9 +5,12 @@ import { BusinessSettingsEntity } from './business-settings.entity';
 import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 import { UpdateThemeSettingsDto } from './dto/update-theme-settings.dto';
 import { LogoStorageService, THEME_LOGO_API_PATH } from './logo-storage.service';
+import { PrinterSettingsEntity } from './printer-settings.entity';
 import { ThemeSettingsEntity } from './theme-settings.entity';
+import type { UpdatePrinterSettingsDto } from './dto/update-printer-settings.dto';
 
 const DEFAULT_THEME_ID = 'default';
+const DEFAULT_PRINTER_ID = 'default';
 const DEFAULT_BUSINESS_ID = 'default';
 const DEFAULT_PRIMARY_COLOR = '#030213';
 const DEFAULT_RECEIPT_WIDTH_MM = 80;
@@ -27,6 +30,14 @@ export type BusinessSettingsResponse = {
   parcelsEnabled: boolean;
 };
 
+export type PrinterSettingsResponse = {
+  printerName?: string | null;
+  printMode: 'escpos' | 'html';
+  printSilent: boolean;
+  printerType: 'epson' | 'star' | 'tanca' | 'daruma' | 'brother' | 'custom';
+  fallbackHtml: boolean;
+};
+
 @Injectable()
 export class SettingsService {
   constructor(
@@ -34,6 +45,8 @@ export class SettingsService {
     private readonly themeRepo: Repository<ThemeSettingsEntity>,
     @InjectRepository(BusinessSettingsEntity)
     private readonly businessRepo: Repository<BusinessSettingsEntity>,
+    @InjectRepository(PrinterSettingsEntity)
+    private readonly printerRepo: Repository<PrinterSettingsEntity>,
     private readonly logoStorage: LogoStorageService,
   ) {}
 
@@ -176,6 +189,54 @@ export class SettingsService {
   async getBusiness(): Promise<BusinessSettingsResponse> {
     const row = await this.businessRepo.findOne({ where: { id: DEFAULT_BUSINESS_ID } });
     return this.toBusinessResponse(row);
+  }
+
+  private toPrinterResponse(row: PrinterSettingsEntity | null): PrinterSettingsResponse {
+    const printerType = row?.printerType ?? 'epson';
+    const allowedTypes = ['epson', 'star', 'tanca', 'daruma', 'brother', 'custom'] as const;
+    const normalizedType = allowedTypes.includes(printerType as (typeof allowedTypes)[number])
+      ? (printerType as (typeof allowedTypes)[number])
+      : 'epson';
+
+    return {
+      printerName: row?.printerName ?? null,
+      printMode: row?.printMode === 'html' ? 'html' : 'escpos',
+      printSilent: Boolean(row?.printSilent),
+      printerType: normalizedType,
+      fallbackHtml: row?.fallbackHtml !== 0,
+    };
+  }
+
+  async getPrinter(): Promise<PrinterSettingsResponse> {
+    const row = await this.printerRepo.findOne({ where: { id: DEFAULT_PRINTER_ID } });
+    return this.toPrinterResponse(row);
+  }
+
+  async updatePrinter(payload: UpdatePrinterSettingsDto): Promise<PrinterSettingsResponse> {
+    const existing = await this.printerRepo.findOne({ where: { id: DEFAULT_PRINTER_ID } });
+
+    const row = this.printerRepo.create({
+      id: DEFAULT_PRINTER_ID,
+      printerName:
+        payload.printerName === undefined ? (existing?.printerName ?? null) : payload.printerName,
+      printMode: payload.printMode ?? existing?.printMode ?? 'escpos',
+      printSilent:
+        payload.printSilent === undefined
+          ? (existing?.printSilent ?? 0)
+          : payload.printSilent
+            ? 1
+            : 0,
+      printerType: payload.printerType ?? existing?.printerType ?? 'epson',
+      fallbackHtml:
+        payload.fallbackHtml === undefined
+          ? (existing?.fallbackHtml ?? 1)
+          : payload.fallbackHtml
+            ? 1
+            : 0,
+    });
+
+    const saved = await this.printerRepo.save(row);
+    return this.toPrinterResponse(saved);
   }
 
   async updateBusiness(payload: UpdateBusinessSettingsDto): Promise<BusinessSettingsResponse> {

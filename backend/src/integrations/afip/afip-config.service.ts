@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { env } from '@/config/env.config';
 import { generateAfipCsr } from './afip-csr.generator';
+import type { AfipBillingDefaults } from './afip-billing-defaults';
+import { normalizeAfipBillingDefaults } from './afip-billing-defaults';
 import type { AfipConfigStatus, AfipStoredConfig } from './afip-config.types';
 import {
   ensureAfipStorageDir,
@@ -9,12 +11,14 @@ import {
   getAfipPrivateKeyPath,
   hasAfipCertificateFile,
   hasAfipPrivateKeyFile,
+  readAfipBillingDefaults,
   readAfipCertificate,
   readAfipPrivateKey,
   readStoredAfipConfig,
   validateCertificatePem,
   validateCuit,
   validatePrivateKeyPem,
+  writeAfipBillingDefaults,
   writeAfipCertificate,
   writeAfipPrivateKey,
   writeStoredAfipConfig,
@@ -67,6 +71,7 @@ export class AfipConfigService {
       cuit,
       puntoVenta: stored?.puntoVenta ?? env.afipPuntoVenta,
       production: stored?.production ?? env.afipProduction,
+      billingDefaults: stored?.billingDefaults ?? readAfipBillingDefaults(),
       hasCertificate,
       hasPrivateKey,
       certPath: getAfipCertificatePath(),
@@ -74,6 +79,11 @@ export class AfipConfigService {
       configPath: getAfipConfigPath(),
       updatedAt: stored?.updatedAt ?? null,
     };
+  }
+
+  updateBillingDefaults(input: AfipBillingDefaults) {
+    writeAfipBillingDefaults(normalizeAfipBillingDefaults(input));
+    return this.getStatus();
   }
 
   importCredentials(input: ImportAfipCredentialsInput) {
@@ -91,11 +101,13 @@ export class AfipConfigService {
       writeAfipCertificate(certificado);
       writeAfipPrivateKey(clavePrivada);
 
+      const existing = readStoredAfipConfig();
       const config: AfipStoredConfig = {
         cuit,
         puntoVenta,
         production,
         updatedAt: new Date().toISOString(),
+        billingDefaults: existing?.billingDefaults ?? readAfipBillingDefaults(),
       };
 
       writeStoredAfipConfig(config);
@@ -162,11 +174,13 @@ export class AfipConfigService {
 
       writeAfipPrivateKey(clavePrivada);
 
+      const existing = readStoredAfipConfig();
       const config: AfipStoredConfig = {
         cuit,
         puntoVenta,
         production,
         updatedAt: new Date().toISOString(),
+        billingDefaults: existing?.billingDefaults ?? readAfipBillingDefaults(),
       };
 
       writeStoredAfipConfig(config);

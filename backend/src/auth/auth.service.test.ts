@@ -51,7 +51,8 @@ function createAuthService(options: {
 
   const jwtService: MockJwtService = {
     signAsync: async () => options.token ?? 'signed-jwt-token',
-    verify: () => options.verifyPayload ?? { sub: 'user-1', username: 'admin', role: 'admin' },
+    verify: <T>(token: string) =>
+      (options.verifyPayload ?? { sub: 'user-1', username: 'admin', role: 'admin' }) as T,
   };
 
   const licenseService: MockLicenseService = {

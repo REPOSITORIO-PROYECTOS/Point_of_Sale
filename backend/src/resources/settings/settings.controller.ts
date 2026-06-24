@@ -16,6 +16,7 @@ import type { Response } from 'express';
 import { PublicRoute } from '../../decorators/public-routes.decorator';
 import { Roles } from '../../decorators/roles.decorator';
 import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
+import { UpdatePrinterSettingsDto } from './dto/update-printer-settings.dto';
 import { UploadThemeLogoDto } from './dto/upload-theme-logo.dto';
 import { UpdateThemeSettingsDto } from './dto/update-theme-settings.dto';
 import { MAX_LOGO_BYTES } from './logo-storage.service';
@@ -76,6 +77,17 @@ export class SettingsController {
   @Delete('theme/logo')
   deleteLogo() {
     return this.service.deleteLogo();
+  }
+
+  @Get('printer')
+  getPrinter() {
+    return this.service.getPrinter();
+  }
+
+  @Put('printer')
+  @Roles('admin')
+  updatePrinter(@Body() payload: UpdatePrinterSettingsDto) {
+    return this.service.updatePrinter(payload);
   }
 
   @Get('business')

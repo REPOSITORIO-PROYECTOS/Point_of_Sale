@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { CashSession, WailsAPI } from "../../../lib/wails-bridge";
 import { PosAPI } from "../../../lib/pos-api";
+import { getExpectedSessionBalance } from "../../../lib/cash-expected";
+import { useAuth } from "../../../lib/auth-context";
+import { useBusinessSettings } from "../../../lib/business-settings-context";
+import { useTheme } from "../../../lib/theme-context";
+import type { CashMovementRecord } from "../../../lib/pos-domain-types";
 import { Button } from "../ui/button";
 import {
   AlertDialog,
@@ -61,6 +66,32 @@ export function CashViewAdvanced({
   const [incomeModalOpen, setIncomeModalOpen] = useState(false);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [weeklyWarningShown, setWeeklyWarningShown] = useState(false);
+  const [movementsRefreshKey, setMovementsRefreshKey] = useState(0);
+  const { user } = useAuth();
+  const { settings: businessSettings } = useBusinessSettings();
+  const { themeConfig } = useTheme();
+
+  const printMovementVoucher = async (movement: CashMovementRecord, sessionId: string) => {
+    const type =
+      movement.type ?? (movement.amount >= 0 ? "income" : "expense");
+
+    await WailsAPI.printMovementVoucher(
+      {
+        type,
+        amount: Math.abs(movement.amount),
+        description: movement.description,
+        paymentMethod: movement.paymentMethod ?? "cash",
+        timestamp: movement.createdAt,
+        movementId: movement.id,
+        sessionId,
+      },
+      {
+        businessName: businessSettings.businessName,
+        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+        operatorName: user?.username,
+      },
+    );
+  };
 
   // Arqueo por método de pago
   const [countedAmounts, setCountedAmounts] = useState({
@@ -137,8 +168,8 @@ export function CashViewAdvanced({
     if (!withCounting) {
       // Cierre sin arqueo - usar el monto esperado
       try {
-        const expectedAmount = session.initialBalance + session.totalSales;
-        await PosAPI.closeCashSession(session.initialBalance + session.totalSales, expectedAmount);
+        const expectedAmount = getExpectedSessionBalance(session);
+        await PosAPI.closeCashSession(expectedAmount, expectedAmount);
         await loadSession();
         setCloseDialogOpen(false);
         resetCountingForm();
@@ -189,7 +220,7 @@ export function CashViewAdvanced({
         return sum;
       }, 0);
 
-      await PosAPI.closeCashSession(session.initialBalance + session.totalSales, totalCounted);
+      await PosAPI.closeCashSession(getExpectedSessionBalance(session), totalCounted);
       await loadSession();
       setCloseDialogOpen(false);
       resetCountingForm();
@@ -212,22 +243,68 @@ export function CashViewAdvanced({
     }
   };
 
-  const handleSaveIncome = (movement: {
+  const handleSaveIncome = async (movement: {
     amount: number;
     description: string;
     paymentMethod: string;
   }) => {
-    toast.success(`Ingreso registrado: $${movement.amount.toFixed(2)}`);
-    console.log("Income movement:", movement);
+    if (!session || session.endTime) {
+      toast.error("No hay una sesión de caja abierta");
+      return;
+    }
+
+    try {
+      const saved = await PosAPI.createCashMovement({
+        description: movement.description,
+        amount: movement.amount,
+        type: "income",
+        paymentMethod: movement.paymentMethod as "cash" | "card" | "transfer" | "qr",
+      });
+      await loadSession();
+      setMovementsRefreshKey((value) => value + 1);
+      try {
+        await printMovementVoucher(saved, session.id);
+      } catch (printError) {
+        console.error("Failed to print income voucher:", printError);
+        toast.warning("Ingreso guardado, pero no se pudo imprimir el comprobante");
+      }
+      toast.success(`Ingreso registrado: $${movement.amount.toFixed(2)}`);
+    } catch (error) {
+      console.error("Failed to save income movement:", error);
+      toast.error("Error al registrar ingreso");
+    }
   };
 
-  const handleSaveExpense = (movement: {
+  const handleSaveExpense = async (movement: {
     amount: number;
     description: string;
     paymentMethod: string;
   }) => {
-    toast.success(`Egreso registrado: $${movement.amount.toFixed(2)}`);
-    console.log("Expense movement:", movement);
+    if (!session || session.endTime) {
+      toast.error("No hay una sesión de caja abierta");
+      return;
+    }
+
+    try {
+      const saved = await PosAPI.createCashMovement({
+        description: movement.description,
+        amount: movement.amount,
+        type: "expense",
+        paymentMethod: movement.paymentMethod as "cash" | "card" | "transfer" | "qr",
+      });
+      await loadSession();
+      setMovementsRefreshKey((value) => value + 1);
+      try {
+        await printMovementVoucher(saved, session.id);
+      } catch (printError) {
+        console.error("Failed to print expense voucher:", printError);
+        toast.warning("Egreso guardado, pero no se pudo imprimir el comprobante");
+      }
+      toast.success(`Egreso registrado: $${movement.amount.toFixed(2)}`);
+    } catch (error) {
+      console.error("Failed to save expense movement:", error);
+      toast.error("Error al registrar egreso");
+    }
   };
 
   const quickAmounts = [0, 10000, 50000, 100000];
@@ -244,7 +321,7 @@ export function CashViewAdvanced({
   const getVariance = () => {
     if (!session) return 0;
     const totalCounted = getTotalCounted();
-    const expected = session.initialBalance + session.totalSales;
+    const expected = getExpectedSessionBalance(session);
     return totalCounted - expected;
   };
 
@@ -384,7 +461,7 @@ export function CashViewAdvanced({
                 </CardHeader>
                 <CardContent>
                   <p className="text-3xl font-bold">
-                    ${(session.initialBalance + session.totalSales).toFixed(2)}
+                    ${getExpectedSessionBalance(session).toFixed(2)}
                   </p>
                 </CardContent>
               </Card>
@@ -501,7 +578,7 @@ export function CashViewAdvanced({
             </Card>
 
             {/* Tabla de Movimientos del Turno */}
-            <CashMovementsTable />
+            <CashMovementsTable sessionId={session.id} refreshKey={movementsRefreshKey} />
 
             {/* Panel de Notas de Crédito */}
             <CreditNotesPanel />
@@ -646,8 +723,7 @@ export function CashViewAdvanced({
         onOpenChange={(open) => {
           setCloseDialogOpen(open);
           if (!open) {
-            setCountedAmount("");
-            setShowExpected(false);
+            resetCountingForm();
             setWithCounting(true);
           }
         }}
@@ -693,7 +769,7 @@ export function CashViewAdvanced({
                   <div className="flex justify-between border-t pt-2">
                     <span className="font-medium">Monto que se registrará:</span>
                     <span className="font-bold">
-                      ${(session.initialBalance + session.totalSales).toFixed(2)}
+                      ${getExpectedSessionBalance(session).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -885,7 +961,7 @@ export function CashViewAdvanced({
                     <div className="flex justify-between border-t pt-2">
                       <span className="font-medium">Saldo Esperado:</span>
                       <span className="font-bold">
-                        ${(session.initialBalance + session.totalSales).toFixed(2)}
+                        ${getExpectedSessionBalance(session).toFixed(2)}
                       </span>
                     </div>
                   </div>

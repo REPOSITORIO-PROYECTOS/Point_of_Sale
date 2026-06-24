@@ -1,6 +1,16 @@
 import { isElectronEnvironment, printReceiptElectron, printReceiptInBrowser } from "./desktop-api";
 import {
+  getCachedPrinterSettings,
+  toPrinterPrintOptions,
+} from "./printer-settings-store";
+import {
+  buildReceiptPrintDocument,
+  type ReceiptPrintDocument,
+} from "./receipt-print-document";
+import {
   buildReceiptHtml,
+  buildEgresoHtml,
+  buildIngresoHtml,
   openReceiptPreview,
   type ReceiptAdjustment,
   type ReceiptLineItem,
@@ -11,6 +21,8 @@ import {
 } from "./receipt-template";
 import { resolveReceiptLogoUrl } from "./theme-logo";
 
+import type { ReceiptAfip, ReceiptEmisor, ReceiptReceptor } from "./receipt-template";
+
 export type PrintReceiptPayload = {
   items: ReceiptLineItem[];
   total: number;
@@ -18,12 +30,19 @@ export type PrintReceiptPayload = {
   adjustments?: ReceiptAdjustment[];
   payments?: ReceiptPaymentLine[];
   ticketId?: string;
-  voucherType?: ReceiptVoucherType;
+  voucherType?: ReceiptVoucherType | "movimiento_ingreso" | "movimiento_egreso";
   businessName?: string;
   logoUrl?: string;
   receiptWidthMm?: ReceiptWidthMm;
   afipCae?: string;
+  emisor?: Partial<ReceiptEmisor>;
+  receptor?: Partial<ReceiptReceptor>;
+  afip?: Partial<ReceiptAfip>;
+  mostrarDesgloseIva?: boolean;
+  observaciones?: string;
   previewOnly?: boolean;
+  movement?: ReceiptPrintDocument["movement"];
+  timestamp?: Date | string;
 };
 
 function isWailsEnvironment(): boolean {
@@ -31,38 +50,124 @@ function isWailsEnvironment(): boolean {
 }
 
 export function buildPrintReceiptHtml(payload: PrintReceiptPayload): string {
+  const widthMm = payload.receiptWidthMm ?? 80;
+
+  if (
+    payload.movement &&
+    (payload.voucherType === "movimiento_ingreso" || payload.voucherType === "movimiento_egreso")
+  ) {
+    const movementHtmlPayload = {
+      nombreNegocio: payload.emisor?.razonSocial ?? payload.businessName ?? "Mi Negocio",
+      fechaHora: payload.timestamp ? new Date(payload.timestamp) : new Date(),
+      nombreUsuario: payload.movement.operador,
+      metodoPagoLabel: payload.movement.metodoPagoLabel,
+      concepto: payload.movement.concepto,
+      monto: payload.total,
+      idMovimiento: payload.movement.idMovimiento,
+      idSesion: payload.movement.idSesion,
+    };
+
+    return payload.voucherType === "movimiento_ingreso"
+      ? buildIngresoHtml(movementHtmlPayload, widthMm)
+      : buildEgresoHtml(movementHtmlPayload, widthMm);
+  }
+
   const options: ReceiptTemplateOptions = {
     widthMm: payload.receiptWidthMm ?? 80,
     businessName: payload.businessName,
     logoUrl: resolveReceiptLogoUrl(payload.logoUrl),
     ticketId: payload.ticketId,
-    voucherType: payload.voucherType ?? "comprobante",
+    voucherType:
+      payload.voucherType === "movimiento_ingreso" || payload.voucherType === "movimiento_egreso"
+        ? "comprobante"
+        : payload.voucherType ?? "comprobante",
     payments: payload.payments,
     adjustments: payload.adjustments,
     subtotal: payload.subtotal,
     afipCae: payload.afipCae,
+    emisor: payload.emisor,
+    receptor: payload.receptor,
+    afip: payload.afip,
+    mostrarDesgloseIva: payload.mostrarDesgloseIva,
+    observaciones: payload.observaciones,
   };
 
   return buildReceiptHtml(payload.items, payload.total, options);
 }
 
+export async function printThermalHtml(
+  html: string,
+  receiptWidthMm: ReceiptWidthMm = 80,
+  previewOnly = false,
+): Promise<void> {
+  if (previewOnly) {
+    openReceiptPreview(html);
+    return;
+  }
+
+  if (isWailsEnvironment()) {
+    const data = JSON.stringify({ html, widthMm: receiptWidthMm });
+    await window.go!.main!.App!.PrintReceipt(data);
+    return;
+  }
+
+  if (isElectronEnvironment()) {
+    throw new Error("Use printReceipt() con documento ESC/POS en Electron");
+  }
+
+  printReceiptInBrowser(html);
+}
+
+export function buildPrintReceiptDocument(payload: PrintReceiptPayload): ReceiptPrintDocument {
+  return buildReceiptPrintDocument({
+    widthMm: payload.receiptWidthMm,
+    voucherType: payload.voucherType,
+    businessName: payload.businessName,
+    emisor: payload.emisor,
+    receptor: payload.receptor,
+    items: payload.items,
+    total: payload.total,
+    subtotal: payload.subtotal,
+    adjustments: payload.adjustments,
+    payments: payload.payments,
+    ticketId: payload.ticketId,
+    timestamp: payload.timestamp,
+    afip: payload.afip?.cae || payload.afipCae
+      ? { ...payload.afip, cae: payload.afip?.cae ?? payload.afipCae }
+      : payload.afip,
+    mostrarDesgloseIva: payload.mostrarDesgloseIva,
+    observaciones: payload.observaciones,
+    movement: payload.movement,
+  });
+}
+
 export async function printReceipt(payload: PrintReceiptPayload): Promise<void> {
-  const html = buildPrintReceiptHtml(payload);
   const widthMm = payload.receiptWidthMm ?? 80;
+  const html = buildPrintReceiptHtml(payload);
 
   if (payload.previewOnly) {
     openReceiptPreview(html);
     return;
   }
 
-  if (isWailsEnvironment()) {
-    const data = JSON.stringify({ html, widthMm });
-    await window.go!.main!.App!.PrintReceipt(data);
+  if (isElectronEnvironment()) {
+    const printerSettings = getCachedPrinterSettings();
+    await printReceiptElectron({
+      widthMm,
+      document: buildPrintReceiptDocument(payload),
+      html,
+      printer: toPrinterPrintOptions(printerSettings),
+    });
     return;
   }
 
-  if (isElectronEnvironment()) {
-    await printReceiptElectron(html, widthMm);
+  if (isWailsEnvironment()) {
+    const data = JSON.stringify({
+      widthMm,
+      document: buildPrintReceiptDocument(payload),
+      html,
+    });
+    await window.go!.main!.App!.PrintReceipt(data);
     return;
   }
 

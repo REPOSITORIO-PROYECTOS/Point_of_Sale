@@ -28,7 +28,8 @@ import { ThemeProvider } from "../lib/theme-context";
 import { useAuth } from "../lib/auth-context";
 import { AuthProvider } from "../lib/auth-provider";
 
-import { BusinessSettingsProvider, useBusinessSettings } from "../lib/business-settings-context";
+import { useBusinessSettings } from "../lib/business-settings-context";
+import { BusinessSettingsProvider } from "../lib/business-settings-provider";
 
 import { LicenseExpiryBanner, LicenseGate } from "../lib/license-context";
 

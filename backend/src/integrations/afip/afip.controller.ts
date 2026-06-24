@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PublicRoute } from '@/decorators/public-routes.decorator';
 import { env } from '@/config/env.config';
@@ -8,6 +8,7 @@ import { ImportAfipCredentialsDto } from './dto/import-afip-credentials.dto';
 import { IssueAfipInvoiceDto } from './dto/issue-afip-invoice.dto';
 import { GenerateAfipCsrDto } from './dto/generate-afip-csr.dto';
 import { SaveAfipPrivateKeyDto } from './dto/save-afip-private-key.dto';
+import { UpdateAfipBillingDefaultsDto } from './dto/update-afip-billing-defaults.dto';
 import { AfipService } from './afip.service';
 
 @ApiTags('integrations-afip')
@@ -81,6 +82,17 @@ export class AfipController {
 
     return {
       message: 'AFIP certificate imported successfully',
+      status,
+    };
+  }
+
+  @Put('billing-defaults')
+  @PublicRoute()
+  updateBillingDefaults(@Body() payload: UpdateAfipBillingDefaultsDto) {
+    const status = this.afipConfigService.updateBillingDefaults(payload);
+
+    return {
+      message: 'AFIP billing defaults saved',
       status,
     };
   }

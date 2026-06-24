@@ -50,6 +50,42 @@ test('AFIP config partial flow: private key then certificate', async (t) => {
   assert.equal(complete.hasPrivateKey, true);
 });
 
+test('AFIP billing defaults persist without full credentials', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afip-billing-test-'));
+  t.after(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  process.env.APP_DATA_DIR = tempDir;
+
+  const { AfipConfigService } = await import('./afip-config.service');
+  const service = new AfipConfigService();
+
+  const initial = service.getStatus();
+  assert.deepEqual(initial.billingDefaults, {
+    tipoAfip: 6,
+    tipoDocumento: 99,
+    documento: '0',
+    idCondicionIva: 5,
+    ivaRatePercent: 21,
+  });
+
+  const updated = service.updateBillingDefaults({
+    tipoAfip: 11,
+    tipoDocumento: 99,
+    documento: '0',
+    idCondicionIva: 5,
+    ivaRatePercent: 10.5,
+  });
+
+  assert.equal(updated.billingDefaults.tipoAfip, 11);
+  assert.equal(updated.billingDefaults.ivaRatePercent, 10.5);
+
+  const reloaded = service.getStatus();
+  assert.equal(reloaded.billingDefaults.tipoAfip, 11);
+  assert.equal(reloaded.billingDefaults.ivaRatePercent, 10.5);
+});
+
 test('AFIP config generate CSR flow: key saved and certificate completes setup', async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afip-csr-test-'));
   t.after(() => {

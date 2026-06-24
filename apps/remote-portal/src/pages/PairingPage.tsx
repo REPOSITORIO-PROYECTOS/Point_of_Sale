@@ -33,6 +33,9 @@ export function PairingPage() {
     setIsGenerating(true);
 
     try {
+      if (!clientNumber) {
+        return;
+      }
       const result = await requestPairingCode(clientNumber, registerLabel.trim());
       setGeneratedCode({ code: result.code, expiresAt: result.expiresAt });
       setCode(result.code);

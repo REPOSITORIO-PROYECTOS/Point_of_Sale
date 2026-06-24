@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recibo de Pago</title>
+  <style>@page { margin: 0; size: 80mm auto; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10px;
+      margin: 0;
+      padding: 0;
+      color: #000;
+    }
+    .ticket {
+      width: 100%;
+      max-width: 80mm;
+      padding: 2mm;
+      box-sizing: border-box;
+      margin: 0 auto;
+    }
+    @media print {
+      .ticket { width: 76mm; padding: 2mm; }
+    }
+    .header { text-align: center; }
+    .header h1 { margin: 0; font-size: 14px; word-wrap: break-word; }
+    .header p, .header h2 { margin: 3px 0; font-size: 11px; }
+    p { margin: 3px 0; }
+    hr { border: none; border-top: 1px dashed black; margin: 5px 0; }
+    .item-list { margin: 8px 0; }
+    .item { display: flex; justify-content: space-between; }
+    .item .description { flex-grow: 1; text-align: left; word-wrap: break-word; }
+    .item .price { text-align: right; white-space: nowrap; padding-left: 5px; }
+    .item-detail, .item-discount {
+      font-size: 9px; color: #555; padding-left: 8px; margin-top: -2px;
+    }
+    .item-discount { color: #d9534f; }
+    .totals-section { margin-top: 8px; }
+    .totals-section .item { font-weight: bold; }
+    .totals-section .discount { color: #d9534f; }
+    .total-final {
+      font-weight: bold; font-size: 14px; text-align: right;
+      margin-top: 8px; padding-top: 4px; border-top: 1px solid black;
+    }
+    .footer { text-align: center; margin-top: 12px; }
+    .disclaimer { font-weight: bold; text-align: center; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="ticket">
+    <div class="header">
+      <h1>Cafetería Demo</h1>
+      
+      
+      <hr>
+      <h2>RECIBO DE PAGO</h2>
+      <hr>
+    </div>
+    <p>Fecha: 24/06/2026, 02:30 p. m.</p>
+    <p>Venta ID: #00123456</p>
+    <p>Cliente: Consumidor Final</p>
+    <p>CUIT/DNI: S/D</p>
+    <hr>
+    <div class="item-list"><div class="item">
+        <span class="description">Café espresso</span>
+        <span class="price">$7.00</span>
+      </div>
+      <div class="item item-detail">
+        <span>2 x $3.50</span>
+      </div><div class="item">
+        <span class="description">Medialuna</span>
+        <span class="price">$3.60</span>
+      </div>
+      <div class="item item-detail">
+        <span>3 x $1.20</span>
+      </div><div class="item">
+        <span class="description">Agua mineral 500ml</span>
+        <span class="price">$2.80</span>
+      </div>
+      <div class="item item-detail">
+        <span>1 x $2.80</span>
+      </div></div>
+    <div class="totals-section">
+      <hr>
+      <div class="item"><p>SUBTOTAL:</p><p>$13.40</p></div>
+      <div class="item discount">
+          <p>DESCUENTO GRAL.</p>
+          <p>-$1.50</p>
+        </div>
+      <p class="total-final">TOTAL A PAGAR: $11.90</p>
+    </div>
+    
+    <p class="disclaimer">COMPROBANTE NO VÁLIDO COMO FACTURA</p>
+    <p class="footer">....................</p>
+    <p class="footer">Firma y Aclaración</p>
+  </div>
+</body>
+</html>

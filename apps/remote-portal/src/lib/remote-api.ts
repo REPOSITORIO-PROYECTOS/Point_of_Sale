@@ -401,7 +401,7 @@ export function requestPairingCode(clientNumber: string, registerLabel: string, 
   });
 }
 
-export function createTenant(clientNumber: string, name: string, contactEmail: string) {
+export function createTenant(clientNumber: string, name: string, contactEmail?: string) {
   return request<Tenant>('/admin/tenants', {
     method: 'POST',
     body: JSON.stringify({ clientNumber, name, contactEmail }),

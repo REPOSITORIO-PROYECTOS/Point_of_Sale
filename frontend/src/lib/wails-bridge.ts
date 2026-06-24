@@ -1,7 +1,7 @@
 import { toast } from "sonner";
 import { isElectronEnvironment } from "./desktop-api";
 import { printReceipt as dispatchPrintReceipt, previewReceipt, type PrintReceiptPayload } from "./print-receipt";
-import type { ReceiptVoucherType, ReceiptWidthMm } from "./receipt-template";
+import { type ReceiptVoucherType, type ReceiptWidthMm } from "./receipt-template";
 
 declare global {
   interface Window {
@@ -67,6 +67,14 @@ export interface CashSession {
     transfer: number;
     qr: number;
   };
+  movementTotals?: {
+    incomeTotal: number;
+    expenseTotal: number;
+    netTotal: number;
+    cashIncome: number;
+    cashExpense: number;
+    cashNet: number;
+  };
 }
 
 export interface PaymentMethod {
@@ -92,6 +100,11 @@ export type PrintReceiptOptions = {
   adjustments?: Array<{ type: "charge" | "discount"; label: string; amount: number; isPercentage?: boolean }>;
   subtotal?: number;
   afipCae?: string;
+  emisor?: Partial<import("./receipt-template").ReceiptEmisor>;
+  receptor?: Partial<import("./receipt-template").ReceiptReceptor>;
+  afip?: Partial<import("./receipt-template").ReceiptAfip>;
+  mostrarDesgloseIva?: boolean;
+  observaciones?: string;
   previewOnly?: boolean;
 };
 
@@ -134,6 +147,11 @@ export const WailsAPI = {
       logoUrl: printOptions.logoUrl,
       receiptWidthMm: printOptions.receiptWidthMm,
       afipCae: printOptions.afipCae,
+      emisor: printOptions.emisor,
+      receptor: printOptions.receptor,
+      afip: printOptions.afip,
+      mostrarDesgloseIva: printOptions.mostrarDesgloseIva,
+      observaciones: printOptions.observaciones,
       previewOnly: printOptions.previewOnly,
     };
 
@@ -172,6 +190,44 @@ export const WailsAPI = {
       logoUrl: printOptions.logoUrl,
       receiptWidthMm: printOptions.receiptWidthMm,
       previewOnly: true,
+    });
+  },
+
+  async printMovementVoucher(
+    movement: {
+      type: "income" | "expense";
+      amount: number;
+      description: string;
+      paymentMethod: string;
+      timestamp: string;
+      movementId?: string | number;
+      sessionId?: string | number;
+    },
+    options: { businessName?: string; receiptWidthMm?: ReceiptWidthMm; operatorName?: string } = {},
+  ): Promise<void> {
+    const widthMm = options.receiptWidthMm ?? 80;
+    const methodLabels: Record<string, string> = {
+      cash: "Efectivo",
+      card: "Tarjeta",
+      transfer: "Transferencia",
+      qr: "QR",
+    };
+
+    await dispatchPrintReceipt({
+      items: [],
+      total: movement.amount,
+      subtotal: movement.amount,
+      receiptWidthMm: widthMm,
+      businessName: options.businessName,
+      voucherType: movement.type === "income" ? "movimiento_ingreso" : "movimiento_egreso",
+      timestamp: movement.timestamp,
+      movement: {
+        concepto: movement.description,
+        metodoPagoLabel: methodLabels[movement.paymentMethod] ?? movement.paymentMethod,
+        operador: options.operatorName ?? "Operador",
+        idMovimiento: movement.movementId ?? Date.now(),
+        idSesion: movement.sessionId ?? "—",
+      },
     });
   },
 

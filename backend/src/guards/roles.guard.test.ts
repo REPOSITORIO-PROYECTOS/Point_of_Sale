@@ -20,7 +20,7 @@ function createContext(user?: AuthUser): ExecutionContext {
 test('RolesGuard allows access when no roles are required', () => {
   const reflector = {
     getAllAndOverride: () => undefined,
-  } as Reflector;
+  } as unknown as Reflector;
   const guard = new RolesGuard(reflector);
 
   assert.equal(guard.canActivate(createContext()), true);
@@ -29,7 +29,7 @@ test('RolesGuard allows access when no roles are required', () => {
 test('RolesGuard allows admin on admin-only route', () => {
   const reflector = {
     getAllAndOverride: (key: string) => (key === ROLES_KEY ? ['admin'] : undefined),
-  } as Reflector;
+  } as unknown as Reflector;
   const guard = new RolesGuard(reflector);
   const user: AuthUser = { id: 'admin-1', username: 'admin', role: 'admin' };
 
@@ -39,7 +39,7 @@ test('RolesGuard allows admin on admin-only route', () => {
 test('RolesGuard rejects cashier on admin-only route', () => {
   const reflector = {
     getAllAndOverride: (key: string) => (key === ROLES_KEY ? ['admin'] : undefined),
-  } as Reflector;
+  } as unknown as Reflector;
   const guard = new RolesGuard(reflector);
   const user: AuthUser = { id: 'cashier-1', username: 'cajero', role: 'cashier' };
 
@@ -49,7 +49,7 @@ test('RolesGuard rejects cashier on admin-only route', () => {
 test('RolesGuard rejects unauthenticated requests on protected route', () => {
   const reflector = {
     getAllAndOverride: (key: string) => (key === ROLES_KEY ? ['admin'] : undefined),
-  } as Reflector;
+  } as unknown as Reflector;
   const guard = new RolesGuard(reflector);
 
   assert.throws(() => guard.canActivate(createContext()), ForbiddenException);

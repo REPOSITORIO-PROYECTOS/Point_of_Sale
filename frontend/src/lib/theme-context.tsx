@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { WailsAPI, ThemeConfig } from "./wails-bridge";
 import { PosAPI } from "./pos-api";
 import { getDefaultLogoUrl, mapThemeConfigFromApi } from "./theme-logo";
+import { loadPrinterSettings } from "./printer-settings-store";
 
 const isWailsEnvironment = (): boolean =>
   typeof window !== "undefined" && !!window.go?.main?.App;
@@ -42,6 +43,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         ? await WailsAPI.getThemeConfig()
         : await PosAPI.getThemeConfig();
       setThemeConfig(withResolvedLogo(config));
+      if (!isWailsEnvironment()) {
+        void loadPrinterSettings();
+      }
     } catch (error) {
       console.error("Error loading theme:", error);
     }

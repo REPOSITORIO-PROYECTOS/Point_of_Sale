@@ -1,5 +1,6 @@
 import type { CashSession } from "./wails-bridge";
 import type { CashClosing } from "./pos-domain-types";
+import { getExpectedSessionBalance } from "./cash-expected";
 
 type CashSessionHistoryRow = CashSession & {
   expectedBalance?: number;
@@ -24,7 +25,10 @@ function roleLabel(role?: string): string {
 
 export function mapCashSessionToClosing(session: CashSessionHistoryRow): CashClosing {
   const expectedAmount =
-    session.expectedBalance ?? session.initialBalance + session.totalSales;
+    session.expectedBalance ??
+    (session.finalBalance != null
+      ? session.finalBalance
+      : getExpectedSessionBalance(session));
   const countedAmount = session.countedAmount ?? session.finalBalance ?? expectedAmount;
   const difference = countedAmount - expectedAmount;
 

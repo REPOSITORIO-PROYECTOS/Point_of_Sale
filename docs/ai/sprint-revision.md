@@ -2,7 +2,7 @@
 
 Plan por fases para validar backend, integraciones y cableado front-back.
 
-**Última actualización:** 2026-06-18
+**Última actualización:** 2026-06-24
 
 ---
 
@@ -231,7 +231,7 @@ npm run test:microservices
 | 5.3 | `WailsAPI` como facade sobre `PosAPI` o eliminar | 🔄 | Parcels + tema en PosAPI; print/drawer quedan en Wails/Electron |
 | 5.4 | Tests Electron bootstrap | ✅ | `desktop/src/bootstrap.smoke.test.ts` |
 | 5.5 | Auditoría UI: cablear `AuditView` a API (hoy mock) | ⬜ |
-| 5.6 | Movimientos caja: persistir + imprimir comprobante | ⬜ |
+| 5.6 | Movimientos caja: persistir + imprimir comprobante | ✅ | API `/cash` + impresión ingreso/egreso en Caja y POS; reimpresión en tabla |
 
 ---
 
@@ -426,3 +426,4 @@ Frontend :5173
 | 2026-06-18 | 5/6 | Encomiendas UI→PosAPI; `GET /api/version`; Electron bootstrap smoke |
 | 2026-06-18 | 7 | Commit MVP remoto + push; deps `ws`, scripts `dev:remote`/`dev:portal` |
 | 2026-06-18 | 7.3/7.4 | Portal clientes + detalle caja; snapshots enriquecidos relay + agente SQLite |
+| 2026-06-24 | 5.6 | Movimientos caja: impresión automática y reimpresión desde tabla |

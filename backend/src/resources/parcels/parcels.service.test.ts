@@ -85,14 +85,14 @@ test('findOne returns parcel or throws NotFoundException', async () => {
     customerName: 'Cliente',
     description: 'Desc',
     amount: 100,
-    status: 'delivered',
+    status: 'picked-up',
     date: '2026-06-18',
     createdAt: new Date(),
   };
   const { service } = createParcelsService([existing]);
 
   const found = await service.findOne('parcel-find');
-  assert.equal(found.status, 'delivered');
+  assert.equal(found.status, 'picked-up');
 
   await assert.rejects(() => service.findOne('missing'), NotFoundException);
 });

@@ -151,7 +151,13 @@ export function ProductsManagementView() {
       setEditDialogOpen(false);
     } catch (error) {
       console.error("Failed to save product:", error);
-      toast.error("Error al guardar el producto");
+      const message =
+        error instanceof Error && /Request failed \(5\d\d\)/.test(error.message)
+          ? "No se pudo conectar con la API. Verificá que el backend esté corriendo (npm run dev:stack)."
+          : error instanceof Error && error.message
+            ? error.message
+            : "Error al guardar el producto";
+      toast.error(message);
     }
   };
 

@@ -16,13 +16,13 @@ export class CashController {
   constructor(private readonly service: CashService) {}
 
   @Get()
-  findAll() {
-    return this.service.findAllMovements();
+  findAll(@Query('sessionId') sessionId?: string) {
+    return this.service.findAllMovements(sessionId);
   }
 
   @Post()
-  create(@Body() payload: CreateCashMovementDto) {
-    return this.service.createMovement(payload);
+  create(@Body() payload: CreateCashMovementDto, @Req() request: AuthenticatedRequest) {
+    return this.service.createMovement(payload, request.user?.id);
   }
 
   @Get('session')

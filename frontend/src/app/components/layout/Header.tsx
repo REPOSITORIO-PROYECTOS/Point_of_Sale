@@ -218,7 +218,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
           <DialogHeader>
             <DialogTitle>Configuración de Apariencia</DialogTitle>
             <DialogDescription>
-              Personaliza los colores y el logo de tu negocio
+              Personaliza colores, logo e impresora de esta caja
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-auto max-h-[calc(85vh-8rem)]">

@@ -1,5 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CartItem, PaymentMethod } from "../../../lib/wails-bridge";
+import {
+  AFIP_CONDICION_IVA_OPTIONS,
+  AFIP_TIPO_COMPROBANTE_OPTIONS,
+  AFIP_TIPO_DOCUMENTO_OPTIONS,
+  DEFAULT_AFIP_BILLING_DEFAULTS,
+  formatAfipBuyerSummary,
+  resolveCheckoutBuyer,
+  resolveTipoAfipForBuyer,
+  validateCustomBuyer,
+  type AfipBillingDefaults,
+  type AfipCheckoutBuyer,
+} from "../../../lib/afip-fiscal";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -31,7 +43,12 @@ interface CheckoutModalEnhancedProps {
   items: CartItem[];
   subtotal: number;
   adjustments?: Adjustment[];
-  onConfirm: (payments: PaymentMethod[], voucherType: VoucherType) => void;
+  afipBillingDefaults?: AfipBillingDefaults;
+  onConfirm: (
+    payments: PaymentMethod[],
+    voucherType: VoucherType,
+    afipBuyer?: AfipCheckoutBuyer,
+  ) => void;
   onPreviewTicket?: (voucherType: VoucherType) => void;
 }
 
@@ -41,6 +58,7 @@ export function CheckoutModalEnhanced({
   items,
   subtotal,
   adjustments = [],
+  afipBillingDefaults = DEFAULT_AFIP_BILLING_DEFAULTS,
   onConfirm,
   onPreviewTicket,
 }: CheckoutModalEnhancedProps) {
@@ -50,6 +68,15 @@ export function CheckoutModalEnhanced({
   const [cashReceived, setCashReceived] = useState("");
   const [showChange, setShowChange] = useState(false);
   const [voucherType, setVoucherType] = useState<VoucherType>("comprobante");
+  const [buyerMode, setBuyerMode] = useState<AfipCheckoutBuyer["mode"]>("consumidor_final");
+  const [customTipoDocumento, setCustomTipoDocumento] = useState(80);
+  const [customDocumento, setCustomDocumento] = useState("");
+  const [customIdCondicionIva, setCustomIdCondicionIva] = useState(1);
+  const [customTipoAfip, setCustomTipoAfip] = useState(afipBillingDefaults.tipoAfip);
+
+  useEffect(() => {
+    setCustomTipoAfip(resolveTipoAfipForBuyer(customIdCondicionIva, afipBillingDefaults.tipoAfip));
+  }, [customIdCondicionIva, afipBillingDefaults.tipoAfip]);
 
   const paymentMethods: { type: PaymentMethod["type"]; label: string; icon: any }[] = [
     { type: "cash", label: "Efectivo", icon: DollarSign },
@@ -151,11 +178,44 @@ export function CheckoutModalEnhanced({
       return;
     }
 
-    onConfirm(payments, voucherType);
+    let afipBuyer: AfipCheckoutBuyer | undefined;
+
+    if (voucherType === "factura") {
+      if (buyerMode === "custom") {
+        const validationError = validateCustomBuyer({
+          tipoDocumento: customTipoDocumento,
+          documento: customDocumento,
+          idCondicionIva: customIdCondicionIva,
+        });
+
+        if (validationError) {
+          toast.error(validationError);
+          return;
+        }
+      }
+
+      afipBuyer = resolveCheckoutBuyer(
+        buyerMode,
+        afipBillingDefaults,
+        buyerMode === "custom"
+          ? {
+              tipoDocumento: customTipoDocumento,
+              documento: customDocumento,
+              idCondicionIva: customIdCondicionIva,
+              tipoAfip: customTipoAfip,
+            }
+          : undefined,
+      );
+    }
+
+    onConfirm(payments, voucherType, afipBuyer);
     setPayments([]);
     setAmount("");
     setCashReceived("");
     setShowChange(false);
+    setVoucherType("comprobante");
+    setBuyerMode("consumidor_final");
+    setCustomDocumento("");
     onOpenChange(false);
   };
 
@@ -165,8 +225,26 @@ export function CheckoutModalEnhanced({
     setCashReceived("");
     setShowChange(false);
     setVoucherType("comprobante");
+    setBuyerMode("consumidor_final");
+    setCustomDocumento("");
     onOpenChange(false);
   };
+
+  const resolvedBuyerPreview =
+    voucherType === "factura"
+      ? resolveCheckoutBuyer(
+          buyerMode,
+          afipBillingDefaults,
+          buyerMode === "custom"
+            ? {
+                tipoDocumento: customTipoDocumento,
+                documento: customDocumento,
+                idCondicionIva: customIdCondicionIva,
+                tipoAfip: customTipoAfip,
+              }
+            : undefined,
+        )
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -429,6 +507,103 @@ export function CheckoutModalEnhanced({
               {voucherType === "presupuesto" && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
                   <strong>Nota:</strong> Los presupuestos no descontarán stock del inventario
+                </div>
+              )}
+              {voucherType === "factura" && (
+                <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <div>
+                    <Label className="text-base font-semibold text-amber-950">Datos fiscales AFIP</Label>
+                    <p className="text-xs text-amber-900/80 mt-1">
+                      Por defecto se usa consumidor final. Podés cambiar el comprador para esta venta.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={buyerMode === "consumidor_final" ? "default" : "outline"}
+                      onClick={() => setBuyerMode("consumidor_final")}
+                    >
+                      Consumidor final
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={buyerMode === "custom" ? "default" : "outline"}
+                      onClick={() => setBuyerMode("custom")}
+                    >
+                      Otro comprador
+                    </Button>
+                  </div>
+                  {buyerMode === "custom" && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Tipo de documento</Label>
+                        <Select
+                          value={String(customTipoDocumento)}
+                          onValueChange={(value) => setCustomTipoDocumento(Number(value))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {AFIP_TIPO_DOCUMENTO_OPTIONS.filter((option) => option.value !== 99).map((option) => (
+                              <SelectItem key={option.value} value={String(option.value)}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Número de documento</Label>
+                        <Input
+                          value={customDocumento}
+                          onChange={(event) => setCustomDocumento(event.target.value)}
+                          placeholder="Sin guiones"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Condición IVA</Label>
+                        <Select
+                          value={String(customIdCondicionIva)}
+                          onValueChange={(value) => setCustomIdCondicionIva(Number(value))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {AFIP_CONDICION_IVA_OPTIONS.filter((option) => option.value !== 5).map((option) => (
+                              <SelectItem key={option.value} value={String(option.value)}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Tipo de comprobante</Label>
+                        <Select
+                          value={String(customTipoAfip)}
+                          onValueChange={(value) => setCustomTipoAfip(Number(value))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {AFIP_TIPO_COMPROBANTE_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={String(option.value)}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                  {resolvedBuyerPreview ? (
+                    <p className="text-sm text-amber-950">
+                      <strong>Se enviará a AFIP:</strong> {formatAfipBuyerSummary(resolvedBuyerPreview)}
+                    </p>
+                  ) : null}
                 </div>
               )}
               {onPreviewTicket ? (

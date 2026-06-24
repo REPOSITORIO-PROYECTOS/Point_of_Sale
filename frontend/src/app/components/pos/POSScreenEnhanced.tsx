@@ -2,13 +2,23 @@ import { useState, useEffect } from "react";
 import { PosAPI } from "../../../lib/pos-api";
 import { useTheme } from "../../../lib/theme-context";
 import { useAuth } from "../../../lib/auth-context";
-import { getEffectiveReceiptWidth } from "../../../lib/user-preferences";
+import { useBusinessSettings } from "../../../lib/business-settings-context";
 import type { Product, CartItem, Transaction, PaymentMethod, CashSession } from "../../../lib/wails-bridge";
 import { WailsAPI } from "../../../lib/wails-bridge";
+import { getExpectedCashInDrawer } from "../../../lib/cash-expected";
 import type { VoucherType } from "./CheckoutModalEnhanced";
 import { ProductCatalog } from "./ProductCatalog";
 import { ShoppingCartEnhanced } from "./ShoppingCartEnhanced";
 import { CheckoutModalEnhanced } from "./CheckoutModalEnhanced";
+import {
+  buildAfipFacturaPayload,
+  DEFAULT_AFIP_BILLING_DEFAULTS,
+  formatAfipBuyerSummary,
+  normalizeAfipBillingDefaults,
+  type AfipBillingDefaults,
+  type AfipCheckoutBuyer,
+} from "../../../lib/afip-fiscal";
+import { AFIP_CONDICION_IVA_OPTIONS } from "../../../lib/afip-fiscal";
 import { OrderQueuePanel, HeldOrder } from "./OrderQueuePanel";
 import { Adjustment } from "./AdjustmentsPanel";
 import { Button } from "../ui/button";
@@ -58,12 +68,28 @@ function formatMoney(value: unknown): string {
   return toCashAmount(value).toFixed(2);
 }
 
+type PaymentMethodKey = keyof NonNullable<CashSession["salesByPaymentMethod"]>;
+
+const PAYMENT_METHOD_LABELS: Record<PaymentMethodKey, string> = {
+  cash: "Efectivo",
+  card: "Tarjeta",
+  transfer: "Transferencia",
+  qr: "QR / App",
+};
+
+const PAYMENT_METHOD_ORDER: PaymentMethodKey[] = ["cash", "card", "transfer", "qr"];
+
+function getSalesByMethod(session: CashSession) {
+  return session.salesByPaymentMethod ?? { cash: 0, card: 0, transfer: 0, qr: 0 };
+}
+
 export function POSScreenEnhanced({
   heldOrders,
   onHeldOrdersChange,
 }: POSScreenEnhancedProps) {
   const { themeConfig } = useTheme();
   const { user } = useAuth();
+  const { settings: businessSettings } = useBusinessSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
@@ -78,6 +104,10 @@ export function POSScreenEnhanced({
   const [movementDialogOpen, setMovementDialogOpen] = useState(false);
   const [movementType, setMovementType] = useState<"income" | "expense">("income");
   const [initialBalance, setInitialBalance] = useState("");
+  const [countedAmount, setCountedAmount] = useState("");
+  const [afipBillingDefaults, setAfipBillingDefaults] = useState<AfipBillingDefaults>(
+    DEFAULT_AFIP_BILLING_DEFAULTS,
+  );
   const [movementAmount, setMovementAmount] = useState("");
   const [movementDescription, setMovementDescription] = useState("");
   const [movementMethod, setMovementMethod] = useState("cash");
@@ -217,39 +247,81 @@ export function POSScreenEnhanced({
     return calculateSubtotal() + calculateAdjustmentsTotal();
   };
 
-  const handleCheckout = async (payments: PaymentMethod[], voucherType: VoucherType) => {
+  const handleCheckout = async (
+    payments: PaymentMethod[],
+    voucherType: VoucherType,
+    afipBuyer?: AfipCheckoutBuyer,
+  ) => {
     if (cartItems.length === 0) return;
 
     try {
       const total = calculateTotal();
 
+      const ticketId = Date.now().toString();
+      const subtotal = calculateSubtotal();
+      const receptorLabel =
+        afipBuyer && afipBuyer.mode === "custom"
+          ? formatAfipBuyerSummary(afipBuyer)
+          : undefined;
+
+      const facturaFiscal =
+        voucherType === "factura" && afipBuyer
+          ? buildAfipFacturaPayload(total, afipBuyer, afipBillingDefaults)
+          : null;
+
+      await WailsAPI.printReceipt(cartItems, total, {
+        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+        logoUrl: themeConfig.logoUrl,
+        businessName: businessSettings.businessName,
+        voucherType,
+        ticketId,
+        subtotal,
+        adjustments,
+        payments,
+        emisor: {
+          razonSocial: businessSettings.businessName ?? "Mi Negocio",
+          cuit: businessSettings.taxId,
+          domicilio: businessSettings.address,
+        },
+        receptor:
+          voucherType === "factura" && afipBuyer
+            ? {
+                nombreRazonSocial:
+                  afipBuyer.mode === "consumidor_final" ? "Consumidor Final" : receptorLabel,
+                cuitODni: afipBuyer.tipoDocumento === 99 ? "S/D" : afipBuyer.documento,
+                condicionIva:
+                  AFIP_CONDICION_IVA_OPTIONS.find((o) => o.value === afipBuyer.idCondicionIva)?.label ??
+                  "Consumidor Final",
+              }
+            : undefined,
+        afip:
+          facturaFiscal && afipBuyer
+            ? {
+                tipoAfip: afipBuyer.tipoAfip,
+                tipoComprobanteLetra: afipBuyer.tipoAfip === 1 ? "A" : afipBuyer.tipoAfip === 11 ? "C" : "B",
+                neto: facturaFiscal.neto,
+                iva: facturaFiscal.iva,
+                ivaRateLabel: `${afipBillingDefaults.ivaRatePercent}%`,
+              }
+            : undefined,
+        mostrarDesgloseIva: voucherType === "factura",
+      });
+
       const transaction: Transaction = {
-        id: Date.now().toString(),
+        id: ticketId,
         items: cartItems,
         total,
         timestamp: new Date().toISOString(),
       };
 
-      // Imprimir comprobante según el tipo
-      await WailsAPI.printReceipt(cartItems, total, {
-        receiptWidthMm: getEffectiveReceiptWidth(user?.id, themeConfig.receiptWidthMm ?? 80),
-        logoUrl: themeConfig.logoUrl,
-      });
-
-      // Solo guardar transacción y descontar stock si NO es presupuesto
       if (voucherType !== "presupuesto") {
         await PosAPI.createSale(transaction, payments, voucherType);
       }
 
-      if (voucherType === "factura") {
+      if (voucherType === "factura" && afipBuyer) {
         try {
-          await PosAPI.facturarAfip({
-            tipo_afip: 6,
-            tipo_documento: 99,
-            documento: "0",
-            total,
-            id_condicion_iva: 5,
-          });
+          const facturaPayload = facturaFiscal ?? buildAfipFacturaPayload(total, afipBuyer, afipBillingDefaults);
+          await PosAPI.facturarAfip(facturaPayload);
         } catch (afipError) {
           console.error("AFIP facturación failed:", afipError);
           toast.error(
@@ -352,14 +424,29 @@ export function POSScreenEnhanced({
   const handleCloseCash = async () => {
     try {
       if (!cashSession) return;
-      const initialBalance = toCashAmount(cashSession.initialBalance);
-      const totalSales = toCashAmount(cashSession.totalSales);
-      const expectedAmount = initialBalance + totalSales;
-      await PosAPI.closeCashSession(expectedAmount, expectedAmount);
+
+      const parsedCounted = parseFloat(countedAmount);
+      if (countedAmount === "" || isNaN(parsedCounted) || parsedCounted < 0) {
+        toast.error("Ingresá el efectivo contado en el arqueo");
+        return;
+      }
+
+      const expectedCash = getExpectedCashInDrawer(cashSession);
+
+      await PosAPI.closeCashSession(expectedCash, parsedCounted);
       const newSession = await PosAPI.getCashSession();
       setCashSession(newSession);
       setCloseCashDialogOpen(false);
-      toast.success("Caja cerrada exitosamente");
+      setCountedAmount("");
+
+      const variance = parsedCounted - expectedCash;
+      if (Math.abs(variance) < 0.01) {
+        toast.success("Caja cerrada — arqueo sin diferencias");
+      } else if (variance > 0) {
+        toast.success(`Caja cerrada — sobrante de $${variance.toFixed(2)}`);
+      } else {
+        toast.warning(`Caja cerrada — faltante de $${Math.abs(variance).toFixed(2)}`);
+      }
     } catch (error) {
       console.error("Failed to close cash:", error);
       toast.error("Error al cerrar caja");
@@ -378,40 +465,55 @@ export function POSScreenEnhanced({
       return;
     }
 
+    if (!cashSession || cashSession.endTime) {
+      toast.error("No hay una sesión de caja abierta");
+      return;
+    }
+
     const movement = {
       amount,
       description: movementDescription,
-      paymentMethod: movementMethod,
+      paymentMethod: movementMethod as "cash" | "card" | "transfer" | "qr",
       type: movementType,
       timestamp: new Date().toISOString(),
     };
 
-    console.log("Movement:", movement);
-
-    // Generar comprobante de ingreso/egreso
     try {
-      const voucherType = movementType === "income" ? "Ingreso" : "Egreso";
-      const voucherData = {
-        type: voucherType,
-        amount,
+      await PosAPI.createCashMovement({
         description: movementDescription,
-        paymentMethod: movementMethod,
-        timestamp: movement.timestamp,
-      };
+        amount,
+        type: movementType,
+        paymentMethod: movement.paymentMethod,
+      });
 
-      console.log(`📄 Generando comprobante de ${voucherType.toLowerCase()}:`, voucherData);
+      const updatedSession = await PosAPI.getCashSession();
+      setCashSession(updatedSession);
 
-      // Aquí se puede llamar a una función para imprimir el comprobante
-      // await WailsAPI.printMovementVoucher(voucherData);
+      await WailsAPI.printMovementVoucher(
+        {
+          type: movementType,
+          amount,
+          description: movementDescription,
+          paymentMethod: movementMethod,
+          timestamp: movement.timestamp,
+          sessionId: cashSession.id,
+        },
+        {
+          businessName: businessSettings.businessName,
+          receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+          operatorName: user?.username,
+        },
+      );
 
       toast.success(
         movementType === "income"
-          ? `Comprobante de Ingreso generado: $${amount.toFixed(2)}`
-          : `Comprobante de Egreso generado: $${amount.toFixed(2)}`
+          ? `Ingreso registrado: $${amount.toFixed(2)}`
+          : `Egreso registrado: $${amount.toFixed(2)}`,
       );
     } catch (error) {
-      console.error("Failed to generate voucher:", error);
-      toast.error("Error al generar comprobante");
+      console.error("Failed to save movement:", error);
+      toast.error("Error al registrar movimiento");
+      return;
     }
 
     setMovementDialogOpen(false);
@@ -510,6 +612,7 @@ export function POSScreenEnhanced({
         onOpenChange={setCheckoutOpen}
         items={cartItems}
         subtotal={calculateTotal()}
+        afipBillingDefaults={afipBillingDefaults}
         onConfirm={handleCheckout}
       />
 
@@ -612,49 +715,140 @@ export function POSScreenEnhanced({
       </Dialog>
 
       {/* Diálogo de Cerrar Caja */}
-      <AlertDialog open={closeCashDialogOpen} onOpenChange={setCloseCashDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
+      <Dialog
+        open={closeCashDialogOpen}
+        onOpenChange={(open) => {
+          setCloseCashDialogOpen(open);
+          if (!open) setCountedAmount("");
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
               <Lock className="size-5" />
-              Cerrar Caja
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              ¿Estás seguro de cerrar la caja? Se cerrará con el monto esperado.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+              Cerrar Caja — Arqueo
+            </DialogTitle>
+            <DialogDescription>
+              Contá el efectivo del cajón. Tarjeta, transferencia y QR son solo referencia del sistema.
+            </DialogDescription>
+          </DialogHeader>
 
-          {cashSession && (
-            <div className="p-4 bg-muted rounded-lg space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm">Saldo Inicial:</span>
-                <span className="font-medium">
-                  ${formatMoney(cashSession.initialBalance)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm">Total Ventas:</span>
-                <span className="font-medium text-green-600">
-                  ${formatMoney(cashSession.totalSales)}
-                </span>
-              </div>
-              <div className="flex justify-between border-t pt-2">
-                <span className="font-medium">Monto Final:</span>
-                <span className="font-bold">
-                  ${formatMoney(toCashAmount(cashSession.initialBalance) + toCashAmount(cashSession.totalSales))}
-                </span>
-              </div>
-            </div>
-          )}
+          {cashSession && (() => {
+            const salesByMethod = getSalesByMethod(cashSession);
+            const expectedCash = getExpectedCashInDrawer(cashSession);
+            const parsedCounted = parseFloat(countedAmount);
+            const hasCounted = countedAmount !== "" && !isNaN(parsedCounted);
+            const variance = hasCounted ? parsedCounted - expectedCash : null;
 
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleCloseCash}>
+            return (
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Ventas por medio de pago
+                  </p>
+                  {PAYMENT_METHOD_ORDER.map((method) => {
+                    const amount = toCashAmount(salesByMethod[method]);
+                    if (amount <= 0) return null;
+
+                    return (
+                      <div key={method} className="flex justify-between text-sm">
+                        <span className={method === "cash" ? "font-medium" : "text-muted-foreground"}>
+                          {PAYMENT_METHOD_LABELS[method]}
+                          {method !== "cash" && (
+                            <span className="text-xs ml-1">(referencia)</span>
+                          )}
+                        </span>
+                        <span className={method === "cash" ? "font-medium" : "text-muted-foreground"}>
+                          ${formatMoney(amount)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {PAYMENT_METHOD_ORDER.every(
+                    (method) => toCashAmount(salesByMethod[method]) <= 0,
+                  ) && (
+                    <p className="text-xs text-muted-foreground">Sin ventas registradas aún</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="countedAmount">Efectivo Contado en Cajón ($)</Label>
+                  <Input
+                    id="countedAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={countedAmount}
+                    onChange={(e) => setCountedAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="text-2xl h-14 mt-1"
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Solo contá billetes y monedas. No incluyas tarjeta ni transferencias.
+                  </p>
+                </div>
+
+                {hasCounted && variance !== null && (
+                  <div
+                    className={`p-4 rounded-lg border ${
+                      Math.abs(variance) < 0.01
+                        ? "bg-green-50 border-green-200"
+                        : variance > 0
+                          ? "bg-blue-50 border-blue-200"
+                          : "bg-red-50 border-red-200"
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">
+                        {Math.abs(variance) < 0.01
+                          ? "Arqueo de efectivo correcto"
+                          : variance > 0
+                            ? "Sobrante en efectivo"
+                            : "Faltante en efectivo"}
+                      </span>
+                      <span
+                        className={`text-lg font-bold ${
+                          Math.abs(variance) < 0.01
+                            ? "text-green-700"
+                            : variance > 0
+                              ? "text-blue-700"
+                              : "text-red-700"
+                        }`}
+                      >
+                        {variance > 0 ? "+" : ""}${variance.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-2 text-muted-foreground">
+                      <span>Contado: ${parsedCounted.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCloseCashDialogOpen(false);
+                setCountedAmount("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCloseCash}
+              disabled={countedAmount === "" || isNaN(parseFloat(countedAmount))}
+            >
+              <Lock className="size-4 mr-2" />
               Cerrar Caja
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo de Movimientos */}
       <Dialog open={movementDialogOpen} onOpenChange={setMovementDialogOpen}>

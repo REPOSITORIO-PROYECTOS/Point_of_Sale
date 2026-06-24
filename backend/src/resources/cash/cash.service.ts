@@ -30,6 +30,12 @@ import { StartCashSessionDto } from './dto/start-cash-session.dto';
 
 import { CashMovementEntity } from './cash-movement.entity';
 
+import {
+  computeExpectedSessionBalance,
+  computeSessionMovementTotals,
+  type SessionMovementTotals,
+} from './cash-movement-totals';
+
 
 
 export type CashSessionResponse = {
@@ -59,6 +65,8 @@ export type CashSessionResponse = {
     qr: number;
 
   };
+
+  movementTotals?: SessionMovementTotals;
 
 };
 
@@ -94,6 +102,8 @@ export type CashClosingSummary = {
 
   salesByMethod: PaymentBreakdown;
 
+  movementTotals?: SessionMovementTotals;
+
 };
 
 
@@ -119,6 +129,22 @@ export type CashClosingDetail = CashClosingSummary & {
     cashier: string;
 
     cashierRole: string;
+
+  }>;
+
+  movements: Array<{
+
+    id: number;
+
+    description: string;
+
+    amount: number;
+
+    type: 'income' | 'expense';
+
+    paymentMethod: string;
+
+    createdAt: string;
 
   }>;
 
@@ -158,6 +184,23 @@ export type CashClosingsPage = {
 
 
 
+export type CashSessionHistoryItem = {
+  id: string;
+  startTime: string;
+  endTime?: string;
+  initialBalance: number;
+  expectedBalance?: number;
+  countedAmount?: number;
+  totalSales: number;
+  salesByPaymentMethod?: PaymentBreakdown;
+  isOpen?: boolean;
+  closedByUsername?: string;
+  closedByRole?: string;
+  transactionsCount?: number;
+};
+
+
+
 type PaymentBreakdown = NonNullable<CashSessionResponse['salesByPaymentMethod']>;
 
 
@@ -188,17 +231,59 @@ export class CashService {
 
 
 
-  findAllMovements() {
+  findAllMovements(sessionId?: string) {
 
-    return this.movementRepository.find({ order: { id: 'DESC' } });
+    return this.movementRepository.find({
+
+      where: sessionId ? { cashSessionId: sessionId } : undefined,
+
+      order: { id: 'DESC' },
+
+    });
 
   }
 
 
 
-  createMovement(payload: CreateCashMovementDto) {
+  async createMovement(payload: CreateCashMovementDto, userId?: string) {
 
-    const entity = this.movementRepository.create(payload);
+    const session = await this.getOpenSession();
+
+
+
+    if (!session) {
+
+      throw new BadRequestException('Cannot record movement without an open cash session');
+
+    }
+
+
+
+    const movementType = payload.type ?? 'income';
+
+    const signedAmount =
+
+      movementType === 'expense' ? -Math.abs(payload.amount) : Math.abs(payload.amount);
+
+
+
+    const entity = this.movementRepository.create({
+
+      description: payload.description,
+
+      amount: signedAmount,
+
+      type: movementType,
+
+      paymentMethod: payload.paymentMethod ?? 'cash',
+
+      cashSessionId: session.id,
+
+      userId: userId ?? null,
+
+    });
+
+
 
     return this.movementRepository.save(entity);
 
@@ -220,7 +305,7 @@ export class CashService {
 
     if (openSession) {
 
-      return toSessionResponse(openSession);
+      return toSessionResponse(openSession, await this.getMovementTotalsForSession(openSession.id));
 
     }
 
@@ -236,7 +321,13 @@ export class CashService {
 
 
 
-    return latestSession[0] ? toSessionResponse(latestSession[0]) : null;
+    const latest = latestSession[0];
+
+    return latest
+
+      ? toSessionResponse(latest, await this.getMovementTotalsForSession(latest.id))
+
+      : null;
 
   }
 
@@ -292,7 +383,7 @@ export class CashService {
 
     const saved = await this.sessionRepository.save(entity);
 
-    return toSessionResponse(saved);
+    return toSessionResponse(saved, emptyMovementTotals());
 
   }
 
@@ -312,7 +403,17 @@ export class CashService {
 
 
 
-    const expectedBalance = payload.expectedBalance ?? session.initialBalance + session.totalSales;
+    const movementTotals = await this.getMovementTotalsForSession(session.id);
+
+    const expectedBalance = computeExpectedSessionBalance(
+
+      session.initialBalance,
+
+      session.totalSales,
+
+      movementTotals,
+
+    );
 
 
 
@@ -328,7 +429,7 @@ export class CashService {
 
     const saved = await this.sessionRepository.save(session);
 
-    return toSessionResponse(saved);
+    return toSessionResponse(saved, movementTotals);
 
   }
 
@@ -435,9 +536,23 @@ export class CashService {
 
 
 
+    const movementTotalsBySession = await this.getMovementTotalsBySessions(sessionIds);
+
+
+
     const items = sessions.map((session) =>
 
-      toClosingSummary(session, saleCounts.get(session.id) ?? 0, cashierMap.get(session.id)),
+      toClosingSummary(
+
+        session,
+
+        saleCounts.get(session.id) ?? 0,
+
+        cashierMap.get(session.id),
+
+        movementTotalsBySession.get(session.id),
+
+      ),
 
     );
 
@@ -467,6 +582,47 @@ export class CashService {
 
 
 
+  async listClosedSessions(limit: number): Promise<CashSessionHistoryItem[]> {
+    const boundedLimit = Math.min(Math.max(limit, 1), 100);
+    const sessions = await this.sessionRepository.find({
+      where: { endTime: Not(IsNull()) },
+      order: { endTime: 'DESC' },
+      take: boundedLimit,
+    });
+
+    if (sessions.length === 0) {
+      return [];
+    }
+
+    const sessionIds = sessions.map((session) => session.id);
+    const [saleCounts, cashierMap] = await Promise.all([
+      this.getSaleCountsBySession(sessionIds),
+      this.resolveCashiersForSessions(sessions),
+    ]);
+
+    return sessions.map((session) => {
+      const response = toSessionResponse(session);
+      const cashier = cashierMap.get(session.id);
+
+      return {
+        id: response.id,
+        startTime: response.startTime,
+        ...(response.endTime ? { endTime: response.endTime } : {}),
+        initialBalance: response.initialBalance,
+        ...(response.finalBalance != null ? { expectedBalance: response.finalBalance } : {}),
+        ...(response.countedAmount != null ? { countedAmount: response.countedAmount } : {}),
+        totalSales: response.totalSales,
+        salesByPaymentMethod: response.salesByPaymentMethod,
+        isOpen: false,
+        ...(cashier?.user ? { closedByUsername: cashier.user } : {}),
+        ...(cashier?.userRole ? { closedByRole: cashier.userRole } : {}),
+        transactionsCount: saleCounts.get(session.id) ?? 0,
+      };
+    });
+  }
+
+
+
   async getClosingDetail(id: string): Promise<CashClosingDetail> {
 
     const session = await this.sessionRepository.findOne({ where: { id, endTime: Not(IsNull()) } });
@@ -481,7 +637,7 @@ export class CashService {
 
 
 
-    const [saleCounts, cashierMap, sales, usersById] = await Promise.all([
+    const [saleCounts, cashierMap, sales, usersById, movements, movementTotals] = await Promise.all([
 
       this.getSaleCountsBySession([session.id]),
 
@@ -497,6 +653,16 @@ export class CashService {
 
       this.loadUsersForSales(session.id),
 
+      this.movementRepository.find({
+
+        where: { cashSessionId: session.id },
+
+        order: { createdAt: 'ASC' },
+
+      }),
+
+      this.getMovementTotalsForSession(session.id),
+
     ]);
 
 
@@ -508,6 +674,8 @@ export class CashService {
       saleCounts.get(session.id) ?? 0,
 
       cashierMap.get(session.id),
+
+      movementTotals,
 
     );
 
@@ -597,6 +765,8 @@ export class CashService {
 
       }),
 
+      movements: movements.map((movement) => toClosingMovement(movement)),
+
     };
 
   }
@@ -652,6 +822,84 @@ export class CashService {
     session.salesByPaymentMethod = JSON.stringify(breakdown);
 
     await this.sessionRepository.save(session);
+
+  }
+
+
+
+  private async getMovementTotalsForSession(sessionId: string): Promise<SessionMovementTotals> {
+
+    const movements = await this.movementRepository.find({ where: { cashSessionId: sessionId } });
+
+    return computeSessionMovementTotals(movements);
+
+  }
+
+
+
+  private async getMovementTotalsBySessions(
+
+    sessionIds: string[],
+
+  ): Promise<Map<string, SessionMovementTotals>> {
+
+    const totals = new Map<string, SessionMovementTotals>();
+
+
+
+    if (sessionIds.length === 0) {
+
+      return totals;
+
+    }
+
+
+
+    const movements = await this.movementRepository.find({
+
+      where: { cashSessionId: In(sessionIds) },
+
+    });
+
+
+
+    for (const sessionId of sessionIds) {
+
+      totals.set(sessionId, emptyMovementTotals());
+
+    }
+
+
+
+    const grouped = new Map<string, CashMovementEntity[]>();
+
+    for (const movement of movements) {
+
+      if (!movement.cashSessionId) {
+
+        continue;
+
+      }
+
+      const bucket = grouped.get(movement.cashSessionId) ?? [];
+
+      bucket.push(movement);
+
+      grouped.set(movement.cashSessionId, bucket);
+
+    }
+
+
+
+    for (const [sessionId, sessionMovements] of grouped) {
+
+      totals.set(sessionId, computeSessionMovementTotals(sessionMovements));
+
+    }
+
+
+
+    return totals;
 
   }
 
@@ -934,7 +1182,35 @@ function parsePaymentBreakdown(value: string | null | undefined): PaymentBreakdo
 
 
 
-function toSessionResponse(entity: CashSessionEntity): CashSessionResponse {
+function emptyMovementTotals(): SessionMovementTotals {
+
+  return {
+
+    incomeTotal: 0,
+
+    expenseTotal: 0,
+
+    netTotal: 0,
+
+    cashIncome: 0,
+
+    cashExpense: 0,
+
+    cashNet: 0,
+
+  };
+
+}
+
+
+
+function toSessionResponse(
+
+  entity: CashSessionEntity,
+
+  movementTotals: SessionMovementTotals = emptyMovementTotals(),
+
+): CashSessionResponse {
 
   const breakdown = parsePaymentBreakdown(entity.salesByPaymentMethod);
 
@@ -958,6 +1234,32 @@ function toSessionResponse(entity: CashSessionEntity): CashSessionResponse {
 
     salesByPaymentMethod: breakdown,
 
+    movementTotals,
+
+  };
+
+}
+
+
+
+function toClosingMovement(movement: CashMovementEntity) {
+
+  const type = movement.type ?? (movement.amount >= 0 ? 'income' : 'expense');
+
+  return {
+
+    id: movement.id,
+
+    description: movement.description,
+
+    amount: movement.amount,
+
+    type: type as 'income' | 'expense',
+
+    paymentMethod: movement.paymentMethod ?? 'cash',
+
+    createdAt: movement.createdAt.toISOString(),
+
   };
 
 }
@@ -972,9 +1274,15 @@ function toClosingSummary(
 
   cashier?: { user: string; userId?: string; userRole: string },
 
+  movementTotals: SessionMovementTotals = emptyMovementTotals(),
+
 ): CashClosingSummary {
 
-  const expectedAmount = entity.finalBalance ?? entity.initialBalance + entity.totalSales;
+  const expectedAmount =
+
+    entity.finalBalance ??
+
+    computeExpectedSessionBalance(entity.initialBalance, entity.totalSales ?? 0, movementTotals);
 
   const countedAmount = entity.countedAmount ?? expectedAmount;
 
@@ -1009,6 +1317,8 @@ function toClosingSummary(
     transactionsCount,
 
     salesByMethod: parsePaymentBreakdown(entity.salesByPaymentMethod),
+
+    movementTotals,
 
   };
 

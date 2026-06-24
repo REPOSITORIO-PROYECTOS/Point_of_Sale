@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cierre de Lote Detallado</title>
+  <style>
+    @page { margin: 0; size: 80mm auto; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10px;
+      margin: 0;
+      padding: 0;
+      color: #000;
+    }
+    .ticket {
+      width: 100%;
+      max-width: 80mm;
+      padding: 2mm;
+      box-sizing: border-box;
+      margin: 0 auto;
+    }
+    @media print {
+      .ticket { width: 76mm; padding: 2mm; }
+    }
+    .header, .footer { text-align: center; }
+    h1 { margin: 0; font-size: 14px; text-transform: uppercase; word-wrap: break-word; font-weight: bold; }
+    h2 { margin: 5px 0; font-size: 13px; border-top: 1px dashed black; border-bottom: 1px dashed black; padding: 4px 0; font-weight: bold; }
+    p { margin: 3px 0; }
+    hr { border: none; border-top: 1px dashed black; margin: 4px 0; }
+    .item { display: flex; justify-content: space-between; }
+    .item .concepto { width: 70%; text-align: left; word-wrap: break-word; }
+    .item .monto { width: 30%; text-align: right; }
+    .total-line { font-weight: bold; }
+    .section-title { font-weight: bold; margin-top: 10px; margin-bottom: 5px; text-align: center; text-transform: uppercase; }
+    .info-line { display: flex; justify-content: space-between; align-items: center; }
+    .info-line .label { font-weight: bold; text-align: left; white-space: nowrap; }
+    .info-line .value { text-align: right; }
+    .final-message { margin-top: 20px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="ticket">
+    <div class="header">
+      <h1>Cafetería Demo</h1>
+      <p>CUIT: 20123456789</p>
+      <h2>CIERRE DE CAJA</h2>
+      <p>Sesión ID: 12</p>
+    </div>
+    <hr>
+    <div class="info-line"><span class="label">Impresión:</span><span class="value">24/06/2026, 01:12 a. m.</span></div>
+    <div class="info-line"><span class="label">Apertura:</span><span class="value">24/06/2026, 08:00 a. m.</span></div>
+    <div class="info-line"><span class="label">Cajero Apertura:</span><span class="value">María García</span></div>
+    <div class="info-line"><span class="label">Cierre:</span><span class="value">24/06/2026, 02:30 p. m.</span></div>
+    <div class="info-line"><span class="label">Cajero Cierre:</span><span class="value">María García</span></div>
+    <p class="section-title">Arqueo de Caja</p>
+    <hr>
+    <div class="item"><p>Saldo Inicial:</p><p>$5000.00</p></div>
+    <div class="item"><p>(+) Total Ventas:</p><p>$15000.00</p></div>
+    <div class="item"><p>(+) Total Propinas:</p><p>$0.00</p></div>
+    <div class="item"><p>(+) Ingresos Varios:</p><p>$500.00</p></div>
+    <div class="item"><p>(-) Egresos (total):</p><p>$2000.00</p></div>
+    <hr>
+    <div class="item total-line"><p>SALDO CALCULADO:</p><p>$18500.00</p></div>
+    <div class="item"><p>SALDO DECLARADO:</p><p>$18450.00</p></div>
+    <hr>
+    <div class="item total-line"><p>DIFERENCIA:</p><p>$-50.00</p></div>
+    <p class="section-title">Desglose de Ventas</p>
+    <hr>
+    <div class="item"><p>Ventas en Efectivo:</p><p>$9000.00</p></div>
+    <div class="item"><p>Ventas por Transferencia:</p><p>$3000.00</p></div>
+    <div class="item"><p>Ventas por POS:</p><p>$3000.00</p></div>
+    <div class="item total-line"><p>TOTAL VENTAS:</p><p>$15000.00</p></div>
+    
+    <p class="section-title">Detalle de Ingresos</p><hr><div class="item">
+        <p class="concepto">Fondo chico:</p>
+        <p class="monto">$500.00</p>
+      </div>
+    <p class="section-title">Detalle de Egresos</p><hr><div class="item">
+        <p class="concepto">[Efectivo] Insumos:</p>
+        <p class="monto">$2000.00</p>
+      </div>
+    <hr>
+    <p class="footer final-message">Fin del reporte de cierre.</p>
+  </div>
+</body>
+</html>

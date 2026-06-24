@@ -2,39 +2,86 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { bootstrapLocalServices, stopLocalServices } from './local-services';
 import { resolveFrontendUrl } from './paths';
+import {
+  printEscposDocument,
+  resolvePrintDeviceName,
+  resolvePrintSilent,
+  shouldAllowHtmlFallback,
+  shouldUseEscposPrint,
+} from './escpos-print';
+import {
+  THERMAL_PAGE_HEIGHT_MICRONS,
+  THERMAL_PAGE_WIDTH_MICRONS,
+  thermalBrowserWindowWidth,
+  type ReceiptWidthMm,
+} from './thermal-print';
+import type { ElectronPrintPayload, PrinterPrintOptions } from './receipt-print-types';
 
-type ReceiptWidthMm = 55 | 80;
+function resolvePrintBaseUrl(isDev: boolean, isPackaged: boolean): string {
+  if (isDev) {
+    const rendererUrl = process.env.ELECTRON_RENDERER_URL ?? 'http://localhost:5173';
+    return rendererUrl.endsWith('/') ? rendererUrl : `${rendererUrl}/`;
+  }
 
-type ElectronPrintPayload = {
-  html: string;
-  widthMm: ReceiptWidthMm;
-};
+  if (isPackaged) {
+    const frontendDir = path.join(process.resourcesPath, 'frontend').replace(/\\/g, '/');
+    return `file://${frontendDir}/`;
+  }
+
+  const devDist = path.resolve(__dirname, '../../frontend/dist').replace(/\\/g, '/');
+  return `file://${devDist}/`;
+}
 
 /**
- * Prints pre-rendered thermal HTML via the OS print driver.
- * Direct ESC/POS integration is planned for a future sprint.
+ * Impresión térmica vía driver del sistema (58/80 mm).
+ * POS_PRINT_SILENT=true → sin diálogo (impresora por defecto).
+ * POS_PRINTER_NAME=Nombre → impresora específica.
  */
-async function printReceiptHtml(payload: ElectronPrintPayload) {
+async function printReceiptHtml(payload: {
+  html: string;
+  widthMm: ReceiptWidthMm;
+  printer?: PrinterPrintOptions;
+}) {
   const printWindow = new BrowserWindow({
     show: false,
-    width: payload.widthMm === 55 ? 260 : 360,
+    width: thermalBrowserWindowWidth(payload.widthMm),
     height: 720,
     webPreferences: {
       sandbox: true,
     },
   });
 
-  await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.html)}`);
+  const baseURLForDataURL = resolvePrintBaseUrl(isDev, app.isPackaged);
+
+  await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.html)}`, {
+    baseURLForDataURL,
+  });
+
+  const silent = resolvePrintSilent(payload.printer);
+  const deviceName = resolvePrintDeviceName(payload.printer);
+  const pageWidth = THERMAL_PAGE_WIDTH_MICRONS[payload.widthMm];
 
   await new Promise<void>((resolve, reject) => {
-    printWindow.webContents.print({ silent: false }, (success, failureReason) => {
-      printWindow.close();
-      if (!success) {
-        reject(new Error(failureReason ?? 'No se pudo imprimir el recibo'));
-        return;
-      }
-      resolve();
-    });
+    printWindow.webContents.print(
+      {
+        silent,
+        printBackground: true,
+        deviceName,
+        margins: { marginType: 'none' },
+        pageSize: {
+          width: pageWidth,
+          height: THERMAL_PAGE_HEIGHT_MICRONS,
+        },
+      },
+      (success, failureReason) => {
+        printWindow.close();
+        if (!success) {
+          reject(new Error(failureReason ?? 'No se pudo imprimir el recibo'));
+          return;
+        }
+        resolve();
+      },
+    );
   });
 }
 
@@ -70,7 +117,47 @@ async function bootstrap() {
   await app.whenReady();
 
   ipcMain.handle('print-receipt', async (_event, payload: ElectronPrintPayload) => {
-    await printReceiptHtml(payload);
+    const printerOptions = payload.printer;
+    const preferEscpos = shouldUseEscposPrint(printerOptions) && payload.document;
+
+    if (preferEscpos) {
+      try {
+        await printEscposDocument(payload.document!, printerOptions);
+        return;
+      } catch (error) {
+        const allowHtmlFallback = shouldAllowHtmlFallback(printerOptions);
+        if (allowHtmlFallback && payload.html) {
+          console.warn('[print] ESC/POS falló, usando HTML:', error);
+          await printReceiptHtml({ html: payload.html, widthMm: payload.widthMm, printer: printerOptions });
+          return;
+        }
+        throw error;
+      }
+    }
+
+    if (!payload.html) {
+      throw new Error('Impresión requiere documento ESC/POS o HTML de respaldo');
+    }
+
+    await printReceiptHtml({ html: payload.html, widthMm: payload.widthMm, printer: printerOptions });
+  });
+
+  ipcMain.handle('list-printers', async () => {
+    const targetWindow = mainWindow ?? BrowserWindow.getAllWindows()[0];
+    if (!targetWindow) {
+      return [];
+    }
+
+    const printers = (await targetWindow.webContents.getPrintersAsync()) as Array<{
+      name: string;
+      isDefault?: boolean;
+      status?: number;
+    }>;
+    return printers.map((printer) => ({
+      name: printer.name,
+      isDefault: Boolean(printer.isDefault),
+      status: printer.status,
+    }));
   });
 
   await bootstrapLocalServices({

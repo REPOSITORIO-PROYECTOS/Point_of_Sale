@@ -1,6 +1,8 @@
 import type { CashSession, PaymentMethod, Parcel, Product, ThemeConfig, Transaction } from "./wails-bridge";
+import type { CashMovementRecord } from "./pos-domain-types";
+import type { AfipBillingDefaults } from "./afip-fiscal";
 import { normalizeProduct } from "./product-categories";
-import { mapThemeConfigFromApi } from "./theme-logo";
+import type { PrinterSettings } from "./printer-settings";
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 const AUTH_TOKEN_KEY = "pos.auth.token";
@@ -102,6 +104,7 @@ export type CashClosingSummary = {
     transfer: number;
     qr: number;
   };
+  movementTotals?: CashSession["movementTotals"];
 };
 
 export type CashClosingDetail = CashClosingSummary & {
@@ -180,6 +183,16 @@ function normalizeCashSession(session: CashSession | null): CashSession | null {
       transfer: 0,
       qr: 0,
     },
+    movementTotals: session.movementTotals
+      ? {
+          incomeTotal: toCashAmount(session.movementTotals.incomeTotal),
+          expenseTotal: toCashAmount(session.movementTotals.expenseTotal),
+          netTotal: toCashAmount(session.movementTotals.netTotal),
+          cashIncome: toCashAmount(session.movementTotals.cashIncome),
+          cashExpense: toCashAmount(session.movementTotals.cashExpense),
+          cashNet: toCashAmount(session.movementTotals.cashNet),
+        }
+      : undefined,
   };
 }
 
@@ -226,6 +239,7 @@ export type AfipConfigStatus = {
   cuit: string | null;
   puntoVenta: number;
   production: boolean;
+  billingDefaults: AfipBillingDefaults;
   hasCertificate: boolean;
   hasPrivateKey: boolean;
   certPath: string;
@@ -233,6 +247,8 @@ export type AfipConfigStatus = {
   configPath: string;
   updatedAt: string | null;
 };
+
+export type UpdateAfipBillingDefaultsPayload = AfipBillingDefaults;
 
 export type AfipHealthStatus = {
   afipReachable: boolean;
@@ -386,6 +402,22 @@ export const PosAPI = {
     return normalizeCashSession(session)!;
   },
 
+  getCashMovements: (sessionId?: string) => {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
+    return request<CashMovementRecord[]>(`/cash${query}`);
+  },
+
+  createCashMovement: (payload: {
+    description: string;
+    amount: number;
+    type: "income" | "expense";
+    paymentMethod: "cash" | "card" | "transfer" | "qr";
+  }) =>
+    request<CashMovementRecord>("/cash", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   getCashClosings: (params: CashClosingsQuery = {}) =>
     request<CashClosingsPage>(`/cash/closings${buildCashClosingsQuery(params)}`),
 
@@ -412,6 +444,11 @@ export const PosAPI = {
     }),
 
   getAfipConfig: () => request<AfipConfigStatus>("/integrations/afip/config"),
+  updateAfipBillingDefaults: (payload: UpdateAfipBillingDefaultsPayload) =>
+    request<{ message: string; status: AfipConfigStatus }>("/integrations/afip/billing-defaults", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   getAfipHealth: () => request<AfipHealthStatus>("/integrations/afip/health"),
   importAfipCredentials: (payload: ImportAfipCredentialsPayload) =>
     request<{ message: string; status: AfipConfigStatus }>("/integrations/afip/credentials", {
@@ -488,6 +525,14 @@ export const PosAPI = {
     request<ThemeConfig>("/settings/theme/logo", {
       method: "DELETE",
     }).then((theme) => mapThemeConfigFromApi(theme)),
+
+  getPrinterSettings: () => request<PrinterSettings>("/settings/printer"),
+
+  savePrinterSettings: (settings: PrinterSettings) =>
+    request<PrinterSettings>("/settings/printer", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
 
   getLicenseStatus: () => request<LicenseStatusResponse>("/license/status"),
 

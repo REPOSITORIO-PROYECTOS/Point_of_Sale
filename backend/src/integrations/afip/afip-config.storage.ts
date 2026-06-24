@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '@/config/env.config';
+import {
+  normalizeAfipBillingDefaults,
+  type AfipBillingDefaults,
+} from './afip-billing-defaults';
 import type { AfipStoredConfig } from './afip-config.types';
 
 const configFileName = 'config.json';
@@ -35,7 +39,7 @@ export function ensureAfipStorageDir() {
   fs.mkdirSync(getAfipStorageDir(), { recursive: true });
 }
 
-export function readStoredAfipConfig(): AfipStoredConfig | null {
+function readConfigFile(): Partial<AfipStoredConfig> | null {
   const configPath = getAfipConfigPath();
 
   if (!fs.existsSync(configPath)) {
@@ -43,16 +47,43 @@ export function readStoredAfipConfig(): AfipStoredConfig | null {
   }
 
   try {
-    const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as AfipStoredConfig;
-
-    if (!parsed.cuit) {
-      return null;
-    }
-
-    return parsed;
+    return JSON.parse(fs.readFileSync(configPath, 'utf8')) as Partial<AfipStoredConfig>;
   } catch {
     return null;
   }
+}
+
+export function readAfipBillingDefaults(): AfipBillingDefaults {
+  const parsed = readConfigFile();
+  return normalizeAfipBillingDefaults(parsed?.billingDefaults);
+}
+
+export function writeAfipBillingDefaults(defaults: AfipBillingDefaults) {
+  ensureAfipStorageDir();
+  const parsed = readConfigFile() ?? {};
+  const next: Partial<AfipStoredConfig> = {
+    ...parsed,
+    billingDefaults: normalizeAfipBillingDefaults(defaults),
+    updatedAt: new Date().toISOString(),
+  };
+
+  fs.writeFileSync(getAfipConfigPath(), JSON.stringify(next, null, 2), 'utf8');
+}
+
+export function readStoredAfipConfig(): AfipStoredConfig | null {
+  const parsed = readConfigFile();
+
+  if (!parsed?.cuit) {
+    return null;
+  }
+
+  return {
+    cuit: parsed.cuit,
+    puntoVenta: parsed.puntoVenta ?? env.afipPuntoVenta,
+    production: parsed.production ?? env.afipProduction,
+    updatedAt: parsed.updatedAt ?? new Date().toISOString(),
+    billingDefaults: normalizeAfipBillingDefaults(parsed.billingDefaults),
+  };
 }
 
 export function writeStoredAfipConfig(config: AfipStoredConfig) {

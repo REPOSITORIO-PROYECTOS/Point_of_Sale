@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 import { PosAPI, readFileAsText, type AfipConfigStatus } from "../../../lib/pos-api";
+import {
+  AFIP_CONDICION_IVA_OPTIONS,
+  AFIP_TIPO_COMPROBANTE_OPTIONS,
+  AFIP_TIPO_DOCUMENTO_OPTIONS,
+  DEFAULT_AFIP_BILLING_DEFAULTS,
+  normalizeAfipBillingDefaults,
+} from "../../../lib/afip-fiscal";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
@@ -7,8 +14,15 @@ import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { Badge } from "../ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { toast } from "sonner";
-import { Copy, Download, FileKey, KeyRound, ShieldCheck, Upload } from "lucide-react";
+import { Copy, Download, FileKey, FileText, KeyRound, ShieldCheck, Upload } from "lucide-react";
 
 function downloadTextFile(filename: string, content: string) {
   const blob = new Blob([content], { type: "application/x-pem-file" });
@@ -35,6 +49,12 @@ export function AfipCredentialsSettings() {
   const [csr, setCsr] = useState("");
   const [certificado, setCertificado] = useState("");
   const [clavePrivada, setClavePrivada] = useState("");
+  const [billingTipoAfip, setBillingTipoAfip] = useState(String(DEFAULT_AFIP_BILLING_DEFAULTS.tipoAfip));
+  const [billingTipoDocumento, setBillingTipoDocumento] = useState(String(DEFAULT_AFIP_BILLING_DEFAULTS.tipoDocumento));
+  const [billingDocumento, setBillingDocumento] = useState(DEFAULT_AFIP_BILLING_DEFAULTS.documento);
+  const [billingIdCondicionIva, setBillingIdCondicionIva] = useState(String(DEFAULT_AFIP_BILLING_DEFAULTS.idCondicionIva));
+  const [billingIvaRate, setBillingIvaRate] = useState(String(DEFAULT_AFIP_BILLING_DEFAULTS.ivaRatePercent));
+  const [isSavingBillingDefaults, setIsSavingBillingDefaults] = useState(false);
 
   const loadStatus = async () => {
     setIsLoading(true);
@@ -45,6 +65,12 @@ export function AfipCredentialsSettings() {
       setCuit(config.cuit ?? "");
       setPuntoVenta(String(config.puntoVenta ?? 1));
       setProduction(config.production ?? false);
+      const billing = normalizeAfipBillingDefaults(config.billingDefaults);
+      setBillingTipoAfip(String(billing.tipoAfip));
+      setBillingTipoDocumento(String(billing.tipoDocumento));
+      setBillingDocumento(billing.documento);
+      setBillingIdCondicionIva(String(billing.idCondicionIva));
+      setBillingIvaRate(String(billing.ivaRatePercent));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo cargar la configuración AFIP");
     } finally {
@@ -165,6 +191,26 @@ export function AfipCredentialsSettings() {
     }
   };
 
+  const handleSaveBillingDefaults = async () => {
+    setIsSavingBillingDefaults(true);
+
+    try {
+      const result = await PosAPI.updateAfipBillingDefaults({
+        tipoAfip: Number(billingTipoAfip),
+        tipoDocumento: Number(billingTipoDocumento),
+        documento: billingDocumento.trim(),
+        idCondicionIva: Number(billingIdCondicionIva),
+        ivaRatePercent: Number(billingIvaRate),
+      });
+      setStatus(result.status);
+      toast.success("Valores por defecto de facturación guardados");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron guardar los valores por defecto");
+    } finally {
+      setIsSavingBillingDefaults(false);
+    }
+  };
+
   const showCertificateStep = Boolean(status?.pendingCertificate || (status?.hasPrivateKey && !status?.hasCertificate));
 
   return (
@@ -255,6 +301,92 @@ export function AfipCredentialsSettings() {
               checked={production}
               onCheckedChange={setProduction}
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="size-5" />
+            Facturación por defecto
+          </CardTitle>
+          <CardDescription>
+            Valores que usa el POS al emitir factura con consumidor final. En el checkout podés cambiar el comprador
+            para una venta puntual.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Tipo de comprobante</Label>
+              <Select value={billingTipoAfip} onValueChange={setBillingTipoAfip}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AFIP_TIPO_COMPROBANTE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Alícuota IVA para desglose (%)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={billingIvaRate}
+                onChange={(event) => setBillingIvaRate(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo documento comprador</Label>
+              <Select value={billingTipoDocumento} onValueChange={setBillingTipoDocumento}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AFIP_TIPO_DOCUMENTO_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Número documento</Label>
+              <Input
+                value={billingDocumento}
+                onChange={(event) => setBillingDocumento(event.target.value)}
+                placeholder="0 para consumidor final"
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Condición IVA comprador</Label>
+              <Select value={billingIdCondicionIva} onValueChange={setBillingIdCondicionIva}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AFIP_CONDICION_IVA_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => void handleSaveBillingDefaults()} disabled={isSavingBillingDefaults}>
+              {isSavingBillingDefaults ? "Guardando..." : "Guardar valores por defecto"}
+            </Button>
           </div>
         </CardContent>
       </Card>

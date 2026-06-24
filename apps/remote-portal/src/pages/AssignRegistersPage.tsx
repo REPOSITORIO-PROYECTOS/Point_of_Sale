@@ -12,7 +12,7 @@ export function AssignRegistersPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
-    if (!session) {
+    if (!session?.clientNumber) {
       return;
     }
 
@@ -33,7 +33,7 @@ export function AssignRegistersPage() {
 
   async function handleEnsureTenant(event: FormEvent) {
     event.preventDefault();
-    if (!session) {
+    if (!session?.clientNumber) {
       return;
     }
 
@@ -56,7 +56,7 @@ export function AssignRegistersPage() {
 
   async function handleCreateRegister(event: FormEvent) {
     event.preventDefault();
-    if (!session) {
+    if (!session?.clientNumber) {
       return;
     }
 

@@ -195,6 +195,7 @@ export function RegisterDetailPage() {
     const socket = createPortalWebSocket(clientNumber, (message) => {
       const payload = message as {
         type?: string;
+        registerId?: string;
         register?: TenantRegister;
         snapshot?: RegisterSnapshot;
       };

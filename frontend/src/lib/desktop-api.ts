@@ -1,23 +1,33 @@
+import type { ReceiptPrintDocument } from "./receipt-print-document";
+import type { PrinterPrintOptions, SystemPrinterInfo } from "./printer-settings";
+
 export type ReceiptWidthMm = 55 | 80;
 
 export type ElectronPrintPayload = {
-  html: string;
   widthMm: ReceiptWidthMm;
+  document?: ReceiptPrintDocument;
+  html?: string;
+  printer?: PrinterPrintOptions;
 };
 
 export function isElectronEnvironment(): boolean {
   return typeof window !== "undefined" && typeof window.desktop?.printReceipt === "function";
 }
 
-export async function printReceiptElectron(
-  html: string,
-  widthMm: ReceiptWidthMm = 80,
-): Promise<void> {
+export async function printReceiptElectron(payload: ElectronPrintPayload): Promise<void> {
   if (!isElectronEnvironment()) {
     throw new Error("Impresión Electron no disponible");
   }
 
-  await window.desktop!.printReceipt!({ html, widthMm });
+  await window.desktop!.printReceipt!(payload);
+}
+
+export async function listSystemPrinters(): Promise<SystemPrinterInfo[]> {
+  if (!isElectronEnvironment() || !window.desktop?.listPrinters) {
+    return [];
+  }
+
+  return window.desktop.listPrinters();
 }
 
 export function printReceiptInBrowser(html: string): void {
@@ -29,9 +39,19 @@ export function printReceiptInBrowser(html: string): void {
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
-  printWindow.close();
+
+  const closeAfterPrint = () => {
+    printWindow.close();
+  };
+
+  printWindow.onload = () => {
+    printWindow.focus();
+    if ("onafterprint" in printWindow) {
+      printWindow.onafterprint = closeAfterPrint;
+    }
+    printWindow.print();
+    window.setTimeout(closeAfterPrint, 2_000);
+  };
 }
 
 declare global {
@@ -44,6 +64,7 @@ declare global {
         electron: string;
       };
       printReceipt?: (payload: ElectronPrintPayload) => Promise<void>;
+      listPrinters?: () => Promise<SystemPrinterInfo[]>;
     };
   }
 }

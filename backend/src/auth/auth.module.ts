@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import type { SignOptions } from 'jsonwebtoken';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { env } from '@/config/env.config';
 import { LicenseModule } from '@/license/license.module';
@@ -12,7 +13,7 @@ import { UserEntity } from './user.entity';
     TypeOrmModule.forFeature([UserEntity]),
     JwtModule.register({
       secret: env.jwtSecret,
-      signOptions: { expiresIn: env.jwtExpiresIn },
+      signOptions: { expiresIn: env.jwtExpiresIn as SignOptions['expiresIn'] },
     }),
     LicenseModule,
   ],

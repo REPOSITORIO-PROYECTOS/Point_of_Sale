@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presupuesto</title>
+  <style>@page { margin: 0; size: 80mm auto; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10px;
+      margin: 0;
+      padding: 0;
+      color: #000;
+    }
+    .ticket {
+      width: 100%;
+      max-width: 80mm;
+      padding: 2mm;
+      box-sizing: border-box;
+      margin: 0 auto;
+    }
+    @media print {
+      .ticket { width: 76mm; padding: 2mm; }
+    }
+    .ticket { width: 56mm; padding: 1mm; }
+    .header, .footer { text-align: center; }
+    .header h1 { margin: 0; font-size: 13px; word-wrap: break-word; }
+    .header h2 { margin: 4px 0; font-size: 12px; }
+    p { margin: 2px 0; }
+    hr { border: none; border-top: 1px dashed black; margin: 5px 0; }
+    .cliente-info { margin-top: 5px; }
+    .cliente-info p { margin-bottom: 3px; }
+    .item-list { margin-top: 8px; }
+    .item { display: flex; justify-content: space-between; margin: 3px 0; }
+    .item .cantidad { width: 15%; text-align: left; }
+    .item .descripcion { flex-grow: 1; text-align: left; word-wrap: break-word; padding: 0 4px; }
+    .item .unitario, .item .subtotal { width: 25%; text-align: right; }
+    .item-header { font-weight: bold; border-bottom: 1px solid black; padding-bottom: 2px; }
+    .item-discount { font-size: 9px; color: #d9534f; padding-left: 8px; margin-top: -2px; }
+    .totals-section { margin-top: 8px; border-top: 1px dashed black; padding-top: 5px; }
+    .totals-section .item { font-weight: bold; }
+    .totals-section .discount { color: #d9534f; }
+    .total-final { font-weight: bold; font-size: 13px; }
+    .footer { font-size: 9px; margin-top: 10px; text-align: left; }
+  </style>
+</head>
+<body>
+  <div class="ticket">
+    <div class="header">
+      <h1>Cafetería Demo</h1>
+      
+      <hr>
+      <h2>PRESUPUESTO</h2>
+      <p>Fecha: 24/06/2026, 02:30 p. m.</p>
+      <p>Validez: 15 días</p>
+      <hr>
+    </div>
+    <div class="cliente-info">
+      <p><strong>Cliente:</strong> A definir</p>
+      <p><strong>CUIT/DNI:</strong> S/D</p>
+    </div>
+    <div class="item-list">
+      <div class="item item-header">
+        <span class="cantidad">Cant</span>
+        <span class="descripcion">Descripción</span>
+        <span class="unitario">P/U</span>
+        <span class="subtotal">Subtotal</span>
+      </div>
+      <div class="item">
+        <span class="cantidad">2</span>
+        <span class="descripcion">Café espresso</span>
+        <span class="unitario">$3.50</span>
+        <span class="subtotal">$7.00</span>
+      </div><div class="item">
+        <span class="cantidad">3</span>
+        <span class="descripcion">Medialuna</span>
+        <span class="unitario">$1.20</span>
+        <span class="subtotal">$3.60</span>
+      </div><div class="item">
+        <span class="cantidad">1</span>
+        <span class="descripcion">Agua mineral 500ml</span>
+        <span class="unitario">$2.80</span>
+        <span class="subtotal">$2.80</span>
+      </div>
+    </div>
+    <div class="totals-section">
+      <div class="item"><span>SUBTOTAL</span><span>$13.40</span></div>
+      
+      <div class="item total-final"><span>TOTAL</span><span>$11.90</span></div>
+    </div>
+    <div class="footer">
+      <strong>Términos:</strong><br />
+      Los precios están expresados en Pesos Argentinos. Este presupuesto no incluye IVA.
+    </div>
+  </div>
+</body>
+</html>

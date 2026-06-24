@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CashService } from '@/resources/cash/cash.service';
+import { CashService, type CashSessionHistoryItem } from '@/resources/cash/cash.service';
 import { ProductsService } from '@/resources/products/products.service';
 
 export type CatalogProductSummary = {
@@ -75,17 +75,41 @@ export class RemoteCommandService {
     };
   }
 
+  private toHistoryItem(
+    session: Awaited<ReturnType<CashService['getSession']>>,
+    extras: Partial<Pick<CashSessionHistoryItem, 'isOpen' | 'closedByUsername' | 'closedByRole' | 'transactionsCount'>>,
+  ): CashSessionHistoryItem | null {
+    if (!session) {
+      return null;
+    }
+
+    return {
+      id: session.id,
+      startTime: session.startTime,
+      ...(session.endTime ? { endTime: session.endTime } : {}),
+      initialBalance: session.initialBalance,
+      ...(session.finalBalance != null ? { expectedBalance: session.finalBalance } : {}),
+      ...(session.countedAmount != null ? { countedAmount: session.countedAmount } : {}),
+      totalSales: session.totalSales,
+      salesByPaymentMethod: session.salesByPaymentMethod,
+      ...extras,
+    };
+  }
+
   private async getCashHistory(payload: unknown) {
     const limit =
       typeof payload === 'object' && payload !== null && 'limit' in payload
         ? Number((payload as { limit?: number }).limit ?? 50)
         : 50;
 
-    const sessions = await this.cashService.listClosedSessions(Math.min(Math.max(limit, 1), 100));
-    const openSession = await this.cashService.getSession();
+    const [sessions, openSession, openEntity] = await Promise.all([
+      this.cashService.listClosedSessions(Math.min(Math.max(limit, 1), 100)),
+      this.cashService.getSession(),
+      this.cashService.getOpenSession(),
+    ]);
 
     return {
-      currentSession: openSession,
+      currentSession: this.toHistoryItem(openSession, { isOpen: Boolean(openEntity) }),
       closedSessions: sessions,
       syncedAt: new Date().toISOString(),
     };

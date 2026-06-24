@@ -1,8 +1,11 @@
+import type { AfipBillingDefaults } from './afip-billing-defaults';
+
 export type AfipStoredConfig = {
   cuit: string;
   puntoVenta: number;
   production: boolean;
   updatedAt: string;
+  billingDefaults?: AfipBillingDefaults;
 };
 
 export type AfipConfigStatus = {
@@ -11,6 +14,7 @@ export type AfipConfigStatus = {
   cuit: string | null;
   puntoVenta: number;
   production: boolean;
+  billingDefaults: AfipBillingDefaults;
   hasCertificate: boolean;
   hasPrivateKey: boolean;
   certPath: string;

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Factura</title>
+  <style>@page { margin: 0; size: 80mm auto; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10px;
+      margin: 0;
+      padding: 0;
+      color: #000;
+    }
+    .ticket {
+      width: 100%;
+      max-width: 80mm;
+      padding: 2mm;
+      box-sizing: border-box;
+      margin: 0 auto;
+    }
+    @media print {
+      .ticket { width: 76mm; padding: 2mm; }
+    }
+    .header, .afip-footer { text-align: center; }
+    .header h1 { margin: 0; font-size: 14px; font-weight: bold; word-wrap: break-word; }
+    .header p { margin: 2px 0; }
+    .factura-info { display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; }
+    .codigo-comprobante { text-align: center; font-size: 10px; margin: 3px 0; font-weight: bold; }
+    hr { border: none; border-top: 1px dashed black; margin: 5px 0; }
+    .cliente-info p, .pago-info p { margin-bottom: 3px; }
+    .item-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .item-table th, .item-table td { padding: 2px 0; }
+    .col-cant { width: 15%; text-align: left; }
+    .col-desc { width: 45%; text-align: left; }
+    .col-pu { width: 20%; text-align: right; }
+    .col-subt { width: 20%; text-align: right; }
+    .totals-section { margin-top: 8px; border-top: 1px dashed black; padding-top: 5px; }
+    .totals-section .item { display: flex; justify-content: space-between; }
+    .totals-section .discount { color: #555; }
+    .total-final { font-size: 13px; font-weight: bold; }
+    .observaciones-finales-section { margin-top: 8px; font-size: 9px; word-wrap: break-word; }
+    .afip-footer { margin-top: 10px; }
+    .afip-footer p { margin: 1px 0; font-weight: bold; }
+    .afip-footer img { max-width: 100px; height: auto; margin-top: 5px; }
+    .leyendas-obligatorias {
+      margin-top: 8px; font-size: 8px; text-align: center;
+      border-top: 1px dashed black; padding-top: 5px;
+    }
+    .leyendas-obligatorias p { margin: 1px 0; }
+  </style>
+</head>
+<body>
+  <div class="ticket">
+    <div class="header">
+      <img src="/branding/default-logo.png" alt="Logo" style="max-width:60%;height:auto;margin-bottom:5px;" />
+      <h1>Cafetería Demo SRL</h1>
+      <p>Av. Corrientes 1234, CABA</p>
+      <p>CUIT: 20123456789</p>
+      
+      
+      <p>IVA: IVA Responsable Inscripto</p>
+      <hr>
+      <div class="factura-info">
+        <span>FACTURA</span>
+        <span>B</span>
+      </div>
+      <div class="codigo-comprobante">Cod. 006</div>
+      <p>P.Venta: 00001 - N°: 00000042</p>
+      <p>Fecha: 24/06/2026, 02:30 p. m.</p>
+      <p>Venta ID: #00123457</p>
+      <hr>
+    </div>
+    <div class="cliente-info">
+      <p><strong>Cliente:</strong> Consumidor Final</p>
+      <p><strong>CUIT/DNI:</strong> S/D</p>
+      <p><strong>IVA:</strong> Consumidor Final</p>
+      <p><strong>Domicilio:</strong> S/D</p>
+    </div>
+    <hr>
+    <table class="item-table">
+      <thead><tr>
+        <th class="col-cant">Cant</th><th class="col-desc">Desc</th>
+        <th class="col-pu">P/U</th><th class="col-subt">Subt</th>
+      </tr></thead>
+      <tbody><tr>
+        <td class="col-cant">2</td>
+        <td class="col-desc">Café espresso</td>
+        <td class="col-pu">$3.50</td>
+        <td class="col-subt">$7.00</td>
+      </tr><tr>
+        <td class="col-cant">3</td>
+        <td class="col-desc">Medialuna</td>
+        <td class="col-pu">$1.20</td>
+        <td class="col-subt">$3.60</td>
+      </tr><tr>
+        <td class="col-cant">1</td>
+        <td class="col-desc">Agua mineral 500ml</td>
+        <td class="col-pu">$2.80</td>
+        <td class="col-subt">$2.80</td>
+      </tr></tbody>
+    </table>
+    <div class="totals-section">
+      <div class="item"><span>Subtotal</span><span>$13.40</span></div>
+      <div class="item discount"><span>Desc. Gral.</span><span>-$1.50</span></div>
+      <hr>
+      <div class="item"><span>Neto Gravado</span><span>$8.76</span></div>
+         <div class="item"><span>IVA (21%)</span><span>$1.84</span></div>
+      <div class="item total-final"><span>TOTAL</span><span>$11.90</span></div>
+    </div>
+    <hr><div class="pago-info"><p><strong>Forma de Pago:</strong></p><p>Efectivo: $15.00</p><p>Tarjeta débito: $0.00</p></div>
+    
+    <hr>
+    <div class="afip-footer"><p>CAE N°: 74234567890123</p>
+       <p>Vto. CAE: 04/07/2026</p>
+       
+       <p>Comprobante Autorizado</p></div>
+    <div class="leyendas-obligatorias">
+    <p>Defensa del Consumidor</p>
+    <p>0800-333-6634</p>
+    <p>Régimen de Transparencia</p>
+    <p>Fiscal al Consumidor</p>
+    <p>Ley 27.743</p>
+  </div>
+  </div>
+</body>
+</html>
