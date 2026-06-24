@@ -1,7 +1,7 @@
 {
   "name": "point-of-sale",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "scripts": {
     "dev:web": "npm run dev --prefix frontend",
     "dev:api": "npm run start:dev --prefix backend",
