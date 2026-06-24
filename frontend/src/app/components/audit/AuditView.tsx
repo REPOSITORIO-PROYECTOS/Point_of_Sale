@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
-import { ScrollArea } from "../ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import {
   Table,
@@ -20,43 +19,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
 import { Label } from "../ui/label";
-import { Separator } from "../ui/separator";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "../ui/pagination";
 import {
   ClipboardList,
   Search,
   Calendar as CalendarIcon,
   ChevronRight,
-  DollarSign,
   User,
   AlertCircle,
   CheckCircle,
   TrendingUp,
-  CreditCard,
-  Smartphone,
-  Wallet,
-  Eye,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  type CashClosing,
-  type AuditEvent,
-} from "../../../lib/pos-domain-types";
-import { PosAPI } from "../../../lib/pos-api";
-import { mapCashSessionToClosing } from "../../../lib/cash-closing-mapper";
-
-const auditTransactions: never[] = [];
-const auditEvents: AuditEvent[] = [];
+  PosAPI,
+  type CashClosingDetail,
+  type CashClosingStatus,
+  type CashClosingSummary,
+} from "../../../lib/pos-api";
 import { CashViewAdvanced } from "../cash/CashViewAdvanced";
 import { ClosingDetailModal } from "./ClosingDetailModal";
 
@@ -65,71 +57,67 @@ interface AuditViewProps {
   onRequestClearOrders?: () => void;
 }
 
+const PAGE_SIZE = 10;
+
 export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditViewProps = {}) {
-  const [cashClosings, setCashClosings] = useState<CashClosing[]>([]);
-  const [closingsLoading, setClosingsLoading] = useState(true);
-  const [closingsError, setClosingsError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<string>("all");
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
-  const [selectedClosing, setSelectedClosing] = useState<CashClosing | null>(null);
+  const [page, setPage] = useState(1);
+  const [closings, setClosings] = useState<CashClosingSummary[]>([]);
+  const [cashiers, setCashiers] = useState<Array<{ id: string; username: string }>>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedClosingId, setSelectedClosingId] = useState<string | null>(null);
+  const [selectedClosingDetail, setSelectedClosingDetail] = useState<CashClosingDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    const timer = window.setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
 
-    void PosAPI.getCashSessionHistory()
-      .then((sessions) => {
-        if (cancelled) {
-          return;
-        }
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, selectedUser, dateRange]);
 
-        setCashClosings(sessions.map((session) => mapCashSessionToClosing(session)));
-        setClosingsError(null);
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
+  const loadClosings = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
 
-        setClosingsError(error instanceof Error ? error.message : "No se pudo cargar el historial");
-        setCashClosings([]);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setClosingsLoading(false);
-        }
+    try {
+      const response = await PosAPI.getCashClosings({
+        page,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch || undefined,
+        userId: selectedUser,
+        dateFrom: dateRange.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
+        dateTo: dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
       });
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      setClosings(response.items);
+      setCashiers(response.cashiers.map((cashier) => ({ id: cashier.id, username: cashier.username })));
+      setTotal(response.total);
+      setTotalPages(response.totalPages);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar los cierres");
+      setClosings([]);
+      setTotal(0);
+      setTotalPages(1);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, debouncedSearch, selectedUser, dateRange]);
 
-  const filteredClosings = useMemo(() => {
-    return cashClosings.filter((closing) => {
-      const matchesSearch =
-        searchTerm === "" ||
-        closing.user.toLowerCase().includes(searchTerm.toLowerCase());
+  useEffect(() => {
+    void loadClosings();
+  }, [loadClosings]);
 
-      const matchesUser = selectedUser === "all" || closing.user === selectedUser;
-
-      const matchesDate =
-        !dateRange.from ||
-        !dateRange.to ||
-        (new Date(closing.date) >= dateRange.from &&
-          new Date(closing.date) <= dateRange.to);
-
-      return matchesSearch && matchesUser && matchesDate;
-    });
-  }, [cashClosings, searchTerm, selectedUser, dateRange]);
-
-  const users = useMemo(() => {
-    const uniqueUsers = new Set(cashClosings.map((c) => c.user));
-    return Array.from(uniqueUsers);
-  }, [cashClosings]);
-
-  const getStatusBadge = (status: CashClosing["status"], difference: number) => {
+  const getStatusBadge = (status: CashClosingStatus, difference: number) => {
     switch (status) {
       case "perfect":
         return (
@@ -161,10 +149,31 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
     return "text-red-600";
   };
 
-  const handleViewDetails = (closing: CashClosing) => {
-    setSelectedClosing(closing);
+  const handleViewDetails = async (closing: CashClosingSummary) => {
+    setSelectedClosingId(closing.id);
     setDetailOpen(true);
+    setIsDetailLoading(true);
+    setSelectedClosingDetail(null);
+
+    try {
+      const detail = await PosAPI.getCashClosingDetail(closing.id);
+      setSelectedClosingDetail(detail);
+    } catch (detailError) {
+      setError(detailError instanceof Error ? detailError.message : "No se pudo cargar el detalle");
+      setDetailOpen(false);
+    } finally {
+      setIsDetailLoading(false);
+    }
   };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSelectedUser("all");
+    setDateRange({});
+    setPage(1);
+  };
+
+  const hasActiveFilters = Boolean(searchTerm || selectedUser !== "all" || dateRange.from);
 
   return (
     <>
@@ -194,211 +203,266 @@ export function AuditView({ heldOrdersCount = 0, onRequestClearOrders }: AuditVi
           </TabsContent>
 
           <TabsContent value="history" className="flex-1 overflow-auto p-6 m-0">
-          <div className="max-w-7xl mx-auto space-y-6">
-            {/* Filtros */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Filtros</CardTitle>
-                <CardDescription>Busca y filtra los cierres de caja</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Buscador */}
-                  <div>
-                    <Label>Buscar Cajero</Label>
-                    <div className="relative mt-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                      <Input
-                        type="text"
-                        placeholder="Nombre del cajero..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
+            <div className="max-w-7xl mx-auto space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Filtros</CardTitle>
+                  <CardDescription>Busca y filtra los cierres de caja</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Buscar Cajero</Label>
+                      <div className="relative mt-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                          type="text"
+                          placeholder="Nombre del cajero..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Filtrar por Cajero</Label>
+                      <Select value={selectedUser} onValueChange={setSelectedUser}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos los cajeros</SelectItem>
+                          {cashiers.map((cashier) => (
+                            <SelectItem key={cashier.id} value={cashier.id}>
+                              {cashier.username}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label>Rango de Fechas</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full mt-1 justify-start">
+                            <CalendarIcon className="size-4 mr-2" />
+                            {dateRange.from ? (
+                              dateRange.to ? (
+                                <>
+                                  {format(dateRange.from, "dd/MM/yyyy")} -{" "}
+                                  {format(dateRange.to, "dd/MM/yyyy")}
+                                </>
+                              ) : (
+                                format(dateRange.from, "dd/MM/yyyy")
+                              )
+                            ) : (
+                              <span>Seleccionar rango</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="range"
+                            selected={dateRange}
+                            onSelect={(range) => setDateRange(range || {})}
+                            locale={es}
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </div>
 
-                  {/* Selector de Usuario */}
-                  <div>
-                    <Label>Filtrar por Cajero</Label>
-                    <Select value={selectedUser} onValueChange={setSelectedUser}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos los cajeros</SelectItem>
-                        {users.map((user) => (
-                          <SelectItem key={user} value={user}>
-                            {user}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {hasActiveFilters && (
+                    <div className="mt-4 flex justify-end">
+                      <Button variant="ghost" size="sm" onClick={clearFilters}>
+                        Limpiar Filtros
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-                  {/* Rango de Fechas */}
-                  <div>
-                    <Label>Rango de Fechas</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full mt-1 justify-start">
-                          <CalendarIcon className="size-4 mr-2" />
-                          {dateRange.from ? (
-                            dateRange.to ? (
-                              <>
-                                {format(dateRange.from, "dd/MM/yyyy")} -{" "}
-                                {format(dateRange.to, "dd/MM/yyyy")}
-                              </>
-                            ) : (
-                              format(dateRange.from, "dd/MM/yyyy")
-                            )
-                          ) : (
-                            <span>Seleccionar rango</span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="range"
-                          selected={dateRange}
-                          onSelect={(range) => setDateRange(range || {})}
-                          locale={es}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Historial de Cierres de Caja</CardTitle>
+                  <CardDescription>
+                    {isLoading ? "Cargando cierres..." : `${total} cierre(s) encontrado(s)`}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {error && (
+                    <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {error}
+                    </div>
+                  )}
 
-                {(searchTerm || selectedUser !== "all" || dateRange.from) && (
-                  <div className="mt-4 flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSearchTerm("");
-                        setSelectedUser("all");
-                        setDateRange({});
-                      }}
-                    >
-                      Limpiar Filtros
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Tabla de Cierres */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Historial de Cierres de Caja</CardTitle>
-                <CardDescription>
-                  {filteredClosings.length} cierre(s) encontrado(s)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {closingsError ? (
-                  <p className="mb-4 text-sm text-destructive">{closingsError}</p>
-                ) : null}
-                {closingsLoading ? (
-                  <p className="py-12 text-center text-muted-foreground">Cargando cierres…</p>
-                ) : (
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Fecha y Hora</TableHead>
-                        <TableHead>Cajero</TableHead>
-                        <TableHead className="text-right">Monto Esperado</TableHead>
-                        <TableHead className="text-right">Monto Contado</TableHead>
-                        <TableHead className="text-right">Diferencia</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead className="text-center">Ventas</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredClosings.length === 0 ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                            No se encontraron cierres de caja con los filtros aplicados
-                          </TableCell>
+                          <TableHead>Fecha y Hora</TableHead>
+                          <TableHead>Cajero</TableHead>
+                          <TableHead className="text-right">Monto Esperado</TableHead>
+                          <TableHead className="text-right">Monto Contado</TableHead>
+                          <TableHead className="text-right">Diferencia</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead className="text-center">Ventas</TableHead>
+                          <TableHead></TableHead>
                         </TableRow>
-                      ) : (
-                        filteredClosings.map((closing) => (
-                          <TableRow
-                            key={closing.id}
-                            className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => handleViewDetails(closing)}
-                          >
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <CalendarIcon className="size-4 text-muted-foreground" />
-                                <div>
-                                  <div className="font-medium">
-                                    {format(new Date(closing.date), "dd/MM/yyyy", {
-                                      locale: es,
-                                    })}
-                                  </div>
-                                  <div className="text-sm text-muted-foreground">
-                                    {format(new Date(closing.date), "HH:mm")}
-                                  </div>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <User className="size-4 text-muted-foreground" />
-                                {closing.user}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              ${closing.expectedAmount.toFixed(2)}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              ${closing.countedAmount.toFixed(2)}
-                            </TableCell>
-                            <TableCell
-                              className={`text-right font-bold ${getDifferenceColor(
-                                closing.difference
-                              )}`}
-                            >
-                              {closing.difference > 0 ? "+" : ""}
-                              ${closing.difference.toFixed(2)}
-                            </TableCell>
-                            <TableCell>{getStatusBadge(closing.status, closing.difference)}</TableCell>
-                            <TableCell className="text-center">
-                              <div className="text-sm">
-                                <div className="font-medium">{closing.transactionsCount}</div>
-                                <div className="text-muted-foreground">tickets</div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Button variant="ghost" size="icon">
-                                <ChevronRight className="size-4" />
-                              </Button>
+                      </TableHeader>
+                      <TableBody>
+                        {isLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                              <Loader2 className="size-5 animate-spin inline-block mr-2" />
+                              Cargando historial...
                             </TableCell>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                        ) : closings.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                              No se encontraron cierres de caja con los filtros aplicados
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          closings.map((closing) => (
+                            <TableRow
+                              key={closing.id}
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => void handleViewDetails(closing)}
+                            >
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <CalendarIcon className="size-4 text-muted-foreground" />
+                                  <div>
+                                    <div className="font-medium">
+                                      {format(new Date(closing.date), "dd/MM/yyyy", { locale: es })}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {format(new Date(closing.date), "HH:mm")}
+                                    </div>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <User className="size-4 text-muted-foreground" />
+                                  {closing.user}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                ${closing.expectedAmount.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                ${closing.countedAmount.toFixed(2)}
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-bold ${getDifferenceColor(closing.difference)}`}
+                              >
+                                {closing.difference > 0 ? "+" : ""}
+                                ${closing.difference.toFixed(2)}
+                              </TableCell>
+                              <TableCell>
+                                {getStatusBadge(closing.status, closing.difference)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="text-sm">
+                                  <div className="font-medium">{closing.transactionsCount}</div>
+                                  <div className="text-muted-foreground">tickets</div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Button variant="ghost" size="icon">
+                                  <ChevronRight className="size-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="mt-4 flex items-center justify-between gap-4">
+                      <p className="text-sm text-muted-foreground">
+                        Página {page} de {totalPages}
+                      </p>
+                      <Pagination>
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious
+                              href="#"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                if (page > 1) setPage(page - 1);
+                              }}
+                              className={page <= 1 ? "pointer-events-none opacity-50" : ""}
+                            />
+                          </PaginationItem>
+                          {Array.from({ length: totalPages }, (_, index) => index + 1)
+                            .filter(
+                              (pageNumber) =>
+                                pageNumber === 1 ||
+                                pageNumber === totalPages ||
+                                Math.abs(pageNumber - page) <= 1,
+                            )
+                            .map((pageNumber, index, visiblePages) => {
+                              const previous = visiblePages[index - 1];
+                              const showEllipsis = previous != null && pageNumber - previous > 1;
+
+                              return (
+                                <span key={pageNumber} className="flex items-center">
+                                  {showEllipsis && (
+                                    <PaginationItem>
+                                      <span className="px-2 text-muted-foreground">...</span>
+                                    </PaginationItem>
+                                  )}
+                                  <PaginationItem>
+                                    <PaginationLink
+                                      href="#"
+                                      isActive={pageNumber === page}
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        setPage(pageNumber);
+                                      }}
+                                    >
+                                      {pageNumber}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                </span>
+                              );
+                            })}
+                          <PaginationItem>
+                            <PaginationNext
+                              href="#"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                if (page < totalPages) setPage(page + 1);
+                              }}
+                              className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
+                            />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Modal de Detalle */}
-      {selectedClosing && (
-        <ClosingDetailModal
-          closing={selectedClosing}
-          open={detailOpen}
-          onOpenChange={setDetailOpen}
-        />
-      )}
+      <ClosingDetailModal
+        closing={selectedClosingDetail}
+        closingId={selectedClosingId}
+        isLoading={isDetailLoading}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
     </>
   );
 }

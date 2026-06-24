@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { PosAPI } from "../../../lib/pos-api";
 import { useTheme } from "../../../lib/theme-context";
+import { useAuth } from "../../../lib/auth-context";
+import { getEffectiveReceiptWidth } from "../../../lib/user-preferences";
 import type { Product, CartItem, Transaction, PaymentMethod, CashSession } from "../../../lib/wails-bridge";
 import { WailsAPI } from "../../../lib/wails-bridge";
 import type { VoucherType } from "./CheckoutModalEnhanced";
@@ -47,11 +49,21 @@ interface POSScreenEnhancedProps {
   onHeldOrdersChange: (orders: HeldOrder[]) => void;
 }
 
+function toCashAmount(value: unknown): number {
+  const amount = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function formatMoney(value: unknown): string {
+  return toCashAmount(value).toFixed(2);
+}
+
 export function POSScreenEnhanced({
   heldOrders,
   onHeldOrdersChange,
 }: POSScreenEnhancedProps) {
   const { themeConfig } = useTheme();
+  const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
@@ -209,65 +221,46 @@ export function POSScreenEnhanced({
     if (cartItems.length === 0) return;
 
     try {
-      const subtotal = calculateSubtotal();
       const total = calculateTotal();
-      const ticketId = Date.now().toString();
 
       const transaction: Transaction = {
-        id: ticketId,
+        id: Date.now().toString(),
         items: cartItems,
         total,
         timestamp: new Date().toISOString(),
       };
 
-      const receiptAdjustments = adjustments.map((adj) => ({
-        type: adj.type,
-        label: adj.label,
-        amount: adj.isPercentage ? (subtotal * adj.amount) / 100 : adj.amount,
-        isPercentage: adj.isPercentage,
-      }));
+      // Imprimir comprobante según el tipo
+      await WailsAPI.printReceipt(cartItems, total, {
+        receiptWidthMm: getEffectiveReceiptWidth(user?.id, themeConfig.receiptWidthMm ?? 80),
+        logoUrl: themeConfig.logoUrl,
+      });
 
-      let afipCae: string | undefined;
-
+      // Solo guardar transacción y descontar stock si NO es presupuesto
       if (voucherType !== "presupuesto") {
         await PosAPI.createSale(transaction, payments, voucherType);
       }
 
       if (voucherType === "factura") {
         try {
-          const afipResult = await PosAPI.facturarAfip({
+          await PosAPI.facturarAfip({
             tipo_afip: 6,
             tipo_documento: 99,
             documento: "0",
             total,
             id_condicion_iva: 5,
           });
-          const cae = (afipResult.result as { cae?: string })?.cae;
-          if (typeof cae === "string") {
-            afipCae = cae;
-          }
         } catch (afipError) {
           console.error("AFIP facturación failed:", afipError);
           toast.error(
             afipError instanceof Error
               ? `Venta registrada, pero falló la factura: ${afipError.message}`
-              : "Venta registrada, pero falló la factura electrónica",
+              : "Venta registrada, pero falló la factura electrónica"
           );
         }
       }
 
-      await WailsAPI.printReceipt(cartItems, total, {
-        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
-        logoUrl: themeConfig.logoUrl,
-        businessName: "Sistema Punto de Venta",
-        ticketId,
-        voucherType,
-        payments,
-        adjustments: receiptAdjustments,
-        subtotal,
-        afipCae,
-      });
-
+      // Mensaje según tipo de comprobante
       const voucherLabels = {
         factura: "Factura",
         comprobante: "Comprobante",
@@ -277,7 +270,7 @@ export function POSScreenEnhanced({
       toast.success(
         voucherType === "presupuesto"
           ? `${voucherLabels[voucherType]} generado (sin descuento de stock)`
-          : `${voucherLabels[voucherType]} generado exitosamente`,
+          : `${voucherLabels[voucherType]} generado exitosamente`
       );
 
       setCartItems([]);
@@ -345,8 +338,7 @@ export function POSScreenEnhanced({
     }
 
     try {
-      await PosAPI.startCashSession(amount);
-      const newSession = await PosAPI.getCashSession();
+      const newSession = await PosAPI.startCashSession(amount);
       setCashSession(newSession);
       setOpenCashDialogOpen(false);
       setInitialBalance("");
@@ -360,8 +352,10 @@ export function POSScreenEnhanced({
   const handleCloseCash = async () => {
     try {
       if (!cashSession) return;
-      const expectedAmount = cashSession.initialBalance + cashSession.totalSales;
-      await PosAPI.closeCashSession(cashSession.initialBalance + cashSession.totalSales, expectedAmount);
+      const initialBalance = toCashAmount(cashSession.initialBalance);
+      const totalSales = toCashAmount(cashSession.totalSales);
+      const expectedAmount = initialBalance + totalSales;
+      await PosAPI.closeCashSession(expectedAmount, expectedAmount);
       const newSession = await PosAPI.getCashSession();
       setCashSession(newSession);
       setCloseCashDialogOpen(false);
@@ -516,26 +510,7 @@ export function POSScreenEnhanced({
         onOpenChange={setCheckoutOpen}
         items={cartItems}
         subtotal={calculateTotal()}
-        adjustments={adjustments}
         onConfirm={handleCheckout}
-        onPreviewTicket={(voucherType) => {
-          const subtotal = calculateSubtotal();
-          const total = calculateTotal();
-          WailsAPI.previewReceipt(cartItems, total, {
-            receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
-            logoUrl: themeConfig.logoUrl,
-            businessName: "Sistema Punto de Venta",
-            ticketId: "PREVIEW",
-            voucherType,
-            subtotal,
-            adjustments: adjustments.map((adj) => ({
-              type: adj.type,
-              label: adj.label,
-              amount: adj.isPercentage ? (subtotal * adj.amount) / 100 : adj.amount,
-              isPercentage: adj.isPercentage,
-            })),
-          });
-        }}
       />
 
       {/* Diálogo de caja cerrada */}
@@ -654,19 +629,19 @@ export function POSScreenEnhanced({
               <div className="flex justify-between">
                 <span className="text-sm">Saldo Inicial:</span>
                 <span className="font-medium">
-                  ${cashSession.initialBalance.toFixed(2)}
+                  ${formatMoney(cashSession.initialBalance)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">Total Ventas:</span>
                 <span className="font-medium text-green-600">
-                  ${cashSession.totalSales.toFixed(2)}
+                  ${formatMoney(cashSession.totalSales)}
                 </span>
               </div>
               <div className="flex justify-between border-t pt-2">
                 <span className="font-medium">Monto Final:</span>
                 <span className="font-bold">
-                  ${(cashSession.initialBalance + cashSession.totalSales).toFixed(2)}
+                  ${formatMoney(toCashAmount(cashSession.initialBalance) + toCashAmount(cashSession.totalSales))}
                 </span>
               </div>
             </div>

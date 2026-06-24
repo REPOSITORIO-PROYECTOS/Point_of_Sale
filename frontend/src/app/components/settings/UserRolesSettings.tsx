@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
+import { Label } from "../ui/label";
+import { Input } from "../ui/input";
 import {
   Select,
   SelectContent,
@@ -20,35 +20,82 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import { PosAPI } from "../../../lib/pos-api";
-import { ShieldAlert, User, UserPlus } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { mockUserRoles, type UserRole as RoleDefinition } from "../../../lib/mock-data";
+import { PosAPI, type UserRole } from "../../../lib/pos-api";
+import { useAuth } from "../../../lib/auth-context";
+import {
+  ACCESS_LEVEL_LABELS,
+  ACCESS_LEVEL_SUMMARIES,
+  getRoleLabel,
+  type AccessLevel,
+} from "../../../lib/user-roles";
+import {
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  User,
+  Eye,
+  Edit,
+  DollarSign,
+  XCircle,
+  PercentCircle,
+  FileText,
+  UserPlus,
+  KeyRound,
+  Loader2,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 
-type ApiUser = {
+type ManagedUser = {
   id: string;
   username: string;
-  role: "admin" | "cashier";
+  role: UserRole;
   isActive: boolean;
   createdAt: string;
 };
 
+const ROLE_OPTIONS: AccessLevel[] = ["admin", "manager", "cashier", "auditor"];
+
 export function UserRolesSettings() {
-  const [users, setUsers] = useState<ApiUser[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [newUsername, setNewUsername] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<"admin" | "cashier">("cashier");
-  const [isCreating, setIsCreating] = useState(false);
+  const { user: currentUser } = useAuth();
+  const [selectedRole, setSelectedRole] = useState<RoleDefinition | null>(null);
+  const [roles] = useState<RoleDefinition[]>(mockUserRoles);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editUser, setEditUser] = useState<ManagedUser | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [createForm, setCreateForm] = useState({
+    username: "",
+    password: "",
+    role: "cashier" as UserRole,
+  });
+
+  const [editForm, setEditForm] = useState({
+    role: "cashier" as UserRole,
+    password: "",
+    isActive: true,
+  });
 
   const loadUsers = useCallback(async () => {
+    setIsLoadingUsers(true);
     try {
       const data = await PosAPI.getUsers();
       setUsers(data);
-    } catch (error) {
+    } catch {
       toast.error("No se pudieron cargar los usuarios");
-      console.error(error);
     } finally {
-      setIsLoading(false);
+      setIsLoadingUsers(false);
     }
   }, []);
 
@@ -56,160 +103,498 @@ export function UserRolesSettings() {
     void loadUsers();
   }, [loadUsers]);
 
-  const handleToggleActive = async (user: ApiUser, isActive: boolean) => {
-    try {
-      const updated = await PosAPI.updateUserActive(user.id, isActive);
-      setUsers((current) =>
-        current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
-      );
-      toast.success(`Usuario ${updated.username} ${isActive ? "habilitado" : "deshabilitado"}`);
-    } catch (error) {
-      toast.error("No se pudo actualizar el usuario");
-      console.error(error);
+  useEffect(() => {
+    if (!editUser) return;
+    setEditForm({
+      role: editUser.role,
+      password: "",
+      isActive: editUser.isActive,
+    });
+  }, [editUser]);
+
+  const getRoleIcon = (accessLevel: string) => {
+    switch (accessLevel) {
+      case "admin":
+        return <ShieldAlert className="size-5 text-red-600" />;
+      case "manager":
+        return <ShieldCheck className="size-5 text-blue-600" />;
+      case "cashier":
+        return <User className="size-5 text-green-600" />;
+      case "auditor":
+        return <Shield className="size-5 text-purple-600" />;
+      default:
+        return <User className="size-5" />;
     }
+  };
+
+  const getRoleBadgeVariant = (accessLevel: string) => {
+    switch (accessLevel) {
+      case "admin":
+        return "destructive";
+      case "manager":
+        return "default";
+      case "cashier":
+        return "secondary";
+      case "auditor":
+        return "outline";
+      default:
+        return "secondary";
+    }
+  };
+
+  const permissionLabels: Record<keyof RoleDefinition["permissions"], string> = {
+    canViewAudit: "Ver auditorías",
+    canEditProducts: "Editar productos",
+    canManageCash: "Gestionar caja",
+    canCancelSales: "Cancelar ventas",
+    canApplyDiscounts: "Aplicar descuentos",
+    canAccessReports: "Acceder a reportes",
+  };
+
+  const permissionIcons: Record<keyof RoleDefinition["permissions"], typeof Eye> = {
+    canViewAudit: Eye,
+    canEditProducts: Edit,
+    canManageCash: DollarSign,
+    canCancelSales: XCircle,
+    canApplyDiscounts: PercentCircle,
+    canAccessReports: FileText,
   };
 
   const handleCreateUser = async () => {
-    if (!newUsername.trim() || newPassword.length < 6) {
-      toast.error("Usuario (mín. 3) y contraseña (mín. 6) requeridos");
+    const username = createForm.username.trim();
+    if (username.length < 3) {
+      toast.error("El usuario debe tener al menos 3 caracteres");
+      return;
+    }
+    if (createForm.password.length < 8) {
+      toast.error("La contraseña debe tener al menos 8 caracteres");
       return;
     }
 
-    setIsCreating(true);
+    setIsSaving(true);
     try {
-      const created = await PosAPI.createUser(newUsername.trim(), newPassword, newRole);
-      setUsers((current) => [...current, created].sort((a, b) => a.username.localeCompare(b.username)));
-      setNewUsername("");
-      setNewPassword("");
-      setNewRole("cashier");
-      toast.success(`Usuario ${created.username} creado`);
+      await PosAPI.createUser({
+        username,
+        password: createForm.password,
+        role: createForm.role,
+      });
+      toast.success("Usuario creado correctamente");
+      setCreateOpen(false);
+      setCreateForm({ username: "", password: "", role: "cashier" });
+      await loadUsers();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo crear el usuario");
-      console.error(error);
+      const message = error instanceof Error ? error.message : "Error al crear usuario";
+      toast.error(message);
     } finally {
-      setIsCreating(false);
+      setIsSaving(false);
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Usuarios del sistema</h3>
-        <p className="text-sm text-muted-foreground">
-          Usuarios reales persistidos en SQLite. La deshabilitación remota vía portal usa el mismo
-          endpoint cuando el agente remoto esté emparejado.
-        </p>
-      </div>
+  const handleUpdateUser = async () => {
+    if (!editUser) return;
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus className="size-4" />
-            Crear usuario
-          </CardTitle>
-          <CardDescription>Agregá cajeros o administradores al POS local</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-4">
-          <div className="space-y-2">
-            <Label htmlFor="newUsername">Usuario</Label>
-            <Input
-              id="newUsername"
-              value={newUsername}
-              onChange={(event) => setNewUsername(event.target.value)}
-              placeholder="cajero2"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="newPassword">Contraseña</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              placeholder="mínimo 6 caracteres"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Rol</Label>
-            <Select value={newRole} onValueChange={(value: "admin" | "cashier") => setNewRole(value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cashier">Cajero</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-end">
-            <Button onClick={() => void handleCreateUser()} disabled={isCreating} className="w-full">
-              {isCreating ? "Creando…" : "Crear usuario"}
+    if (editForm.password && editForm.password.length < 8) {
+      toast.error("La contraseña debe tener al menos 8 caracteres");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const payload: { isActive?: boolean; password?: string; role?: UserRole } = {
+        isActive: editForm.isActive,
+        role: editForm.role,
+      };
+      if (editForm.password.trim()) {
+        payload.password = editForm.password;
+      }
+
+      await PosAPI.updateUser(editUser.id, payload);
+      toast.success("Usuario actualizado");
+      setEditUser(null);
+      await loadUsers();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Error al actualizar usuario";
+      toast.error(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+  return (
+    <>
+      <div className="space-y-8">
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Users className="size-5" />
+                Cuentas de usuario
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Creá usuarios, asigná roles y gestioná contraseñas y acceso
+              </p>
+            </div>
+            <Button onClick={() => setCreateOpen(true)} className="shrink-0">
+              <UserPlus className="size-4 mr-2" />
+              Nuevo usuario
             </Button>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Cuentas locales</CardTitle>
-          <CardDescription>Roles disponibles: admin y cashier</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Usuario</TableHead>
-                <TableHead>Rol</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Activo</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    Cargando usuarios...
-                  </TableCell>
-                </TableRow>
-              ) : users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    No hay usuarios registrados
-                  </TableCell>
-                </TableRow>
+          <Card>
+            <CardContent className="p-0">
+              {isLoadingUsers ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Cargando usuarios...
+                </div>
               ) : (
-                users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.username}</TableCell>
-                    <TableCell>
-                      <Badge variant={user.role === "admin" ? "destructive" : "secondary"}>
-                        {user.role === "admin" ? (
-                          <ShieldAlert className="size-3 mr-1 inline" />
-                        ) : (
-                          <User className="size-3 mr-1 inline" />
-                        )}
-                        {user.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.isActive ? "default" : "outline"}>
-                        {user.isActive ? "Activo" : "Inactivo"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Switch
-                        checked={user.isActive}
-                        onCheckedChange={(checked) => void handleToggleActive(user, checked)}
-                        aria-label={`Activar ${user.username}`}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>Rol</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Alta</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {users.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          No hay usuarios registrados
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      users.map((account) => (
+                        <TableRow key={account.id}>
+                          <TableCell className="font-medium">{account.username}</TableCell>
+                          <TableCell>
+                            <Badge variant={getRoleBadgeVariant(account.role) as "default"}>
+                              {getRoleLabel(account.role)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={account.isActive ? "default" : "secondary"}>
+                              {account.isActive ? "Activo" : "Inactivo"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {formatDate(account.createdAt)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditUser(account)}
+                            >
+                              <KeyRound className="size-4 mr-1" />
+                              Gestionar
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Roles y Permisos</h3>
+            <p className="text-sm text-muted-foreground">
+              Referencia de niveles de acceso y permisos por rol
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {roles.map((role) => (
+              <Card
+                key={role.id}
+                className="cursor-pointer hover:border-primary transition-colors"
+                onClick={() => setSelectedRole(role)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {getRoleIcon(role.accessLevel)}
+                      <h4 className="font-semibold">{role.name}</h4>
+                    </div>
+                    <Badge variant={getRoleBadgeVariant(role.accessLevel) as "default"}>
+                      {role.accessLevel}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {Object.entries(role.permissions).map(([key, value]) => {
+                      const Icon = permissionIcons[key as keyof RoleDefinition["permissions"]];
+                      return (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon className="size-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">
+                              {permissionLabels[key as keyof RoleDefinition["permissions"]]}
+                            </span>
+                          </div>
+                          <Badge variant={value ? "default" : "secondary"} className="text-xs">
+                            {value ? "Sí" : "No"}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">Niveles de Acceso</h3>
+            <p className="text-sm text-muted-foreground">
+              Guía rápida para elegir el rol adecuado al crear una cuenta
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {ROLE_OPTIONS.map((level) => (
+              <div
+                key={level}
+                className="flex items-start gap-3 rounded-lg border bg-card p-4 shadow-sm"
+              >
+                <div className="mt-0.5 shrink-0">{getRoleIcon(level)}</div>
+                <div className="min-w-0">
+                  <p className="font-semibold leading-tight">{ACCESS_LEVEL_LABELS[level]}</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {ACCESS_LEVEL_SUMMARIES[level]}
+                  </p>
+                  <Badge
+                    variant={getRoleBadgeVariant(level) as "default"}
+                    className="mt-2 text-xs"
+                  >
+                    {level}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="size-5" />
+              Nuevo usuario
+            </DialogTitle>
+            <DialogDescription>
+              Creá una cuenta con usuario, contraseña y nivel de acceso
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="new-username">Usuario</Label>
+              <Input
+                id="new-username"
+                value={createForm.username}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, username: e.target.value }))}
+                placeholder="ej: maria.gonzalez"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-password">Contraseña</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={createForm.password}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, password: e.target.value }))}
+                placeholder="Mínimo 8 caracteres"
+                autoComplete="new-password"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Rol</Label>
+              <Select
+                value={createForm.role}
+                onValueChange={(value) =>
+                  setCreateForm((prev) => ({ ...prev, role: value as UserRole }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map((level) => (
+                    <SelectItem key={level} value={level}>
+                      {ACCESS_LEVEL_LABELS[level]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {ACCESS_LEVEL_SUMMARIES[createForm.role as AccessLevel]}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void handleCreateUser()} disabled={isSaving}>
+              {isSaving ? <Loader2 className="size-4 animate-spin" /> : "Crear usuario"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editUser} onOpenChange={(open) => !open && setEditUser(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="size-5" />
+              Gestionar usuario
+            </DialogTitle>
+            <DialogDescription>
+              {editUser?.username} — cambiá rol, contraseña o estado de la cuenta
+            </DialogDescription>
+          </DialogHeader>
+
+          {editUser && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Rol</Label>
+                <Select
+                  value={editForm.role}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, role: value as UserRole }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLE_OPTIONS.map((level) => (
+                      <SelectItem key={level} value={level}>
+                        {ACCESS_LEVEL_LABELS[level]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-password">Nueva contraseña</Label>
+                <Input
+                  id="edit-password"
+                  type="password"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, password: e.target.value }))}
+                  placeholder="Dejar vacío para no cambiar"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <p className="font-medium">Cuenta activa</p>
+                  <p className="text-sm text-muted-foreground">
+                    {editUser.id === currentUser?.id
+                      ? "No podés desactivar tu propia sesión"
+                      : "Los usuarios inactivos no pueden iniciar sesión"}
+                  </p>
+                </div>
+                <Switch
+                  checked={editForm.isActive}
+                  disabled={editUser.id === currentUser?.id}
+                  onCheckedChange={(checked) =>
+                    setEditForm((prev) => ({ ...prev, isActive: checked }))
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUser(null)} disabled={isSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void handleUpdateUser()} disabled={isSaving}>
+              {isSaving ? <Loader2 className="size-4 animate-spin" /> : "Guardar cambios"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!selectedRole}
+        onOpenChange={(open) => !open && setSelectedRole(null)}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedRole && getRoleIcon(selectedRole.accessLevel)}
+              {selectedRole?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Permisos asignados a este rol (solo lectura)
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRole && (
+            <div className="space-y-6 py-4">
+              <div>
+                <Label className="text-base mb-4 block">Permisos</Label>
+                <div className="space-y-3">
+                  {Object.entries(selectedRole.permissions).map(([key, value]) => {
+                    const Icon = permissionIcons[key as keyof RoleDefinition["permissions"]];
+                    return (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between p-3 border rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Icon className="size-5 text-muted-foreground" />
+                          <p className="font-medium">
+                            {permissionLabels[key as keyof RoleDefinition["permissions"]]}
+                          </p>
+                        </div>
+                        <Switch checked={value} disabled />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button variant="outline" onClick={() => setSelectedRole(null)}>
+                  Cerrar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -17,10 +17,21 @@ export function LoginView() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+
+    const trimmedUsername = username.trim();
+    if (trimmedUsername.length < 3) {
+      setError("El usuario debe tener al menos 3 caracteres");
+      return;
+    }
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      await login(username.trim(), password);
+      await login(trimmedUsername, password);
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "No se pudo iniciar sesión";
@@ -55,6 +66,7 @@ export function LoginView() {
                 autoComplete="username"
                 autoFocus
                 required
+                minLength={3}
               />
             </div>
             <div className="space-y-2">
@@ -66,6 +78,7 @@ export function LoginView() {
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="current-password"
                 required
+                minLength={6}
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}

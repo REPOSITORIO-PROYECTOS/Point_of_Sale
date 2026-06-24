@@ -9,6 +9,7 @@ import { ImportExportView } from "./components/inventory/ImportExportView";
 import { AuditView } from "./components/audit/AuditView";
 
 import { LoginView } from "./components/auth/LoginView";
+import { SetupView } from "./components/auth/SetupView";
 
 import { Header } from "./components/layout/Header";
 
@@ -24,7 +25,8 @@ import { ThemeProvider as NextThemeProvider } from "./components/theme-provider"
 
 import { ThemeProvider } from "../lib/theme-context";
 
-import { AuthProvider, useAuth } from "../lib/auth-context";
+import { useAuth } from "../lib/auth-context";
+import { AuthProvider } from "../lib/auth-provider";
 
 import { BusinessSettingsProvider, useBusinessSettings } from "../lib/business-settings-context";
 
@@ -36,7 +38,7 @@ import { HeldOrder } from "./components/pos/OrderQueuePanel";
 
 function AppContent() {
 
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, needsSetup, apiUnavailable } = useAuth();
 
   const { settings: businessSettings } = useBusinessSettings();
 
@@ -82,7 +84,27 @@ function AppContent() {
 
         }
 
-
+        if (apiUnavailable) {
+          return (
+            <div className="size-full flex flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+              <h1 className="text-xl font-semibold text-foreground">API no disponible</h1>
+              <p className="max-w-md text-muted-foreground">
+                No se pudo conectar con el backend en{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-sm">127.0.0.1:3001</code>.
+                Ejecutá <code className="rounded bg-muted px-1.5 py-0.5 text-sm">npm run dev:api</code> o{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-sm">npm run dev:stack</code> desde la raíz del
+                proyecto.
+              </p>
+              <button
+                type="button"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                onClick={() => window.location.reload()}
+              >
+                Reintentar
+              </button>
+            </div>
+          );
+        }
 
         if (license && !license.allowed) {
 
@@ -105,9 +127,11 @@ function AppContent() {
 
 
         if (!user) {
+          if (needsSetup) {
+            return <SetupView />;
+          }
 
           return <LoginView />;
-
         }
 
 

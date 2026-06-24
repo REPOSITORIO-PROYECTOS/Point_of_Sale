@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useAuth } from "../../../lib/auth-context";
 import { useTheme } from "../../../lib/theme-context";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +22,6 @@ import {
 import {
   ShoppingCart,
   User,
-  Settings,
   Store,
   Palette,
   DollarSign,
@@ -31,14 +32,12 @@ import {
   ClipboardList,
   Shield,
   FileKey,
-  Cloud,
 } from "lucide-react";
 import { AppearanceSettings } from "../settings/AppearanceSettings";
 import { AfipCredentialsSettings } from "../settings/AfipCredentialsSettings";
-import { BusinessSettings } from "../settings/BusinessSettings";
-import { RemoteSettings } from "../settings/RemoteSettings";
 import { UserRolesSettings } from "../settings/UserRolesSettings";
-import { useBusinessSettings } from "../../../lib/business-settings-context";
+import { UserProfileSettings } from "../settings/UserProfileSettings";
+import { getRoleLabel } from "../../../lib/user-roles";
 
 interface HeaderProps {
   activeTab: string;
@@ -47,19 +46,16 @@ interface HeaderProps {
 
 export function Header({ activeTab, onTabChange }: HeaderProps) {
   const { user, logout, isAdmin } = useAuth();
-  const { settings: businessSettings } = useBusinessSettings();
   const { themeConfig } = useTheme();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(false);
   const [afipOpen, setAfipOpen] = useState(false);
-  const [remoteOpen, setRemoteOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const navigationItems = [
     { id: "pos", label: "Mostrador", icon: ShoppingCart },
-    ...(isAdmin && businessSettings.parcelsEnabled
-      ? [{ id: "parcels", label: "Encomiendas", icon: Package }]
-      : []),
+    ...(isAdmin ? [{ id: "parcels", label: "Encomiendas", icon: Package }] : []),
   ];
 
   return (
@@ -176,14 +172,6 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
                     <FileKey className="size-4 mr-2" />
                     Certificados AFIP
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setRemoteOpen(true)}>
-                    <Cloud className="size-4 mr-2" />
-                    Conexión Remota
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Settings className="size-4 mr-2" />
-                    Configuración General
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -200,7 +188,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
                   </div>
                   <div className="text-left hidden md:block">
                     <p className="text-sm font-medium">
-                      {user?.role === "admin" ? "Administrador" : "Cajero"}
+                      {user ? getRoleLabel(user.role) : ""}
                     </p>
                     <p className="text-xs opacity-75">{user?.username}</p>
                   </div>
@@ -209,13 +197,9 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setProfileOpen(true)}>
                   <User className="size-4 mr-2" />
                   Perfil de Usuario
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="size-4 mr-2" />
-                  Preferencias
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="text-destructive" onClick={logout}>
@@ -264,7 +248,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
           <DialogHeader>
             <DialogTitle>Certificados AFIP</DialogTitle>
             <DialogDescription>
-              Importá CUIT, certificado y clave privada para facturación electrónica
+              Generá la clave y CSR, subilo a AFIP y después importá el certificado aprobado
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-auto max-h-[calc(85vh-8rem)]">
@@ -273,32 +257,81 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Conexión Remota */}
-      <Dialog open={remoteOpen} onOpenChange={setRemoteOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh]">
+      {/* Modal de Datos del Negocio */}
+      <Dialog open={businessOpen} onOpenChange={setBusinessOpen}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Conexión Remota</DialogTitle>
+            <DialogTitle>Datos del Negocio</DialogTitle>
             <DialogDescription>
-              Emparejá esta caja con el portal POS Remoto para supervisión a distancia
+              Configura la información de tu negocio
             </DialogDescription>
           </DialogHeader>
-          <div className="overflow-auto max-h-[calc(85vh-8rem)]">
-            <RemoteSettings />
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Nombre del Negocio</Label>
+                <Input
+                  type="text"
+                  placeholder="Mi Negocio"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>RUT / CUIT</Label>
+                <Input
+                  type="text"
+                  placeholder="12-34567890-1"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Teléfono</Label>
+                <Input
+                  type="tel"
+                  placeholder="+54 11 1234-5678"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  placeholder="contacto@negocio.com"
+                  className="mt-1"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Dirección</Label>
+                <Input
+                  type="text"
+                  placeholder="Calle 123, Ciudad"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setBusinessOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => setBusinessOpen(false)}>
+                Guardar Cambios
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Datos del Negocio */}
-      <Dialog open={businessOpen} onOpenChange={setBusinessOpen}>
+      {/* Modal de Perfil de Usuario */}
+      <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh]">
           <DialogHeader>
-            <DialogTitle>Datos del Negocio</DialogTitle>
+            <DialogTitle>Perfil de Usuario</DialogTitle>
             <DialogDescription>
-              Información del local y módulos activos (encomiendas, etc.)
+              Administrá tu cuenta, contraseña y preferencias personales
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-auto max-h-[calc(85vh-8rem)]">
-            <BusinessSettings onSaved={() => setBusinessOpen(false)} />
+            <UserProfileSettings />
           </div>
         </DialogContent>
       </Dialog>

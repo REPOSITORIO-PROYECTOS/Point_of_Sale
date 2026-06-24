@@ -31,6 +31,7 @@ type UploadedLogoFile = {
 export class SettingsController {
   constructor(private readonly service: SettingsService) {}
 
+  @PublicRoute()
   @Get('theme')
   getTheme() {
     return this.service.getTheme();

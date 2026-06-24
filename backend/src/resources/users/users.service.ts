@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -35,13 +36,12 @@ export class UsersService {
   async create(payload: CreateUserDto) {
     const username = payload.username.trim();
     const existing = await this.repository.findOne({ where: { username } });
-
     if (existing) {
-      throw new ConflictException(`User ${username} already exists`);
+      throw new ConflictException(`El usuario "${username}" ya existe`);
     }
 
     const passwordHash = await bcrypt.hash(payload.password, 10);
-    const entity = this.repository.create({
+    const saved = await this.repository.save({
       id: randomUUID(),
       username,
       passwordHash,
@@ -49,18 +49,32 @@ export class UsersService {
       isActive: true,
     });
 
-    const saved = await this.repository.save(entity);
     return toUserResponse(saved);
   }
 
-  async update(id: string, payload: UpdateUserDto) {
+  async update(id: string, payload: UpdateUserDto, actorId?: string) {
     const user = await this.repository.findOne({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`User ${id} not found`);
     }
 
-    user.isActive = payload.isActive;
+    if (payload.isActive === false && actorId === id) {
+      throw new BadRequestException('No podés desactivar tu propia cuenta');
+    }
+
+    if (payload.role !== undefined) {
+      user.role = payload.role;
+    }
+
+    if (payload.isActive !== undefined) {
+      user.isActive = payload.isActive;
+    }
+
+    if (payload.password) {
+      user.passwordHash = await bcrypt.hash(payload.password, 10);
+    }
+
     const saved = await this.repository.save(user);
     return toUserResponse(saved);
   }

@@ -59,6 +59,7 @@ export interface CashSession {
   endTime?: string;
   initialBalance: number;
   finalBalance?: number;
+  countedAmount?: number;
   totalSales: number;
   salesByPaymentMethod?: {
     cash: number;

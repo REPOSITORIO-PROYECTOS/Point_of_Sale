@@ -27,10 +27,10 @@ export class CashSessionEntity {
   salesByPaymentMethod!: string;
 
   @Column({ type: 'text', nullable: true })
-  closedByUsername?: string | null;
+  openedByUserId?: string | null;
 
   @Column({ type: 'text', nullable: true })
-  closedByRole?: string | null;
+  closedByUserId?: string | null;
 
   @CreateDateColumn({ type: 'datetime' })
   createdAt!: Date;

@@ -49,3 +49,35 @@ test('AFIP config partial flow: private key then certificate', async (t) => {
   assert.equal(complete.hasCertificate, true);
   assert.equal(complete.hasPrivateKey, true);
 });
+
+test('AFIP config generate CSR flow: key saved and certificate completes setup', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afip-csr-test-'));
+  t.after(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  process.env.APP_DATA_DIR = tempDir;
+
+  const { AfipConfigService } = await import('./afip-config.service');
+  const service = new AfipConfigService();
+
+  const generated = service.generateCsrAndSaveKey({
+    cuit: '20123456789',
+    organization: 'EmpresaPrueba',
+    commonName: 'PointOfSale',
+    puntoVenta: 3,
+    production: false,
+  });
+
+  assert.match(generated.csr, /BEGIN CERTIFICATE REQUEST/);
+  assert.equal(generated.status.configured, false);
+  assert.equal(generated.status.pendingCertificate, true);
+  assert.equal(generated.status.hasPrivateKey, true);
+  assert.equal(generated.status.hasCertificate, false);
+  assert.equal(generated.status.puntoVenta, 3);
+
+  const complete = service.importCertificate({ certificado: SAMPLE_CERT });
+
+  assert.equal(complete.configured, true);
+  assert.equal(complete.pendingCertificate, false);
+});

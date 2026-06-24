@@ -8,17 +8,31 @@ import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { Badge } from "../ui/badge";
 import { toast } from "sonner";
-import { FileKey, ShieldCheck, Upload } from "lucide-react";
+import { Copy, Download, FileKey, KeyRound, ShieldCheck, Upload } from "lucide-react";
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "application/x-pem-file" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 export function AfipCredentialsSettings() {
   const [status, setStatus] = useState<AfipConfigStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGeneratingCsr, setIsGeneratingCsr] = useState(false);
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [isSavingCert, setIsSavingCert] = useState(false);
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [cuit, setCuit] = useState("");
+  const [organization, setOrganization] = useState("PointOfSale");
+  const [commonName, setCommonName] = useState("PointOfSale");
   const [puntoVenta, setPuntoVenta] = useState("1");
   const [production, setProduction] = useState(false);
+  const [csr, setCsr] = useState("");
   const [certificado, setCertificado] = useState("");
   const [clavePrivada, setClavePrivada] = useState("");
 
@@ -54,6 +68,46 @@ export function AfipCredentialsSettings() {
     setClavePrivada(content);
   };
 
+  const handleGenerateCsr = async () => {
+    setIsGeneratingCsr(true);
+
+    try {
+      const result = await PosAPI.generateAfipCsr({
+        cuit,
+        organization,
+        commonName,
+        puntoVenta: Number(puntoVenta),
+        production,
+      });
+
+      setCsr(result.csr);
+      setStatus(result.status);
+      setClavePrivada("");
+      toast.success("Clave generada y guardada. Subí el CSR a AFIP y después importá el .crt aprobado.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo generar el CSR");
+    } finally {
+      setIsGeneratingCsr(false);
+    }
+  };
+
+  const handleCopyCsr = async () => {
+    if (!csr) return;
+
+    try {
+      await navigator.clipboard.writeText(csr);
+      toast.success("CSR copiado al portapapeles");
+    } catch {
+      toast.error("No se pudo copiar el CSR");
+    }
+  };
+
+  const handleDownloadCsr = () => {
+    if (!csr) return;
+    const normalizedCuit = cuit.replace(/\D/g, "") || "empresa";
+    downloadTextFile(`afip-${normalizedCuit}-pedido.csr`, csr);
+  };
+
   const handleSavePrivateKey = async () => {
     setIsSavingKey(true);
 
@@ -81,7 +135,8 @@ export function AfipCredentialsSettings() {
       const result = await PosAPI.importAfipCertificate({ certificado });
 
       setStatus(result.status);
-      toast.success("Certificado AFIP importado correctamente");
+      setCsr("");
+      toast.success("Certificado AFIP importado y unido con la clave guardada");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo importar el certificado");
     } finally {
@@ -121,7 +176,8 @@ export function AfipCredentialsSettings() {
             Certificados AFIP
           </CardTitle>
           <CardDescription>
-            Guardá la clave privada mientras AFIP procesa el CSR. Cuando llegue el certificado (.crt), importalo para completar la configuración.
+            El sistema puede generar la clave privada, guardarla localmente y darte el CSR para subirlo a AFIP.
+            Cuando AFIP apruebe el certificado (.crt), importalo acá y el sistema lo une con la clave guardada.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -165,6 +221,26 @@ export function AfipCredentialsSettings() {
                 className="mt-1"
               />
             </div>
+            <div>
+              <Label htmlFor="afip-organization">Empresa (O=)</Label>
+              <Input
+                id="afip-organization"
+                value={organization}
+                onChange={(event) => setOrganization(event.target.value)}
+                placeholder="Mi Empresa"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="afip-common-name">Sistema (CN=)</Label>
+              <Input
+                id="afip-common-name"
+                value={commonName}
+                onChange={(event) => setCommonName(event.target.value)}
+                placeholder="PointOfSale"
+                className="mt-1"
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-between rounded-lg border p-4">
@@ -186,11 +262,65 @@ export function AfipCredentialsSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileKey className="size-5" />
-            Paso 1 — Clave privada
+            <KeyRound className="size-5" />
+            Paso 1 — Generar clave y CSR
           </CardTitle>
           <CardDescription>
-            Generá o importá la clave privada y guardala localmente mientras esperás el certificado de AFIP.
+            Generá la clave RSA 2048, guardala en el sistema y descargá el pedido CSR (sin aprobar) para subirlo en WSASS/AFIP.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => void loadStatus()} disabled={isLoading || isGeneratingCsr}>
+              Recargar
+            </Button>
+            <Button onClick={() => void handleGenerateCsr()} disabled={isGeneratingCsr || !cuit || status?.hasCertificate}>
+              <KeyRound className="size-4 mr-2" />
+              {isGeneratingCsr ? "Generando..." : "Generar clave y CSR"}
+            </Button>
+          </div>
+
+          {(csr || showCertificateStep) && (
+            <div className="space-y-3 rounded-lg border p-4">
+              <div>
+                <Label htmlFor="afip-csr-text">Pedido CSR para AFIP</Label>
+                <Textarea
+                  id="afip-csr-text"
+                  value={csr}
+                  readOnly={!csr}
+                  onChange={(event) => setCsr(event.target.value)}
+                  placeholder="-----BEGIN CERTIFICATE REQUEST-----"
+                  className="mt-1 min-h-32 font-mono text-xs"
+                />
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="outline" onClick={() => void handleCopyCsr()} disabled={!csr}>
+                  <Copy className="size-4 mr-2" />
+                  Copiar CSR
+                </Button>
+                <Button variant="outline" onClick={handleDownloadCsr} disabled={!csr}>
+                  <Download className="size-4 mr-2" />
+                  Descargar .csr
+                </Button>
+              </div>
+              {status?.hasPrivateKey && !status?.hasCertificate && (
+                <p className="text-sm text-muted-foreground">
+                  La clave privada ya quedó guardada en el sistema. No hace falta volver a subirla cuando importes el .crt.
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileKey className="size-5" />
+            Paso 1 alternativo — Importar clave existente
+          </CardTitle>
+          <CardDescription>
+            Si ya generaste la clave con OpenSSL u otra herramienta, importala manualmente.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -216,10 +346,7 @@ export function AfipCredentialsSettings() {
             />
           </div>
 
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => void loadStatus()} disabled={isLoading || isSavingKey}>
-              Recargar
-            </Button>
+          <div className="flex justify-end">
             <Button onClick={() => void handleSavePrivateKey()} disabled={isSavingKey || !cuit || !clavePrivada}>
               <Upload className="size-4 mr-2" />
               {isSavingKey ? "Guardando..." : "Guardar clave privada"}
@@ -236,7 +363,7 @@ export function AfipCredentialsSettings() {
               Paso 2 — Certificado aprobado
             </CardTitle>
             <CardDescription>
-              Cuando AFIP apruebe el CSR, importá el archivo .crt para habilitar la facturación electrónica.
+              Cuando AFIP apruebe el CSR, importá el archivo .crt. El sistema lo une automáticamente con la clave guardada.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -265,7 +392,7 @@ export function AfipCredentialsSettings() {
             <div className="flex justify-end">
               <Button onClick={() => void handleImportCertificate()} disabled={isSavingCert || !certificado}>
                 <Upload className="size-4 mr-2" />
-                {isSavingCert ? "Importando..." : "Importar certificado"}
+                {isSavingCert ? "Importando..." : "Importar certificado aprobado"}
               </Button>
             </div>
           </CardContent>

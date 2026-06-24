@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { env } from '@/config/env.config';
+import { generateAfipCsr } from './afip-csr.generator';
 import type { AfipConfigStatus, AfipStoredConfig } from './afip-config.types';
 import {
   ensureAfipStorageDir,
@@ -37,6 +38,14 @@ type SaveAfipPrivateKeyInput = {
 
 type ImportAfipCertificateInput = {
   certificado: string;
+};
+
+type GenerateAfipCsrInput = {
+  cuit: string;
+  organization?: string;
+  commonName?: string;
+  puntoVenta?: number;
+  production?: boolean;
 };
 
 @Injectable()
@@ -98,6 +107,45 @@ export class AfipConfigService {
       }
 
       throw new BadRequestException(error instanceof Error ? error.message : 'Invalid AFIP credentials');
+    }
+  }
+
+  generateCsrAndSaveKey(input: GenerateAfipCsrInput) {
+    const status = this.getStatus();
+
+    if (status.hasCertificate) {
+      throw new BadRequestException(
+        'A certificate is already configured. Remove it before generating a new key pair.',
+      );
+    }
+
+    try {
+      const cuit = validateCuit(input.cuit);
+      const organization = input.organization?.trim() || 'PointOfSale';
+      const commonName = input.commonName?.trim() || 'PointOfSale';
+      const { privateKeyPem, csrPem } = generateAfipCsr({
+        cuit,
+        organization,
+        commonName,
+      });
+
+      const nextStatus = this.savePrivateKey({
+        cuit,
+        clavePrivada: privateKeyPem,
+        puntoVenta: input.puntoVenta,
+        production: input.production,
+      });
+
+      return {
+        csr: csrPem,
+        status: nextStatus,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException(error instanceof Error ? error.message : 'Could not generate AFIP CSR');
     }
   }
 

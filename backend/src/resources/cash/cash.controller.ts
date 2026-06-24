@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import type { AuthUser } from '../../auth/auth.types';
+import type { AuthUser } from '@/auth/auth.types';
 import { CloseCashSessionDto } from './dto/close-cash-session.dto';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
+import { FindCashClosingsDto } from './dto/find-cash-closings.dto';
 import { StartCashSessionDto } from './dto/start-cash-session.dto';
 import { CashService } from './cash.service';
 
@@ -29,23 +30,23 @@ export class CashController {
     return this.service.getSession();
   }
 
-  @Get('sessions/history')
-  listClosedSessions() {
-    return this.service.listClosedSessions();
+  @Get('closings')
+  findClosings(@Query() query: FindCashClosingsDto) {
+    return this.service.findClosings(query);
+  }
+
+  @Get('closings/:id')
+  getClosingDetail(@Param('id') id: string) {
+    return this.service.getClosingDetail(id);
   }
 
   @Post('session/start')
-  startSession(@Body() payload: StartCashSessionDto) {
-    return this.service.startSession(payload);
+  startSession(@Body() payload: StartCashSessionDto, @Req() request: AuthenticatedRequest) {
+    return this.service.startSession(payload, request.user?.id);
   }
 
   @Post('session/close')
   closeSession(@Body() payload: CloseCashSessionDto, @Req() request: AuthenticatedRequest) {
-    const user = request.user;
-    const closedBy = user
-      ? { username: user.username, role: user.role }
-      : undefined;
-
-    return this.service.closeSession(payload, closedBy);
+    return this.service.closeSession(payload, request.user?.id);
   }
 }

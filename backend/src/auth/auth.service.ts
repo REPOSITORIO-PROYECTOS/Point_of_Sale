@@ -13,6 +13,7 @@ import { LicenseService } from '@/license/license.service';
 import type { AuthUser, JwtPayload } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { SetupAdminDto } from './dto/setup-admin.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserEntity } from './user.entity';
 
 @Injectable()
@@ -82,6 +83,50 @@ export class AuthService {
 
   profile(user: AuthUser) {
     return user;
+  }
+
+  async updateProfile(authUser: AuthUser, payload: UpdateProfileDto) {
+    const user = await this.usersRepository.findOne({ where: { id: authUser.id } });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Usuario no encontrado o inactivo');
+    }
+
+    if (payload.password !== undefined) {
+      if (!payload.currentPassword) {
+        throw new BadRequestException('Debe ingresar la contraseña actual');
+      }
+      if (payload.password !== payload.confirmPassword) {
+        throw new BadRequestException('Las contraseñas no coinciden');
+      }
+
+      const passwordMatches = await bcrypt.compare(payload.currentPassword, user.passwordHash);
+      if (!passwordMatches) {
+        throw new UnauthorizedException('La contraseña actual es incorrecta');
+      }
+
+      user.passwordHash = await bcrypt.hash(payload.password, 10);
+    }
+
+    if (payload.username !== undefined) {
+      const username = payload.username.trim();
+      if (username.length < 3) {
+        throw new BadRequestException('El usuario debe tener al menos 3 caracteres');
+      }
+      if (username !== user.username) {
+        const existing = await this.usersRepository.findOne({ where: { username } });
+        if (existing) {
+          throw new ConflictException(`El usuario "${username}" ya existe`);
+        }
+        user.username = username;
+      }
+    }
+
+    const saved = await this.usersRepository.save(user);
+    const updatedAuthUser = toAuthUser(saved);
+    const accessToken = await this.jwtService.signAsync(toJwtPayload(updatedAuthUser));
+
+    return { accessToken, user: updatedAuthUser };
   }
 
   verifyToken(token: string): AuthUser {

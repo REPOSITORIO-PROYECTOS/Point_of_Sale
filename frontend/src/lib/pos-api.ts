@@ -5,21 +5,12 @@ import { mapThemeConfigFromApi } from "./theme-logo";
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 const AUTH_TOKEN_KEY = "pos.auth.token";
 
-export type UserRole = "admin" | "cashier";
+export type UserRole = "admin" | "manager" | "cashier" | "auditor";
 
 export type AuthUser = {
   id: string;
   username: string;
   role: UserRole;
-};
-
-export type BusinessSettings = {
-  businessName?: string;
-  taxId?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  parcelsEnabled: boolean;
 };
 
 export type LoginResponse = {
@@ -84,9 +75,112 @@ export type SetupAdminPayload = {
   confirmPassword: string;
 };
 
+export type UpdateProfilePayload = {
+  username?: string;
+  currentPassword?: string;
+  password?: string;
+  confirmPassword?: string;
+};
+
+export type CashClosingStatus = "perfect" | "surplus" | "shortage";
+
+export type CashClosingSummary = {
+  id: string;
+  date: string;
+  user: string;
+  userId?: string;
+  userRole: string;
+  expectedAmount: number;
+  countedAmount: number;
+  difference: number;
+  status: CashClosingStatus;
+  totalSales: number;
+  transactionsCount: number;
+  salesByMethod: {
+    cash: number;
+    card: number;
+    transfer: number;
+    qr: number;
+  };
+};
+
+export type CashClosingDetail = CashClosingSummary & {
+  sales: Array<{
+    id: string;
+    time: string;
+    items: Array<{ id: string; name: string; quantity: number; price: number }>;
+    paymentMethod: string;
+    paymentDetails?: Array<{ method: string; amount: number }>;
+    subtotal: number;
+    amount: number;
+    cashier: string;
+    cashierRole: string;
+  }>;
+  businessData: {
+    name: string;
+    rut: string;
+    phone: string;
+    email: string;
+    address: string;
+  };
+};
+
+export type CashClosingsPage = {
+  items: CashClosingSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  cashiers: Array<{ id: string; username: string; role: UserRole }>;
+};
+
+export type CashClosingsQuery = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  userId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+function buildCashClosingsQuery(params: CashClosingsQuery): string {
+  const search = new URLSearchParams();
+  if (params.page) search.set("page", String(params.page));
+  if (params.pageSize) search.set("pageSize", String(params.pageSize));
+  if (params.search?.trim()) search.set("search", params.search.trim());
+  if (params.userId && params.userId !== "all") search.set("userId", params.userId);
+  if (params.dateFrom) search.set("dateFrom", params.dateFrom);
+  if (params.dateTo) search.set("dateTo", params.dateTo);
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
 function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function toCashAmount(value: unknown): number {
+  const amount = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function normalizeCashSession(session: CashSession | null): CashSession | null {
+  if (!session) return null;
+
+  return {
+    ...session,
+    initialBalance: toCashAmount(session.initialBalance),
+    totalSales: toCashAmount(session.totalSales),
+    finalBalance: session.finalBalance != null ? toCashAmount(session.finalBalance) : undefined,
+    countedAmount: session.countedAmount != null ? toCashAmount(session.countedAmount) : undefined,
+    salesByPaymentMethod: session.salesByPaymentMethod ?? {
+      cash: 0,
+      card: 0,
+      transfer: 0,
+      qr: 0,
+    },
+  };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -168,6 +262,14 @@ export type ImportAfipCertificatePayload = {
   certificado: string;
 };
 
+export type GenerateAfipCsrPayload = {
+  cuit: string;
+  organization?: string;
+  commonName?: string;
+  puntoVenta?: number;
+  production?: boolean;
+};
+
 export type AfipFacturaPayload = {
   tipo_afip: number;
   punto_venta?: number;
@@ -198,19 +300,34 @@ export const PosAPI = {
 
   getMe: () => request<AuthUser>("/auth/me"),
 
+  updateProfile: (payload: UpdateProfilePayload) =>
+    request<LoginResponse>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
   getUsers: () =>
     request<Array<AuthUser & { isActive: boolean; createdAt: string }>>("/users"),
+
+  createUser: (payload: { username: string; password: string; role: UserRole }) =>
+    request<AuthUser & { isActive: boolean; createdAt: string }>("/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateUser: (
+    userId: string,
+    payload: { isActive?: boolean; password?: string; role?: UserRole },
+  ) =>
+    request<AuthUser & { isActive: boolean; createdAt: string }>(`/users/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
 
   updateUserActive: (userId: string, isActive: boolean) =>
     request<AuthUser & { isActive: boolean; createdAt: string }>(`/users/${encodeURIComponent(userId)}`, {
       method: "PATCH",
       body: JSON.stringify({ isActive }),
-    }),
-
-  createUser: (username: string, password: string, role: "admin" | "cashier") =>
-    request<AuthUser & { isActive: boolean; createdAt: string }>("/users", {
-      method: "POST",
-      body: JSON.stringify({ username, password, role }),
     }),
 
   getProductByBarcode: (code: string) =>
@@ -248,41 +365,32 @@ export const PosAPI = {
       body: JSON.stringify({ products: products.map(toProductPayload) }),
     }).then((saved) => saved.map((product) => normalizeProduct(product))),
 
-  getCashSession: () => request<CashSession | null>("/cash/session"),
+  getCashSession: async () => {
+    const session = await request<CashSession | null>("/cash/session");
+    return normalizeCashSession(session);
+  },
 
-  getCashSessionHistory: () =>
-    request<
-      Array<
-        CashSession & {
-          expectedBalance?: number;
-          countedAmount?: number;
-          endTime?: string;
-          closedByUsername?: string;
-          closedByRole?: string;
-          transactionsCount?: number;
-        }
-      >
-    >("/cash/sessions/history"),
-
-  getBusinessSettings: () => request<BusinessSettings>("/settings/business"),
-
-  updateBusinessSettings: (payload: Partial<BusinessSettings>) =>
-    request<BusinessSettings>("/settings/business", {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    }),
-
-  startCashSession: (initialBalance: number) =>
-    request<CashSession>("/cash/session/start", {
+  startCashSession: async (initialBalance: number) => {
+    const session = await request<CashSession>("/cash/session/start", {
       method: "POST",
       body: JSON.stringify({ initialBalance }),
-    }),
+    });
+    return normalizeCashSession(session)!;
+  },
 
-  closeCashSession: (expectedBalance: number, countedAmount: number) =>
-    request<CashSession>("/cash/session/close", {
+  closeCashSession: async (expectedBalance: number, countedAmount: number) => {
+    const session = await request<CashSession>("/cash/session/close", {
       method: "POST",
       body: JSON.stringify({ expectedBalance, countedAmount }),
-    }),
+    });
+    return normalizeCashSession(session)!;
+  },
+
+  getCashClosings: (params: CashClosingsQuery = {}) =>
+    request<CashClosingsPage>(`/cash/closings${buildCashClosingsQuery(params)}`),
+
+  getCashClosingDetail: (closingId: string) =>
+    request<CashClosingDetail>(`/cash/closings/${encodeURIComponent(closingId)}`),
 
   createSale: (transaction: Transaction, payments?: PaymentMethod[], voucherType?: string) =>
     request<Transaction>("/sales", {
@@ -312,6 +420,11 @@ export const PosAPI = {
     }),
   saveAfipPrivateKey: (payload: SaveAfipPrivateKeyPayload) =>
     request<{ message: string; status: AfipConfigStatus }>("/integrations/afip/private-key", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  generateAfipCsr: (payload: GenerateAfipCsrPayload) =>
+    request<{ message: string; csr: string; status: AfipConfigStatus }>("/integrations/afip/generate-csr", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -404,44 +517,10 @@ export const PosAPI = {
 
   getParcels: () => request<Parcel[]>("/parcels"),
 
-  getSales: () => request<Transaction[]>("/sales"),
-
-  getCashMovements: () =>
-    request<Array<{ id: number; description: string; amount: number; createdAt: string }>>("/cash"),
-
   createParcel: (parcel: Parcel) =>
     request<Parcel>("/parcels", {
       method: "POST",
       body: JSON.stringify(parcel),
-    }),
-
-  getRemoteStatus: () =>
-    request<{
-      enabled: boolean;
-      paired: boolean;
-      connected: boolean;
-      relayUrl: string;
-      lastSeen: string | null;
-      registerLabel: string | null;
-    }>("/remote/status"),
-
-  getRemoteConfig: () =>
-    request<{
-      paired: boolean;
-      clientNumber: string | null;
-      registerId: string | null;
-      registerLabel: string | null;
-    }>("/remote/config"),
-
-  pairRemote: (pairingCode: string) =>
-    request<{
-      paired: boolean;
-      clientNumber: string;
-      registerId: string;
-      registerLabel: string;
-    }>("/remote/pair", {
-      method: "POST",
-      body: JSON.stringify({ pairingCode }),
     }),
 };
 

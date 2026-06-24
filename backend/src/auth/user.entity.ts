@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
 
-export const USER_ROLES = ['admin', 'cashier'] as const;
+export const USER_ROLES = ['admin', 'manager', 'cashier', 'auditor'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 @Entity('users')

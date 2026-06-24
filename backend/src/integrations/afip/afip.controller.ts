@@ -6,6 +6,7 @@ import { AfipConfigService } from './afip-config.service';
 import { ImportAfipCertificateDto } from './dto/import-afip-certificate.dto';
 import { ImportAfipCredentialsDto } from './dto/import-afip-credentials.dto';
 import { IssueAfipInvoiceDto } from './dto/issue-afip-invoice.dto';
+import { GenerateAfipCsrDto } from './dto/generate-afip-csr.dto';
 import { SaveAfipPrivateKeyDto } from './dto/save-afip-private-key.dto';
 import { AfipService } from './afip.service';
 
@@ -47,6 +48,18 @@ export class AfipController {
     return {
       message: 'AFIP credentials imported successfully',
       status,
+    };
+  }
+
+  @Post('generate-csr')
+  @PublicRoute()
+  generateCsr(@Body() payload: GenerateAfipCsrDto) {
+    const result = this.afipConfigService.generateCsrAndSaveKey(payload);
+
+    return {
+      message: 'AFIP private key saved. Upload the CSR to AFIP and import the approved certificate when ready.',
+      csr: result.csr,
+      status: result.status,
     };
   }
 
