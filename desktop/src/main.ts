@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import { bootstrapLocalServices, stopLocalServices } from './local-services';
 import { resolveFrontendUrl } from './paths';
@@ -97,13 +98,36 @@ const apiPort = Number(process.env.PORT ?? 3001);
 
 let mainWindow: BrowserWindow | null = null;
 
+function resolveAppIcon() {
+  const candidates = [
+    path.join(__dirname, '../resources/icon.png'),
+    path.join(__dirname, '../resources/icon.ico'),
+    path.join(process.resourcesPath, 'icon.png'),
+    path.join(process.resourcesPath, 'icon.ico'),
+  ];
+
+  for (const iconPath of candidates) {
+    if (fs.existsSync(iconPath)) {
+      const image = nativeImage.createFromPath(iconPath);
+      if (!image.isEmpty()) {
+        return image;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 async function createWindow() {
+  const appIcon = resolveAppIcon();
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
     show: false,
+    ...(appIcon ? { icon: appIcon } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

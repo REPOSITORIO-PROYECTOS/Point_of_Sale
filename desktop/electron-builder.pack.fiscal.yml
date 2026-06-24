@@ -1,3 +1,4 @@
+# Config fiscal para release: backend staging + afip-service.exe
 appId: com.pointofsale.desktop
 productName: Point of Sale
 directories:
@@ -15,15 +16,15 @@ extraResources:
     to: icon.ico
   - from: resources/nodejs/node.exe
     to: nodejs/node.exe
-  - from: ../backend/dist
+  - from: ../backend/.pack-staging/dist
     to: backend/dist
     filter:
       - "**/*"
-  - from: ../backend/node_modules
+  - from: ../backend/.pack-staging/node_modules
     to: backend/node_modules
     filter:
       - "**/*"
-  - from: ../backend/package.json
+  - from: ../backend/.pack-staging/package.json
     to: backend/package.json
   - from: ../frontend/dist
     to: frontend
@@ -35,12 +36,8 @@ win:
   icon: resources/icon.ico
   signAndEditExecutable: false
   target:
-    - nsis
-    - portable
-  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+    - dir
 nsis:
   oneClick: true
   perMachine: false
   allowToChangeInstallationDirectory: false
-portable:
-  artifactName: ${productName}-${version}-portable.${ext}

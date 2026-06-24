@@ -7,7 +7,12 @@ forceCodeSigning: false
 files:
   - dist/**/*
   - package.json
+  - "!node_modules/**"
 extraResources:
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/icon.ico
+    to: icon.ico
   - from: resources/nodejs/node.exe
     to: nodejs/node.exe
   - from: ../backend/dist
@@ -25,6 +30,8 @@ extraResources:
     filter:
       - "**/*"
 win:
+  icon: resources/icon.ico
+  signAndEditExecutable: false
   target:
     - nsis
     - portable

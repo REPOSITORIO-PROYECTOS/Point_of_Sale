@@ -31,6 +31,7 @@ desktop/resources/nodejs/
 
 # Backend local data
 backend/storage/
+backend/.pack-staging/
 backend/*.sqlite
 backend/database.sqlite
 
@@ -66,3 +67,7 @@ venv/
 
 # License signing keys (team only)
 tools/keys/
+
+# Source exports (scripts/export-source.ps1)
+exports/*
+!exports/.gitkeep

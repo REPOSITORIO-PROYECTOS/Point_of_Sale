@@ -18,14 +18,17 @@
     "build:remote": "npm run build --prefix services/remote",
     "build:api": "npm run build --prefix backend",
     "build:desktop": "npm run build --prefix desktop",
-    "build:all": "npm run build:web && npm run build:api && npm run build:desktop",
+    "build:all": "concurrently -n web,api,desktop -c cyan,green,yellow \"npm run build:web\" \"npm run build:api\" \"npm run build:desktop\"",
+    "prepare:backend-pack": "powershell -ExecutionPolicy Bypass -File scripts/prepare-backend-pack.ps1",
     "dist:win": "npm run build:all && npm run dist:win --prefix desktop",
     "dist:win:fiscal": "npm run build:all && npm run build:afip-sidecar && npm run dist:win:fiscal --prefix desktop",
     "test:microservices": "node scripts/verify-microservices.mjs",
     "test:microservices:unit": "npm run test:microservices --prefix backend",
     "test:api:smoke": "npm run test:smoke --prefix backend",
     "test:desktop:smoke": "npm run test:smoke --prefix desktop",
-    "test:all": "npm run test:microservices:unit && npm run test:api:smoke && npm run test:desktop:smoke"
+    "test:all": "npm run test:microservices:unit && npm run test:api:smoke && npm run test:desktop:smoke",
+    "export:source": "powershell -ExecutionPolicy Bypass -File scripts/export-source.ps1",
+    "export:installer": "powershell -ExecutionPolicy Bypass -File scripts/export-installer.ps1"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
