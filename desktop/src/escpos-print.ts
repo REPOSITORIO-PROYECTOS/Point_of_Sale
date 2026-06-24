@@ -1,15 +1,20 @@
 import {
-  CharacterSet,
-  PrinterTypes,
-  ThermalPrinter,
-  BreakLine,
-} from 'node-thermal-printer';
-import {
   escposColumnsForWidth,
   type PrinterPrintOptions,
   type ReceiptPrintDocument,
 } from './receipt-print-types';
 import { renderReceiptPrintText } from './receipt-print-text';
+
+type ThermalPrinterModule = typeof import('node-thermal-printer');
+
+let thermalPrinterModule: ThermalPrinterModule | null = null;
+
+async function loadThermalPrinter(): Promise<ThermalPrinterModule> {
+  if (!thermalPrinterModule) {
+    thermalPrinterModule = await import('node-thermal-printer');
+  }
+  return thermalPrinterModule;
+}
 
 function resolvePrinterInterface(options?: PrinterPrintOptions): string {
   const configured = process.env.POS_PRINTER_INTERFACE?.trim();
@@ -25,7 +30,10 @@ function resolvePrinterInterface(options?: PrinterPrintOptions): string {
   return 'printer:';
 }
 
-function resolvePrinterType(options?: PrinterPrintOptions): PrinterTypes {
+function resolvePrinterType(
+  options: PrinterPrintOptions | undefined,
+  PrinterTypes: ThermalPrinterModule['PrinterTypes'],
+): ThermalPrinterModule['PrinterTypes'][keyof ThermalPrinterModule['PrinterTypes']] {
   const raw = (options?.printerType ?? process.env.POS_PRINTER_TYPE ?? 'epson').toLowerCase();
   if (raw === 'star') return PrinterTypes.STAR;
   if (raw === 'tanca') return PrinterTypes.TANCA;
@@ -78,9 +86,14 @@ function voucherTitle(voucherType: ReceiptPrintDocument['voucherType']): string 
 async function createPrinter(
   widthMm: 55 | 80,
   options?: PrinterPrintOptions,
-): Promise<{ printer: ThermalPrinter; interfaceId: string; printerType: string }> {
+): Promise<{
+  printer: InstanceType<ThermalPrinterModule['ThermalPrinter']>;
+  interfaceId: string;
+  printerType: string;
+}> {
+  const { CharacterSet, PrinterTypes, ThermalPrinter, BreakLine } = await loadThermalPrinter();
   const interfaceId = resolvePrinterInterface(options);
-  const printerType = resolvePrinterType(options);
+  const printerType = resolvePrinterType(options, PrinterTypes);
 
   const printer = new ThermalPrinter({
     type: printerType,
@@ -114,7 +127,7 @@ async function createPrinter(
 }
 
 async function executePrintJob(
-  printer: ThermalPrinter,
+  printer: InstanceType<ThermalPrinterModule['ThermalPrinter']>,
   interfaceId: string,
   printerType: string,
 ): Promise<void> {

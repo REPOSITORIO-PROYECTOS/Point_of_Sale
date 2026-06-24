@@ -4,3 +4,32 @@
 electronLanguages:
   - es
   - en-US
+
+# Runtime del proceso main (dependencies en desktop/package.json).
+# El backend va en extraResources; estas deps NO deben excluirse con !node_modules/**.
+files:
+  - dist/**/*
+  - package.json
+  - node_modules/node-thermal-printer/**/*
+  - node_modules/iconv-lite/**/*
+  - node_modules/safer-buffer/**/*
+  - node_modules/pngjs/**/*
+  - node_modules/unorm/**/*
+  - node_modules/write-file-queue/**/*
+  - node_modules/dank-do-while/**/*
+  - node_modules/electron-updater/**/*
+  - node_modules/builder-util-runtime/**/*
+  - node_modules/debug/**/*
+  - node_modules/ms/**/*
+  - node_modules/sax/**/*
+  - node_modules/fs-extra/**/*
+  - node_modules/graceful-fs/**/*
+  - node_modules/jsonfile/**/*
+  - node_modules/universalify/**/*
+  - node_modules/js-yaml/**/*
+  - node_modules/argparse/**/*
+  - node_modules/lazy-val/**/*
+  - node_modules/lodash.escaperegexp/**/*
+  - node_modules/lodash.isequal/**/*
+  - node_modules/semver/**/*
+  - node_modules/tiny-typed-emitter/**/*
