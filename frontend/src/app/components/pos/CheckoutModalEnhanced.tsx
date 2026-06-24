@@ -93,6 +93,7 @@ export function CheckoutModalEnhanced({
     setSelectedMethod("cash");
     setCashReceived(subtotal.toString());
     setShowChange(false);
+    handleQuickPay("cash");
   };
 
   const handleQuickPayCashWithChange = () => {
@@ -154,26 +155,24 @@ export function CheckoutModalEnhanced({
     const methodData = paymentMethods.find((m) => m.type === "cash");
     if (!methodData) return;
 
-    setPayments([
+    const cashPayment: PaymentMethod[] = [
       {
         type: "cash",
         amount: subtotal,
         label: methodData.label,
       },
-    ]);
+    ];
 
-    // Si hay vuelto, mostrarlo antes de confirmar
-    if (change > 0.01) {
-      setTimeout(() => {
-        handleConfirm();
-      }, 100);
-    } else {
-      handleConfirm();
-    }
+    setPayments(cashPayment);
+    handleConfirm(cashPayment);
   };
 
-  const handleConfirm = () => {
-    if (remaining > 0.01) {
+  const handleConfirm = (paymentsOverride?: PaymentMethod[]) => {
+    const effectivePayments = paymentsOverride ?? payments;
+    const effectiveTotalPaid = effectivePayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const effectiveRemaining = subtotal - effectiveTotalPaid;
+
+    if (effectiveRemaining > 0.01) {
       toast.error("El pago no está completo");
       return;
     }
@@ -208,7 +207,7 @@ export function CheckoutModalEnhanced({
       );
     }
 
-    onConfirm(payments, voucherType, afipBuyer);
+    onConfirm(effectivePayments, voucherType, afipBuyer);
     setPayments([]);
     setAmount("");
     setCashReceived("");
@@ -252,7 +251,7 @@ export function CheckoutModalEnhanced({
         <DialogHeader>
           <DialogTitle>Procesar Pago</DialogTitle>
           <DialogDescription>
-            Selecciona el método de pago
+            Selecciona el método de pago o divide el pago entre varios métodos
           </DialogDescription>
         </DialogHeader>
 
@@ -343,45 +342,91 @@ export function CheckoutModalEnhanced({
               </div>
             </div>
           ) : payments.length === 0 ? (
-            <div>
-              <Label className="mb-3">Selecciona un método de pago</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {/* Efectivo con opciones */}
-                <Button
-                  variant="outline"
-                  className="h-24 flex-col gap-2 border-green-200 hover:bg-green-50"
-                  onClick={handleQuickPayCash}
-                >
-                  <DollarSign className="size-7 text-green-600" />
-                  <span className="font-medium">Efectivo</span>
-                  <span className="text-xs text-muted-foreground">Monto exacto</span>
-                </Button>
+            <div className="space-y-4">
+              <div>
+                <Label className="mb-3">Pago único — selecciona un método</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-24 flex-col gap-2 border-green-200 hover:bg-green-50"
+                    onClick={handleQuickPayCash}
+                  >
+                    <DollarSign className="size-7 text-green-600" />
+                    <span className="font-medium">Efectivo</span>
+                    <span className="text-xs text-muted-foreground">Monto exacto</span>
+                  </Button>
 
-                <Button
-                  variant="outline"
-                  className="h-24 flex-col gap-2 border-green-200 hover:bg-green-50"
-                  onClick={handleQuickPayCashWithChange}
-                >
-                  <Calculator className="size-7 text-green-600" />
-                  <span className="font-medium">Efectivo</span>
-                  <span className="text-xs text-muted-foreground">Con vuelto</span>
-                </Button>
+                  <Button
+                    variant="outline"
+                    className="h-24 flex-col gap-2 border-green-200 hover:bg-green-50"
+                    onClick={handleQuickPayCashWithChange}
+                  >
+                    <Calculator className="size-7 text-green-600" />
+                    <span className="font-medium">Efectivo</span>
+                    <span className="text-xs text-muted-foreground">Con vuelto</span>
+                  </Button>
 
-                {/* Otros métodos */}
-                {paymentMethods.slice(1).map((method) => {
-                  const Icon = method.icon;
-                  return (
-                    <Button
-                      key={method.type}
-                      variant="outline"
-                      className="h-24 flex-col gap-2"
-                      onClick={() => handleQuickPay(method.type)}
-                    >
-                      <Icon className="size-7" />
-                      <span className="font-medium">{method.label}</span>
-                    </Button>
-                  );
-                })}
+                  {paymentMethods.slice(1).map((method) => {
+                    const Icon = method.icon;
+                    return (
+                      <Button
+                        key={method.type}
+                        variant="outline"
+                        className="h-24 flex-col gap-2"
+                        onClick={() => handleQuickPay(method.type)}
+                      >
+                        <Icon className="size-7" />
+                        <span className="font-medium">{method.label}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label>Pago dividido</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {paymentMethods.map((method) => {
+                    const Icon = method.icon;
+                    return (
+                      <Button
+                        key={method.type}
+                        variant={selectedMethod === method.type ? "default" : "outline"}
+                        className="h-16 flex-col gap-1"
+                        onClick={() => setSelectedMethod(method.type)}
+                      >
+                        <Icon className="size-5" />
+                        <span className="text-xs">{method.label}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={remaining}
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder={`Máximo: $${remaining.toFixed(2)}`}
+                      className="h-12"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleAddPayment();
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button onClick={handleAddPayment} className="h-12 px-6">
+                    <Plus className="size-5 mr-2" />
+                    Agregar
+                  </Button>
+                </div>
               </div>
             </div>
           ) : (
@@ -622,7 +667,7 @@ export function CheckoutModalEnhanced({
               <Button variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
-              <Button onClick={handleConfirm} disabled={remaining > 0.01}>
+              <Button onClick={() => handleConfirm()} disabled={remaining > 0.01}>
                 Confirmar e imprimir (F8)
               </Button>
             </DialogFooter>

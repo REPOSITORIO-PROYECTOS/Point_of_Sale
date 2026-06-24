@@ -555,8 +555,11 @@ export function RegisterDetailPage() {
 
                 <div className="grid gap-3 sm:grid-cols-[1fr_140px_auto]">
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">Categoría</label>
+                    <label htmlFor="price-category-select" className="mb-1 block text-xs text-slate-400">
+                      Categoría
+                    </label>
                     <select
+                      id="price-category-select"
                       value={selectedCategory}
                       onChange={(event) => setSelectedCategory(event.target.value)}
                       className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm"
@@ -570,8 +573,11 @@ export function RegisterDetailPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">Aumento %</label>
+                    <label htmlFor="price-increase-percent" className="mb-1 block text-xs text-slate-400">
+                      Aumento %
+                    </label>
                     <input
+                      id="price-increase-percent"
                       type="number"
                       min="0.01"
                       step="0.01"

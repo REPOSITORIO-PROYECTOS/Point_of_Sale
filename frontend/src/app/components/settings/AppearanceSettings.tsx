@@ -172,10 +172,12 @@ export function AppearanceSettings() {
               <div className="flex items-center gap-3">
                 <input
                   ref={fileInputRef}
+                  id="appearance-logo-upload"
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   onChange={handleLogoUpload}
-                  className="hidden"
+                  className="sr-only"
+                  aria-label="Seleccionar imagen de logo"
                 />
                 <Button
                   variant="outline"
@@ -441,10 +443,12 @@ export function AppearanceSettings() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div>
-                <Label>Selector de Color</Label>
+                <Label htmlFor="appearance-primary-color">Selector de Color</Label>
                 <div className="flex items-center gap-3 mt-2">
                   <input
+                    id="appearance-primary-color"
                     type="color"
+                    aria-label="Selector de color principal"
                     value={selectedColor}
                     onChange={(e) => handleColorChange(e.target.value)}
                     className="h-14 w-20 rounded-lg cursor-pointer border-2"
