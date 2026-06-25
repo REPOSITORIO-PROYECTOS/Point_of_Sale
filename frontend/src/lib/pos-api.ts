@@ -431,8 +431,14 @@ export const PosAPI = {
   replaceProducts: (products: Product[]) =>
     request<Product[]>("/products/bulk", {
       method: "PUT",
-      body: JSON.stringify({ products: products.map(toProductPayload) }),
+      body: JSON.stringify({ products: products.map(toProductPayload), summaryOnly: false }),
     }).then((saved) => saved.map((product) => normalizeProduct(product))),
+
+  importBulkProducts: (products: Product[]) =>
+    request<{ count: number }>("/products/bulk", {
+      method: "PUT",
+      body: JSON.stringify({ products: products.map(toProductPayload), summaryOnly: true }),
+    }),
 
   getStockMovements: (params: { type?: StockMovementType; limit?: number } = {}) => {
     const searchParams = new URLSearchParams();

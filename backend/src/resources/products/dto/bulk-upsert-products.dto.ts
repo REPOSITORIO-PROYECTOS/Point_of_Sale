@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsOptional, ValidateNested } from 'class-validator';
 import { CreateProductDto } from './create-product.dto';
 
 export class BulkUpsertProductsDto {
@@ -10,4 +10,10 @@ export class BulkUpsertProductsDto {
   @ValidateNested({ each: true })
   @Type(() => CreateProductDto)
   products!: CreateProductDto[];
+
+  /** Si true, responde solo `{ count }` (ideal para importaciones grandes). */
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  summaryOnly?: boolean;
 }

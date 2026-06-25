@@ -41,6 +41,7 @@
     "export:installer:portable": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/export-installer.ps1 -Portable",
     "export:installer:zip": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/export-installer.ps1 -Zip",
     "export:lc-elixia": "node scripts/export-lc-to-elixia.cjs",
+    "convert:elixia-pos": "node scripts/convert-elixia-artsxls-to-pos.cjs",
     "version:sync": "node scripts/sync-version.mjs",
     "version:set": "node scripts/set-version.mjs",
     "version:bump": "node scripts/version-bump.mjs"

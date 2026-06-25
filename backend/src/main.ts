@@ -2,9 +2,12 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { env } from './config/env.config';
 import { runSqliteLegacyMigrations } from './database/sqlite-legacy-migrations';
+
+const JSON_BODY_LIMIT = '25mb';
 
 function isAllowedDesktopOrigin(origin: string) {
   if (origin === 'null' || origin.startsWith('file://')) {
@@ -18,6 +21,7 @@ async function bootstrap() {
   await runSqliteLegacyMigrations(env.sqliteDbPath);
 
   const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
     cors: {
       origin: (origin, callback) => {
         if (!origin || env.corsOrigin === '*' || origin === env.corsOrigin || isAllowedDesktopOrigin(origin)) {
@@ -29,6 +33,9 @@ async function bootstrap() {
       },
     },
   });
+
+  app.use(json({ limit: JSON_BODY_LIMIT }));
+  app.use(urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
 
   app.enableShutdownHooks();
   app.setGlobalPrefix('api');

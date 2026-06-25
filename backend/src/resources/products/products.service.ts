@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { BulkUpsertProductsDto } from './dto/bulk-upsert-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -201,21 +201,47 @@ export class ProductsService {
   }
 
   async bulkUpsert(payload: BulkUpsertProductsDto) {
-    const saved: ProductEntity[] = [];
+    const { products, summaryOnly = false } = payload;
+    const existingMap = new Map<string, ProductEntity>();
+    const ids = products.map((product) => product.id);
+    const lookupChunkSize = 500;
 
-    for (const product of payload.products) {
-      const existing = await this.repository.findOne({ where: { id: product.id } });
-      const entity = existing
-        ? Object.assign(existing, mapDtoToEntity(product))
-        : this.repository.create({
-            ...mapDtoToEntity(product),
-            unit: product.unit ?? 'unidad',
-          });
-
-      saved.push(await this.repository.save(entity));
+    for (let i = 0; i < ids.length; i += lookupChunkSize) {
+      const chunkIds = ids.slice(i, i + lookupChunkSize);
+      const found = await this.repository.find({ where: { id: In(chunkIds) } });
+      for (const entity of found) {
+        existingMap.set(entity.id, entity);
+      }
     }
 
-    return saved.map(toProductResponse);
+    const entities = products.map((product) => {
+      const existing = existingMap.get(product.id);
+      if (existing) {
+        Object.assign(existing, mapDtoToEntity(product));
+        if (product.unit) {
+          existing.unit = product.unit;
+        }
+        return existing;
+      }
+
+      return this.repository.create({
+        ...mapDtoToEntity(product),
+        unit: product.unit ?? 'unidad',
+      });
+    });
+
+    const saveChunkSize = 250;
+    await this.repository.manager.transaction(async (manager) => {
+      for (let i = 0; i < entities.length; i += saveChunkSize) {
+        await manager.save(ProductEntity, entities.slice(i, i + saveChunkSize));
+      }
+    });
+
+    if (summaryOnly) {
+      return { count: entities.length };
+    }
+
+    return entities.map(toProductResponse);
   }
 
   async listCategories(): Promise<string[]> {
