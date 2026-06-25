@@ -19,21 +19,21 @@ npm install
 npm install --prefix frontend
 cd backend; npm install; npm run build; cd ..
 cd desktop; npm install; npm run build; cd ..
-npm run build:web
+npm run build:web:electron
 
-# 2. Embeber Node (obligatorio; no está en git)
-$node = (Get-Command node).Source
-New-Item -Force -ItemType Directory desktop\resources\nodejs | Out-Null
-Copy-Item $node desktop\resources\nodejs\node.exe -Force
-
-# 3. Empaquetar
-npm run dist:win          # sin AFIP
+# 2. Empaquetar (ensure:embedded-node copia node.exe; prepare-backend-pack valida licencia y nativos)
+npm run dist:win          # sin AFIP → desktop/release/Point-of-Sale-Setup.exe
 # o
 npm run build:afip-sidecar  # Python 3.11
 npm run dist:win:fiscal     # con AFIP
 ```
 
-Salida: `desktop/release/win-unpacked/Point of Sale.exe`
+Salida instalador: `desktop/release/Point-of-Sale-Setup.exe`  
+Salida portable (sin NSIS): `npm run dist:win:dir` → `desktop/release/win-unpacked/`
+
+El backend en `.exe` usa por defecto **node.exe embebido** (`resources/nodejs/node.exe`, copiado automáticamente desde el Node del sistema).
+
+Alternativa más liviana: `POS_USE_ELECTRON_AS_NODE=true` + Visual Studio Build Tools → `electron-rebuild` en `prepare-backend-pack`.
 
 ### Si OneDrive bloquea (`EBUSY` / `EPERM`)
 
@@ -75,6 +75,7 @@ Detalle humano: [`services/afip/PRODUCTION.md`](../../services/afip/PRODUCTION.m
 | Issue | Fix |
 |-------|-----|
 | Pantalla blanca en `.exe` | `base: './'` en `frontend/vite.config.ts` |
-| App cierra sola | `db:init` con APP_DATA_DIR; backend spawn con `node.exe` embebido |
-| NSIS colgado | `forceCodeSigning: false` en electron-builder yml |
+| App cierra sola | BD no init; módulos nativos | `db:init` con APP_DATA_DIR; `npm run prepare:backend-pack -Force` (rebuild Electron) |
+| Falta license-public.pem | Build sin postbuild | `npm run build:api` y volver a empaquetar |
+| NSIS colgado / sin Setup.exe | OneDrive o code signing | `CSC_IDENTITY_AUTO_DISCOVERY=false` (ya en scripts); output alternativo `POS_BUILD_DIR=C:/Temp/pos-build npm run installer` |
 | `.exe` no en repo | Normal; output en `desktop/release/` gitignored |

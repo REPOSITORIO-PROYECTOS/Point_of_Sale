@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
 import { Repository } from 'typeorm';
 import { LicenseService } from '@/license/license.service';
+import { CashService } from '@/resources/cash/cash.service';
 import type { AuthUser, JwtPayload } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { SetupAdminDto } from './dto/setup-admin.dto';
@@ -23,6 +24,7 @@ export class AuthService {
     private readonly usersRepository: Repository<UserEntity>,
     private readonly jwtService: JwtService,
     private readonly licenseService: LicenseService,
+    private readonly cashService: CashService,
   ) {}
 
   async getSetupStatus() {
@@ -41,6 +43,8 @@ export class AuthService {
       if (userCount > 0) {
         throw new ConflictException('La configuración inicial ya fue completada');
       }
+
+      await this.cashService.closeOrphanOpenSessionsForFirstSetup(manager);
 
       const passwordHash = await bcrypt.hash(payload.password, 10);
       const user = await manager.save(UserEntity, {

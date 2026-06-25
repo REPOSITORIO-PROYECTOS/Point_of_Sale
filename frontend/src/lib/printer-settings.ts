@@ -25,7 +25,7 @@ export type SystemPrinterInfo = {
 export const DEFAULT_PRINTER_SETTINGS: PrinterSettings = {
   printerName: null,
   printMode: 'escpos',
-  printSilent: false,
+  printSilent: true,
   printerType: 'epson',
   fallbackHtml: true,
 };

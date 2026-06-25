@@ -401,9 +401,9 @@ export function AppearanceSettings() {
 
                   <div className="flex items-center justify-between rounded-lg border p-3 sm:col-span-2">
                     <div>
-                      <p className="text-sm font-medium">Impresión silenciosa</p>
+                      <p className="text-sm font-medium">Impresión automática</p>
                       <p className="text-xs text-muted-foreground">
-                        Sin diálogo de impresión (solo modo HTML / driver)
+                        Imprime directo a la impresora predeterminada sin mostrar el diálogo de Windows
                       </p>
                     </div>
                     <Switch

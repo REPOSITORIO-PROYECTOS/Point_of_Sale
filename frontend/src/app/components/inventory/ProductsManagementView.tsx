@@ -38,6 +38,7 @@ import {
   getProductCategories,
   productInCategory,
 } from "../../../lib/product-categories";
+import { applyPriceIncrease, type PriceRoundMode } from "../../../lib/price-utils";
 
 export function ProductsManagementView() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -48,6 +49,7 @@ export function ProductsManagementView() {
   const [priceIncreaseDialogOpen, setPriceIncreaseDialogOpen] = useState(false);
   const [increaseType, setIncreaseType] = useState<"general" | "category" | "selection">("general");
   const [increasePercentage, setIncreasePercentage] = useState("");
+  const [priceRoundMode, setPriceRoundMode] = useState<PriceRoundMode>("none");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [formData, setFormData] = useState({
@@ -206,6 +208,14 @@ export function ProductsManagementView() {
     return `${value} ${unit}`;
   };
 
+  const previewNewPrice = (price: number) => {
+    const parsedPercentage = parseFloat(increasePercentage);
+    if (!increasePercentage || !Number.isFinite(parsedPercentage) || parsedPercentage <= 0) {
+      return price;
+    }
+    return applyPriceIncrease(price, parsedPercentage / 100, priceRoundMode);
+  };
+
   const handleApplyPriceIncrease = async () => {
     if (!increasePercentage || parseFloat(increasePercentage) <= 0) {
       toast.error("Ingresa un porcentaje válido");
@@ -216,12 +226,14 @@ export function ProductsManagementView() {
     let updatedProducts = [...products];
     let affectedCount = 0;
 
+    const increaseProductPrice = (product: Product): Product => ({
+      ...product,
+      price: applyPriceIncrease(product.price, percentage, priceRoundMode),
+      cost: product.cost ? product.cost * (1 + percentage) : product.cost,
+    });
+
     if (increaseType === "general") {
-      updatedProducts = updatedProducts.map((p) => ({
-        ...p,
-        price: p.price * (1 + percentage),
-        cost: p.cost ? p.cost * (1 + percentage) : p.cost,
-      }));
+      updatedProducts = updatedProducts.map((p) => increaseProductPrice(p));
       affectedCount = updatedProducts.length;
     } else if (increaseType === "category") {
       if (!selectedCategory) {
@@ -231,11 +243,7 @@ export function ProductsManagementView() {
       updatedProducts = updatedProducts.map((p) => {
         if (productInCategory(p, selectedCategory)) {
           affectedCount++;
-          return {
-            ...p,
-            price: p.price * (1 + percentage),
-            cost: p.cost ? p.cost * (1 + percentage) : p.cost,
-          };
+          return increaseProductPrice(p);
         }
         return p;
       });
@@ -247,11 +255,7 @@ export function ProductsManagementView() {
       updatedProducts = updatedProducts.map((p) => {
         if (selectedProducts.has(p.id)) {
           affectedCount++;
-          return {
-            ...p,
-            price: p.price * (1 + percentage),
-            cost: p.cost ? p.cost * (1 + percentage) : p.cost,
-          };
+          return increaseProductPrice(p);
         }
         return p;
       });
@@ -262,6 +266,7 @@ export function ProductsManagementView() {
       setProducts(savedProducts);
       setPriceIncreaseDialogOpen(false);
       setIncreasePercentage("");
+      setPriceRoundMode("none");
       setSelectedCategory("");
       setSelectedProducts(new Set());
       toast.success(
@@ -806,6 +811,29 @@ export function ProductsManagementView() {
               />
             </div>
 
+            <div>
+              <Label htmlFor="priceRoundMode">Redondeo de precios</Label>
+              <Select
+                value={priceRoundMode}
+                onValueChange={(value) => setPriceRoundMode(value as PriceRoundMode)}
+              >
+                <SelectTrigger id="priceRoundMode" className="mt-1">
+                  <SelectValue placeholder="Sin redondeo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin redondeo</SelectItem>
+                  <SelectItem value="10">Al múltiplo de 10 superior</SelectItem>
+                  <SelectItem value="100">Al múltiplo de 100 superior</SelectItem>
+                </SelectContent>
+              </Select>
+              {priceRoundMode !== "none" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tras aplicar el porcentaje, cada precio se redondea hacia arriba al múltiplo de{" "}
+                  {priceRoundMode} más cercano.
+                </p>
+              )}
+            </div>
+
             {increaseType === "category" && (
               <div>
                 <Label htmlFor="categorySelect">Selecciona Categoría</Label>
@@ -851,16 +879,10 @@ export function ProductsManagementView() {
                       {increasePercentage && parseFloat(increasePercentage) > 0 && (
                         <div className="text-right">
                           <p className="text-sm text-green-600 font-medium">
-                            ${(
-                              product.price *
-                              (1 + parseFloat(increasePercentage) / 100)
-                            ).toFixed(2)}
+                            ${previewNewPrice(product.price).toFixed(2)}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            +${(
-                              product.price *
-                              (parseFloat(increasePercentage) / 100)
-                            ).toFixed(2)}
+                            +${(previewNewPrice(product.price) - product.price).toFixed(2)}
                           </p>
                         </div>
                       )}
@@ -885,9 +907,10 @@ export function ProductsManagementView() {
                     <span className="font-bold text-green-600">
                       $
                       {(
-                        products.reduce((acc, p) => acc + p.price, 0) /
-                        products.length *
-                        (parseFloat(increasePercentage) / 100)
+                        products.reduce(
+                          (acc, p) => acc + (previewNewPrice(p.price) - p.price),
+                          0,
+                        ) / products.length
                       ).toFixed(2)}
                     </span>
                   </p>
@@ -913,14 +936,18 @@ export function ProductsManagementView() {
                       Aumento promedio:{" "}
                       <span className="font-bold text-green-600">
                         $
-                        {(
-                          products
-                            .filter((p) => productInCategory(p, selectedCategory))
-                            .reduce((acc, p) => acc + p.price, 0) /
-                          products.filter((p) => productInCategory(p, selectedCategory))
-                            .length *
-                          (parseFloat(increasePercentage) / 100)
-                        ).toFixed(2)}
+                        {(() => {
+                          const categoryProducts = products.filter((p) =>
+                            productInCategory(p, selectedCategory),
+                          );
+                          if (categoryProducts.length === 0) return "0.00";
+                          return (
+                            categoryProducts.reduce(
+                              (acc, p) => acc + (previewNewPrice(p.price) - p.price),
+                              0,
+                            ) / categoryProducts.length
+                          ).toFixed(2);
+                        })()}
                       </span>
                     </p>
                   </div>
@@ -934,6 +961,7 @@ export function ProductsManagementView() {
               onClick={() => {
                 setPriceIncreaseDialogOpen(false);
                 setIncreasePercentage("");
+                setPriceRoundMode("none");
                 setSelectedCategory("");
                 setSelectedProducts(new Set());
               }}

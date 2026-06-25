@@ -155,6 +155,29 @@ export type BusinessSettings = {
   parcelsEnabled: boolean;
 };
 
+export type StockMovementType = "in" | "out" | "transfer";
+
+export type StockMovementRecord = {
+  id: number;
+  productId: string;
+  productName: string;
+  type: StockMovementType;
+  quantity: number;
+  stockBefore?: number;
+  stockAfter?: number;
+  destinationLocal?: string;
+  notes?: string;
+  userId?: string;
+  createdAt: string;
+};
+
+export type CreateStockMovementPayload = {
+  type: StockMovementType;
+  items: Array<{ productId: string; quantity: number }>;
+  destinationLocal?: string;
+  notes?: string;
+};
+
 function buildCashClosingsQuery(params: CashClosingsQuery): string {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
@@ -179,6 +202,14 @@ function toCashAmount(value: unknown): number {
 
 function normalizeCashSession(session: CashSession | null): CashSession | null {
   if (!session) return null;
+  if (
+    typeof session.id !== "string" ||
+    session.id.length === 0 ||
+    typeof session.startTime !== "string" ||
+    session.startTime.length === 0
+  ) {
+    return null;
+  }
 
   return {
     ...session,
@@ -360,6 +391,19 @@ export const PosAPI = {
       normalizeProduct(product),
     ),
 
+  searchProducts: (params: { q?: string; category?: string; limit?: number } = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.q?.trim()) searchParams.set("q", params.q.trim());
+    if (params.category?.trim()) searchParams.set("category", params.category.trim());
+    if (params.limit != null) searchParams.set("limit", String(params.limit));
+    const query = searchParams.toString();
+    return request<Product[]>(`/products/search${query ? `?${query}` : ""}`).then((products) =>
+      products.map((product) => normalizeProduct(product)),
+    );
+  },
+
+  getProductCategories: () => request<string[]>("/products/categories"),
+
   getProducts: async () => {
     const products = await request<Product[]>("/products");
     return products.map((product) => normalizeProduct(product));
@@ -389,6 +433,20 @@ export const PosAPI = {
       method: "PUT",
       body: JSON.stringify({ products: products.map(toProductPayload) }),
     }).then((saved) => saved.map((product) => normalizeProduct(product))),
+
+  getStockMovements: (params: { type?: StockMovementType; limit?: number } = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.type) searchParams.set("type", params.type);
+    if (params.limit != null) searchParams.set("limit", String(params.limit));
+    const query = searchParams.toString();
+    return request<StockMovementRecord[]>(`/inventory/stock-movements${query ? `?${query}` : ""}`);
+  },
+
+  createStockMovement: (payload: CreateStockMovementPayload) =>
+    request<StockMovementRecord[]>("/inventory/stock-movements", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   getCashSession: async () => {
     const session = await request<CashSession | null>("/cash/session");

@@ -156,6 +156,22 @@ function isPlaceholderName(name) {
   return !text || text === 'XX' || /^Artículo\s+\d+$/i.test(text);
 }
 
+function incoherentNameReason(name) {
+  const text = cleanText(name);
+  if (!text) return 'nombre vacío';
+  if (text === 'XX') return 'marcador XX';
+  if (/^Artículo\s+\d+$/i.test(text)) return 'placeholder Artículo N';
+  if (text.length < 3) return 'nombre muy corto';
+  if (!/[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(text)) return 'sin letras (solo código numérico)';
+  if (/^AOE\b/i.test(text) || /\bAOE\s+AOE\b/i.test(text)) return 'patrón AOE';
+  if (/^[A-Z]{2,5}\s+\d{3,}$/i.test(text)) return 'código tipo SIG 1234';
+  return null;
+}
+
+function isCoherentName(name) {
+  return incoherentNameReason(name) === null;
+}
+
 function csvEscape(value) {
   const text = value === null || value === undefined ? '' : String(value);
   if (/[;"\r\n]/.test(text)) {
@@ -173,14 +189,20 @@ function writeCsv(filePath, headers, rows) {
 }
 
 function deriveSalePrice(row) {
+  const pvMin = toNumber(row.pv_min);
+  if (pvMin && pvMin > 0) return pvMin;
+
+  const pvInt = toNumber(row.pv_int);
+  if (pvInt && pvInt > 0) return pvInt;
+
+  const pvMay = toNumber(row.pv_may);
+  if (pvMay && pvMay > 0) return pvMay;
+
   const shelf = toNumber(row.precio_gondola);
   if (shelf && shelf > 0) return shelf;
 
   const avgSale = toNumber(row.precio_venta_prom);
   if (avgSale && avgSale > 0) return avgSale;
-
-  const pvMin = toNumber(row.pv_min);
-  if (pvMin && pvMin > 0) return pvMin;
 
   return null;
 }
@@ -316,10 +338,10 @@ async function loadArticles(db) {
       ${descExpr} AS sql_descripcion,
       x.Articulo AS articulo,
       COALESCE(x.CodProveedor, ${sqlArtTable ? 'a.IDArtProv' : "''"}) AS cod_proveedor,
-      COALESCE(x.PrecioCosto, ${sqlArtTable ? 'a.PrecioCpraCI, a.PrecioCpraSI' : "NULL, NULL"}) AS precio_costo,
-      COALESCE(x.PVMin, ${sqlArtTable ? 'a.PrecioVta1' : 'NULL'}) AS pv_min,
-      COALESCE(x.PVInt, ${sqlArtTable ? 'a.PrecioVta2' : 'NULL'}) AS pv_int,
-      COALESCE(x.PVMay, ${sqlArtTable ? 'a.PrecioVta3' : 'NULL'}) AS pv_may,
+      COALESCE(${sqlArtTable ? 'a.PrecioCpraCI, a.PrecioCpraSI' : 'NULL, NULL'}, x.PrecioCosto) AS precio_costo,
+      COALESCE(${sqlArtTable ? 'a.PrecioVta1' : 'NULL'}, x.PVMin) AS pv_min,
+      COALESCE(${sqlArtTable ? 'a.PrecioVta2' : 'NULL'}, x.PVInt) AS pv_int,
+      COALESCE(${sqlArtTable ? 'a.PrecioVta3' : 'NULL'}, x.PVMay) AS pv_may,
       COALESCE(x.IDProveedor, ${sqlArtTable ? 'a.IDProveedor' : 'NULL'}) AS id_proveedor,
       COALESCE(x.IDRubro, ${sqlArtTable ? 'a.IDRubro' : 'NULL'}) AS id_rubro,
       COALESCE(x.IDMoneda, ${sqlArtTable ? 'a.IDMoneda' : 'NULL'}) AS id_moneda,
@@ -372,7 +394,7 @@ function mapElixiaRow(row, rubroNameById) {
     PorcRec: formatDecimal(row.porc_dto2 ?? '0', 1),
     PrecioFlete: formatDecimal(row.precio_flete ?? '0'),
     PVMin: formatDecimal(sale ?? row.pv_min),
-    PVInt: formatDecimal(row.pv_int),
+    PVInt: formatDecimal(toNumber(row.pv_int) ?? sale),
     PVMay: formatDecimal(row.pv_may),
     CodBarra: cleanText(row.cod_barra),
     Nota: cleanText(row.nota) || (rubroNameById.get(idRubro) ? `Rubro: ${rubroNameById.get(idRubro)}` : ''),
@@ -413,6 +435,7 @@ function writeReadme(outDir, stats) {
     '| `01_rubros_elixia.csv` | Rubros / categorías para Elixia PAS |',
     '| `02_articulos_artsxls_elixia.csv` | Importación de artículos (formato ArtsXLS) |',
     '| `03_productos_pos.csv` | Importación al POS de este repo |',
+    '| `04_articulos_excluidos.csv` | Artículos omitidos por nombre incoherente |',
     '',
     '## Estadísticas',
     '',
@@ -422,6 +445,7 @@ function writeReadme(outDir, stats) {
     `- Con precio de venta estimado: ${stats.withSalePrice}`,
     `- Con stock > 0: ${stats.withStock}`,
     `- Con código de barras: ${stats.withBarcode}`,
+    `- Excluidos por nombre incoherente: ${stats.excluded}`,
     '',
     '## Importante',
     '',
@@ -447,19 +471,45 @@ async function main() {
     const rubros = await loadRubros(db);
     const rubroNameById = new Map(rubros.map((r) => [r.IDRubro, r['Descripción']]));
 
-    const articles = await loadArticles(db);
+    const allArticles = await loadArticles(db);
+    const articles = [];
+    const excludedRows = [];
+
+    for (const row of allArticles) {
+      const name = deriveName(row);
+      const reason = incoherentNameReason(name);
+      if (reason) {
+        excludedRows.push({
+          IDArt: cleanText(row.id_art),
+          Articulo: name,
+          Motivo: reason,
+          PrecioCosto: formatDecimal(deriveCost(row)),
+          PVMin: formatDecimal(deriveSalePrice(row) ?? row.pv_min),
+        });
+      } else {
+        articles.push(row);
+      }
+    }
+
     const elixiaRows = articles.map((row) => mapElixiaRow(row, rubroNameById));
     const posRows = articles.map((row) => mapPosRow(row, rubroNameById));
 
     writeCsv(path.join(outDir, '01_rubros_elixia.csv'), ELIXIA_RUBRO_COLUMNS, rubros);
     writeCsv(path.join(outDir, '02_articulos_artsxls_elixia.csv'), ELIXIA_ARTS_COLUMNS, elixiaRows);
     writeCsv(path.join(outDir, '03_productos_pos.csv'), POS_COLUMNS, posRows);
+    writeCsv(
+      path.join(outDir, '04_articulos_excluidos.csv'),
+      ['IDArt', 'Articulo', 'Motivo', 'PrecioCosto', 'PVMin'],
+      excludedRows,
+    );
 
     const sqlArtCount = articles.filter((r) => cleanText(r.sql_descripcion)).length;
 
     const stats = {
       rubros: rubros.length,
       articles: articles.length,
+      excluded: excludedRows.length,
+      totalBeforeFilter: allArticles.length,
       withRealName: articles.filter((r) => !isPlaceholderName(deriveName(r))).length,
       sqlArtCount,
       withSalePrice: elixiaRows.filter((r) => cleanText(r.PVMin) !== '' && toNumber(r.PVMin) > 0).length,
@@ -468,6 +518,11 @@ async function main() {
       warnings: [],
     };
 
+    if (stats.excluded > 0) {
+      stats.warnings.push(
+        `Se excluyeron ${stats.excluded} artículos sin nombre coherente. Ver 04_articulos_excluidos.csv.`,
+      );
+    }
     if (sqlArtCount > 0 && sqlArtCount < stats.articles) {
       stats.warnings.push(
         `Catálogo SQL aporta ${sqlArtCount} nombres reales; ${stats.articles - sqlArtCount} artículos del Access local siguen sin nombre en SQL.`,
@@ -492,7 +547,8 @@ async function main() {
 
     console.log('Export listo en:', outDir);
     console.log(`  Rubros: ${stats.rubros}`);
-    console.log(`  Artículos: ${stats.articles}`);
+    console.log(`  Artículos exportados: ${stats.articles}`);
+    console.log(`  Excluidos (nombre raro): ${stats.excluded}`);
     console.log(`  Con nombre real: ${stats.withRealName}`);
     console.log(`  Con precio venta: ${stats.withSalePrice}`);
     console.log(`  Con stock > 0: ${stats.withStock}`);

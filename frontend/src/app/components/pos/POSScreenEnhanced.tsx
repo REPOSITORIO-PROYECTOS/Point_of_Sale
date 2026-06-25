@@ -6,7 +6,12 @@ import { useBusinessSettings } from "../../../lib/business-settings-context";
 import type { Product, CartItem, Transaction, PaymentMethod, CashSession } from "../../../lib/wails-bridge";
 import { WailsAPI } from "../../../lib/wails-bridge";
 import { getExpectedCashBreakdown, getExpectedCashInDrawer } from "../../../lib/cash-expected";
-import { isCashSessionOpen, notifyCashDataUpdated, notifyCashSessionClosed } from "../../../lib/cash-session";
+import {
+  CASH_DATA_UPDATED_EVENT,
+  isCashSessionOpen,
+  notifyCashDataUpdated,
+  notifyCashSessionClosed,
+} from "../../../lib/cash-session";
 import type { VoucherType } from "./CheckoutModalEnhanced";
 import { ProductCatalog } from "./ProductCatalog";
 import { ShoppingCartEnhanced } from "./ShoppingCartEnhanced";
@@ -91,10 +96,8 @@ export function POSScreenEnhanced({
   const { themeConfig } = useTheme();
   const { user } = useAuth();
   const { settings: businessSettings } = useBusinessSettings();
-  const [products, setProducts] = useState<Product[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
-  const [loading, setLoading] = useState(true);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [cashSession, setCashSession] = useState<CashSession | null>(null);
@@ -114,8 +117,16 @@ export function POSScreenEnhanced({
   const [movementMethod, setMovementMethod] = useState("cash");
 
   useEffect(() => {
-    loadProducts();
-    loadCashSession();
+    void loadCashSession();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const onCashDataUpdated = () => {
+      void loadCashSession();
+    };
+
+    window.addEventListener(CASH_DATA_UPDATED_EVENT, onCashDataUpdated);
+    return () => window.removeEventListener(CASH_DATA_UPDATED_EVENT, onCashDataUpdated);
   }, []);
 
   useEffect(() => {
@@ -129,18 +140,6 @@ export function POSScreenEnhanced({
       void loadCashSession();
     }
   }, [closeCashDialogOpen]);
-
-  const loadProducts = async () => {
-    try {
-      const data = await PosAPI.getProducts();
-      setProducts(data);
-    } catch (error) {
-      console.error("Failed to load products:", error);
-      toast.error("Error al cargar productos");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadCashSession = async () => {
     try {
@@ -580,24 +579,11 @@ export function POSScreenEnhanced({
     },
   });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-pulse text-muted-foreground">
-            Cargando productos...
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       <div className="flex h-full relative">
         <div className="flex-1 border-r">
           <ProductCatalog
-            products={products}
             onAddToCart={handleAddToCart}
             cashSession={cashSession}
             onOpenCash={() => setOpenCashDialogOpen(true)}

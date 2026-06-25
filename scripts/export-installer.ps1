@@ -61,10 +61,17 @@ function Invoke-PrepareBackendPack {
     if ($LASTEXITCODE -ne 0) { throw "prepare-backend-pack falló" }
 }
 
+function Invoke-EnsureEmbeddedNode {
+    $ensureScript = Join-Path $repoRoot 'scripts\ensure-embedded-node.ps1'
+    & $ensureScript -DesktopDir $desktopDir
+    if ($LASTEXITCODE -ne 0) { throw "ensure-embedded-node falló" }
+}
+
 function Invoke-ElectronPackage {
     param([string]$OutputDir, [switch]$WithFiscal, [switch]$DirOnlyMode)
 
     Ensure-NodeEmbedded
+    Invoke-EnsureEmbeddedNode
     Invoke-PrepareBackendPack
 
     $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'

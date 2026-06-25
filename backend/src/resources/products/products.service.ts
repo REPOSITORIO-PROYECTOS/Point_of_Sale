@@ -69,6 +69,29 @@ export class ProductsService {
     return this.repository.find({ order: { name: 'ASC' } }).then((items) => items.map(toProductResponse));
   }
 
+  async search(params: { q?: string; category?: string; limit?: number }) {
+    const limit = Math.min(Math.max(params.limit ?? 80, 1), 200);
+    const qb = this.repository.createQueryBuilder('product').orderBy('product.name', 'ASC').take(limit);
+
+    const query = params.q?.trim();
+    if (query) {
+      const pattern = `%${query.toLowerCase()}%`;
+      qb.andWhere('(LOWER(product.name) LIKE :pattern OR product.barcodes LIKE :pattern)', {
+        pattern,
+      });
+    }
+
+    const category = params.category?.trim();
+    if (category) {
+      qb.andWhere('product.categories LIKE :categoryPattern', {
+        categoryPattern: `%"${category.replace(/"/g, '')}"%`,
+      });
+    }
+
+    const items = await qb.getMany();
+    return items.map(toProductResponse);
+  }
+
   async findOne(id: string) {
     const entity = await this.repository.findOne({ where: { id } });
 
@@ -85,8 +108,11 @@ export class ProductsService {
       throw new NotFoundException(`Product with barcode ${code} not found`);
     }
 
-    const entities = await this.repository.find({ order: { name: 'ASC' } });
-    const entity = entities.find((item) => parseJsonArray(item.barcodes).includes(trimmed));
+    const entity = await this.repository
+      .createQueryBuilder('product')
+      .where('product.barcodes LIKE :exactPattern', { exactPattern: `%"${trimmed.replace(/"/g, '')}"%` })
+      .orderBy('product.name', 'ASC')
+      .getOne();
 
     if (!entity) {
       throw new NotFoundException(`Product with barcode ${code} not found`);
@@ -141,8 +167,37 @@ export class ProductsService {
       return;
     }
 
-    entity.stock = Math.max(0, entity.stock - quantity);
+    await this.adjustStock(productId, -quantity);
+  }
+
+  async adjustStock(
+    productId: string,
+    delta: number,
+    options: { allowNullStock?: boolean; enforceMinimum?: boolean } = {},
+  ): Promise<{ stockBefore: number; stockAfter: number }> {
+    const entity = await this.repository.findOne({ where: { id: productId } });
+
+    if (!entity) {
+      throw new NotFoundException(`Product ${productId} not found`);
+    }
+
+    if (entity.stock == null && !options.allowNullStock && delta < 0) {
+      throw new BadRequestException(`Product ${productId} does not track stock`);
+    }
+
+    const stockBefore = entity.stock ?? 0;
+    const stockAfter = stockBefore + delta;
+
+    if (options.enforceMinimum !== false && stockAfter < 0) {
+      throw new BadRequestException(
+        `Insufficient stock for ${productId}. Available: ${stockBefore}, requested: ${Math.abs(delta)}`,
+      );
+    }
+
+    entity.stock = Math.max(0, stockAfter);
     await this.repository.save(entity);
+
+    return { stockBefore, stockAfter: entity.stock };
   }
 
   async bulkUpsert(payload: BulkUpsertProductsDto) {

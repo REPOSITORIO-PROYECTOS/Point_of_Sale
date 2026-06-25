@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { PosAPI } from "../../../lib/pos-api";
 import { useTheme } from "../../../lib/theme-context";
 import { CartItem, Transaction, WailsAPI, Product } from "../../../lib/wails-bridge";
@@ -8,25 +8,7 @@ import { toast } from "sonner";
 
 export function POSScreen() {
   const { themeConfig } = useTheme();
-  const [products, setProducts] = useState<Product[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const loadProducts = async () => {
-    try {
-      const data = await PosAPI.getProducts();
-      setProducts(data);
-    } catch (error) {
-      console.error("Failed to load products:", error);
-      toast.error("Error al cargar productos");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAddToCart = (product: Product) => {
     setCartItems((prev) => {
@@ -102,22 +84,10 @@ export function POSScreen() {
     setCartItems([]);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-pulse text-muted-foreground">
-            Cargando productos...
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full">
       <div className="flex-1 border-r">
-        <ProductCatalog products={products} onAddToCart={handleAddToCart} />
+        <ProductCatalog onAddToCart={handleAddToCart} />
       </div>
       <div className="w-[400px]">
         <ShoppingCart

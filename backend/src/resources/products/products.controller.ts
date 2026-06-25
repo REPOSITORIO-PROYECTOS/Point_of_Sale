@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { BulkUpsertProductsDto } from './dto/bulk-upsert-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -13,6 +13,25 @@ export class ProductsController {
   @Get()
   findAll() {
     return this.service.findAll();
+  }
+
+  @Get('categories')
+  listCategories() {
+    return this.service.listCategories();
+  }
+
+  @Get('search')
+  search(
+    @Query('q') q?: string,
+    @Query('category') category?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.service.search({
+      q,
+      category,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+    });
   }
 
   @Put('bulk')

@@ -311,7 +311,13 @@ export function resolvePrintSilent(options?: PrinterPrintOptions): boolean {
   if (options?.printSilent !== undefined) {
     return options.printSilent;
   }
-  return process.env.POS_PRINT_SILENT === 'true';
+  if (process.env.POS_PRINT_SILENT === 'true') {
+    return true;
+  }
+  if (process.env.POS_PRINT_SILENT === 'false') {
+    return false;
+  }
+  return true;
 }
 
 export function resolvePrintDeviceName(options?: PrinterPrintOptions): string | undefined {

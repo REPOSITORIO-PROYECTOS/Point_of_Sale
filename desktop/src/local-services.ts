@@ -88,14 +88,14 @@ function resolveBackendRuntime(isDev: boolean, isPackaged: boolean) {
     return { mode: 'spawn-node' as const, command: process.env.POS_BACKEND_NODE };
   }
 
-  // En .exe empaquetado: reutilizar el runtime de Electron (~68 MB menos que node.exe embebido).
-  if (isPackaged && process.env.USE_ELECTRON_NODE !== 'false') {
-    return { mode: 'fork-electron' as const, command: process.execPath };
-  }
-
   const bundledNode = resolveBundledNodeExecutable(isPackaged);
   if (bundledNode) {
     return { mode: 'spawn-node' as const, command: bundledNode };
+  }
+
+  // Sin node.exe embebido: reutilizar Electron como Node (requiere módulos nativos recompilados).
+  if (isPackaged && process.env.USE_ELECTRON_NODE !== 'false') {
+    return { mode: 'fork-electron' as const, command: process.execPath };
   }
 
   if (process.env.USE_ELECTRON_NODE === 'true' || !hasSystemNode()) {

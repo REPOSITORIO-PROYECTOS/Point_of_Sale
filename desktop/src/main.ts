@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeImage } from 'electron';
+import { registerDevKeyboardShortcuts } from './dev-shortcuts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { bootstrapLocalServices, stopLocalServices } from './local-services';
@@ -18,6 +19,47 @@ import {
 } from './thermal-print';
 import type { ElectronPrintPayload, PrinterPrintOptions } from './receipt-print-types';
 import { setupAutoUpdater } from './auto-updater';
+
+type SystemPrinter = {
+  name: string;
+  isDefault?: boolean;
+  status?: number;
+};
+
+async function getSystemPrinters(): Promise<SystemPrinter[]> {
+  const targetWindow = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  if (!targetWindow) {
+    return [];
+  }
+
+  return (await targetWindow.webContents.getPrintersAsync()) as SystemPrinter[];
+}
+
+async function resolveDefaultSystemPrinterName(): Promise<string | undefined> {
+  const printers = await getSystemPrinters();
+  const defaultPrinter = printers.find((printer) => printer.isDefault);
+  return defaultPrinter?.name ?? printers[0]?.name;
+}
+
+async function resolveEffectivePrinterOptions(
+  options?: PrinterPrintOptions,
+): Promise<PrinterPrintOptions> {
+  const effective: PrinterPrintOptions = { ...options };
+
+  if (!effective.printerName?.trim()) {
+    const defaultName = await resolveDefaultSystemPrinterName();
+    if (defaultName) {
+      effective.printerName = defaultName;
+      console.info(`[print] usando impresora predeterminada: ${defaultName}`);
+    }
+  }
+
+  if (effective.printSilent === undefined) {
+    effective.printSilent = true;
+  }
+
+  return effective;
+}
 
 function resolvePrintBaseUrl(isDev: boolean, isPackaged: boolean): string {
   if (isDev) {
@@ -128,6 +170,7 @@ async function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     show: false,
+    autoHideMenuBar: true,
     ...(appIcon ? { icon: appIcon } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -141,21 +184,24 @@ async function createWindow() {
     mainWindow?.show();
   });
 
+  registerDevKeyboardShortcuts(mainWindow);
+
   const frontendUrl = resolveFrontendUrl(isDev, app.isPackaged);
   await mainWindow.loadURL(frontendUrl);
 }
 
 async function bootstrap() {
   await app.whenReady();
+  Menu.setApplicationMenu(null);
 
   ipcMain.handle('print-receipt', async (_event, payload: ElectronPrintPayload) => {
-    const printerOptions = payload.printer;
+    const printerOptions = await resolveEffectivePrinterOptions(payload.printer);
     const preferEscpos = shouldUseEscposPrint(printerOptions) && payload.document;
     const mode = preferEscpos ? 'escpos' : 'html';
-    const printerName = printerOptions?.printerName ?? process.env.POS_PRINTER_NAME ?? '(predeterminada)';
+    const printerName = printerOptions.printerName ?? '(predeterminada)';
 
     console.info(
-      `[print] inicio mode=${mode} width=${payload.widthMm}mm printer=${printerName} type=${printerOptions?.printerType ?? 'epson'}`,
+      `[print] inicio mode=${mode} width=${payload.widthMm}mm printer=${printerName} type=${printerOptions.printerType ?? 'epson'} silent=${printerOptions.printSilent ?? true}`,
     );
 
     if (preferEscpos) {
@@ -183,16 +229,7 @@ async function bootstrap() {
   });
 
   ipcMain.handle('list-printers', async () => {
-    const targetWindow = mainWindow ?? BrowserWindow.getAllWindows()[0];
-    if (!targetWindow) {
-      return [];
-    }
-
-    const printers = (await targetWindow.webContents.getPrintersAsync()) as Array<{
-      name: string;
-      isDefault?: boolean;
-      status?: number;
-    }>;
+    const printers = await getSystemPrinters();
     return printers.map((printer) => ({
       name: printer.name,
       isDefault: Boolean(printer.isDefault),

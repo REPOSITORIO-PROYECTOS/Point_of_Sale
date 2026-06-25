@@ -12,7 +12,7 @@ import {
 
 import { InjectRepository } from '@nestjs/typeorm';
 
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, type EntityManager, Repository } from 'typeorm';
 
 import { UserEntity, type UserRole } from '@/auth/user.entity';
 
@@ -310,6 +310,34 @@ export class CashService {
 
     });
 
+  }
+
+  /** Cierra sesiones abiertas huérfanas al completar la configuración inicial (sin usuarios previos). */
+  async closeOrphanOpenSessionsForFirstSetup(manager: EntityManager) {
+    const openSessions = await manager.find(CashSessionEntity, {
+      where: { endTime: IsNull() },
+    });
+
+    if (openSessions.length === 0) {
+      return;
+    }
+
+    const now = new Date();
+
+    for (const session of openSessions) {
+      const movementTotals = await this.getMovementTotalsForSession(session.id);
+      const expectedBalance = computeExpectedSessionBalance(
+        session.initialBalance,
+        session.totalSales,
+        movementTotals,
+      );
+
+      session.endTime = now;
+      session.finalBalance = expectedBalance;
+      session.countedAmount = expectedBalance;
+      session.closedByUserId = null;
+      await manager.save(CashSessionEntity, session);
+    }
   }
 
 

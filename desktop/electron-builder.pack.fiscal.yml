@@ -11,6 +11,8 @@ extraResources:
     to: icon.png
   - from: resources/icon.ico
     to: icon.ico
+  - from: resources/nodejs/node.exe
+    to: nodejs/node.exe
   - from: ../backend/.pack-staging/dist
     to: backend/dist
     filter:

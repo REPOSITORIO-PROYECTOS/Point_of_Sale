@@ -12,9 +12,21 @@ export function notifyCashSessionClosed() {
   window.dispatchEvent(new CustomEvent(CASH_SESSION_CLOSED_EVENT));
 }
 
-/** Sesión abierta = existe registro y sin fecha de cierre. */
+function hasCashSessionIdentity(
+  session: CashSession | null | undefined,
+): session is CashSession {
+  return Boolean(
+    session &&
+      typeof session.id === "string" &&
+      session.id.length > 0 &&
+      typeof session.startTime === "string" &&
+      session.startTime.length > 0,
+  );
+}
+
+/** Sesión abierta = registro válido de API y sin fecha de cierre. */
 export function isCashSessionOpen(session: CashSession | null | undefined): session is CashSession {
-  return Boolean(session && !session.endTime);
+  return hasCashSessionIdentity(session) && !session.endTime;
 }
 
 export function getSalesByPaymentMethod(session: CashSession) {

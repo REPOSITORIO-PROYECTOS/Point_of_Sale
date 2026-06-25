@@ -1,5 +1,6 @@
 import { isElectronEnvironment, printReceiptElectron, printReceiptInBrowser } from "./desktop-api";
-import { getCachedPrinterSettings, toPrinterPrintOptions } from "./printer-settings";
+import { toPrinterPrintOptions } from "./printer-settings";
+import { loadPrinterSettings } from "./printer-settings-store";
 import {
   buildReceiptPrintDocument,
   renderReceiptPrintText,
@@ -151,13 +152,14 @@ export async function printReceipt(payload: PrintReceiptPayload): Promise<void> 
   }
 
   if (isElectronEnvironment()) {
-    const printerSettings = getCachedPrinterSettings();
+    const printerSettings = await loadPrinterSettings();
     console.info("[print] Electron", {
       mode: printerSettings.printMode,
       printer: printerSettings.printerName ?? "(predeterminada)",
       type: printerSettings.printerType,
       widthMm,
       voucherType: document.voucherType,
+      silent: printerSettings.printSilent,
     });
     await printReceiptElectron({
       widthMm,

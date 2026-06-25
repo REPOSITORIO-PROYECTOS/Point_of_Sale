@@ -5,18 +5,14 @@
 ## Prerrequisitos
 
 - Setup inicial hecho ([setup-inicial.md](../getting-started/setup-inicial.md))
-- Node embebido copiado (una vez):
-
-```powershell
-$node = (Get-Command node).Source
-New-Item -Force -ItemType Directory desktop\resources\nodejs | Out-Null
-Copy-Item $node desktop\resources\nodejs\node.exe -Force
-```
+- `backend/src/license/keys/license-public.pem` presente (no está en git; ver [licensing.md](../ai/licensing.md))
+- Node en PATH (se copia a `desktop/resources/nodejs/node.exe` al empaquetar)
 
 ## Build
 
 ```powershell
-npm run build:all
+npm run build:electron-all
+npm run prepare:backend-pack   # o se ejecuta solo con dist:win
 
 # Sin AFIP embebido
 npm run dist:win
@@ -29,7 +25,8 @@ npm run dist:win:fiscal
 ## Salida
 
 ```text
-desktop/release/win-unpacked/Point of Sale.exe
+desktop/release/Point-of-Sale-Setup.exe    # instalador NSIS
+desktop/release/win-unpacked/Point of Sale.exe   # con dist:win:dir
 ```
 
 ## Si OneDrive bloquea (`EBUSY`)
@@ -56,7 +53,7 @@ npm run db:init
 |---------|-------|-----|
 | Pantalla blanca | Rutas `/assets/` | Ya corregido: `base: './'` en vite |
 | App se cierra | BD no init | `db:init` con APP_DATA_DIR |
-| API no responde | Falta node embebido | Copiar `node.exe` a `desktop/resources/nodejs/` |
+| API no responde | Módulos nativos / licencia | `npm run prepare:backend-pack -Force`; verificar `license-public.pem` en dist |
 
 Detalle: [../deployment/README.md](../deployment/README.md) · [../ai/build-and-deploy.md](../ai/build-and-deploy.md)
 

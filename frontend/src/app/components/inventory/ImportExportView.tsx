@@ -22,6 +22,7 @@ import { Label } from "../ui/label";
 import { Upload, Download, FileSpreadsheet, CheckCircle, AlertCircle, Package } from "lucide-react";
 import { toast } from "sonner";
 import { ProductsManagementView } from "./ProductsManagementView";
+import { StockMovementsView } from "./StockMovementsView";
 
 interface PreviewData {
   headers: string[];
@@ -191,7 +192,7 @@ export function ImportExportView() {
           <div>
             <h1 className="text-2xl font-semibold">Gestión de Inventario</h1>
             <p className="text-sm text-muted-foreground">
-              Administra tu catálogo de productos
+              Administra tu catálogo de productos y movimientos de stock
             </p>
           </div>
         </div>
@@ -201,6 +202,7 @@ export function ImportExportView() {
         <div className="px-6 pt-4 shrink-0">
           <TabsList>
             <TabsTrigger value="products">Productos</TabsTrigger>
+            <TabsTrigger value="stock-movements">Stock</TabsTrigger>
             <TabsTrigger value="import-export">Importar / Exportar</TabsTrigger>
           </TabsList>
         </div>
@@ -210,6 +212,13 @@ export function ImportExportView() {
           className="flex-1 min-h-0 overflow-hidden m-0 data-[state=active]:flex data-[state=active]:flex-col"
         >
           <ProductsManagementView />
+        </TabsContent>
+
+        <TabsContent
+          value="stock-movements"
+          className="flex-1 min-h-0 overflow-hidden m-0 data-[state=active]:flex data-[state=active]:flex-col"
+        >
+          <StockMovementsView />
         </TabsContent>
 
         <TabsContent value="import-export" className="flex-1 min-h-0 overflow-auto p-6 m-0">

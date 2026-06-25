@@ -248,6 +248,62 @@ test('inventory GET and POST', async (t) => {
   assert.ok(items.some((item) => item.name === uniqueName));
 });
 
+test('inventory stock movements POST and GET', async (t) => {
+  if (skipIfOffline(t)) return;
+
+  const productId = `smoke-stock-${Date.now()}`;
+  await authedRequest('/products', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: productId,
+      name: 'Producto stock movement smoke',
+      price: 100,
+      categories: ['Otros'],
+      stock: 10,
+      unit: 'unidad',
+    }),
+  });
+
+  const ingreso = await authedRequest('/inventory/stock-movements', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'in',
+      items: [{ productId, quantity: 5 }],
+      notes: 'Smoke ingreso',
+    }),
+  });
+  assert.equal(ingreso.response.status, 201);
+  const ingresoBody = ingreso.body as Array<Record<string, unknown>>;
+  assert.equal(ingresoBody[0]?.type, 'in');
+  assert.equal(ingresoBody[0]?.stockAfter, 15);
+
+  const egreso = await authedRequest('/inventory/stock-movements', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'out',
+      items: [{ productId, quantity: 3 }],
+    }),
+  });
+  assert.equal(egreso.response.status, 201);
+  assert.equal((egreso.body as Array<Record<string, unknown>>)[0]?.stockAfter, 12);
+
+  const transfer = await authedRequest('/inventory/stock-movements', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'transfer',
+      destinationLocal: 'Local Norte',
+      items: [{ productId, quantity: 2 }],
+    }),
+  });
+  assert.equal(transfer.response.status, 201);
+  assert.equal((transfer.body as Array<Record<string, unknown>>)[0]?.stockAfter, 10);
+
+  const list = await authedRequest('/inventory/stock-movements?limit=20');
+  assert.equal(list.response.status, 200);
+  const movements = list.body as Array<Record<string, unknown>>;
+  assert.ok(movements.some((item) => item.productId === productId));
+});
+
 test('AFIP integration health', async (t) => {
   if (skipIfOffline(t)) return;
   const { response, body } = await request('/integrations/afip/health');

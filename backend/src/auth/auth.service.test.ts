@@ -24,6 +24,10 @@ type MockLicenseService = {
   clearLoginAttempts: (ip: string) => void;
 };
 
+type MockCashService = {
+  closeOrphanOpenSessionsForFirstSetup: (manager: EntityManager) => Promise<void>;
+};
+
 function createAuthService(options: {
   users?: UserEntity[];
   user?: UserEntity | null;
@@ -60,7 +64,19 @@ function createAuthService(options: {
     clearLoginAttempts: () => undefined,
   };
 
-  return { service: new AuthService(usersRepository as never, jwtService as never, licenseService as never), store };
+  const cashService: MockCashService = {
+    closeOrphanOpenSessionsForFirstSetup: async () => undefined,
+  };
+
+  return {
+    service: new AuthService(
+      usersRepository as never,
+      jwtService as never,
+      licenseService as never,
+      cashService as never,
+    ),
+    store,
+  };
 }
 
 test('getSetupStatus returns needsSetup when no users exist', async () => {

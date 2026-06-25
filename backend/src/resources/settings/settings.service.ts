@@ -201,7 +201,7 @@ export class SettingsService {
     return {
       printerName: row?.printerName ?? null,
       printMode: row?.printMode === 'html' ? 'html' : 'escpos',
-      printSilent: Boolean(row?.printSilent),
+      printSilent: row ? Boolean(row.printSilent) : true,
       printerType: normalizedType,
       fallbackHtml: row?.fallbackHtml !== 0,
     };
@@ -222,7 +222,7 @@ export class SettingsService {
       printMode: payload.printMode ?? existing?.printMode ?? 'escpos',
       printSilent:
         payload.printSilent === undefined
-          ? (existing?.printSilent ?? 0)
+          ? (existing?.printSilent ?? 1)
           : payload.printSilent
             ? 1
             : 0,
