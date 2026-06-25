@@ -25,6 +25,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install license public key
+        shell: pwsh
+        env:
+          LICENSE_PUBLIC_KEY_PEM: ${{ secrets.LICENSE_PUBLIC_KEY_PEM }}
+        run: |
+          if (-not $env:LICENSE_PUBLIC_KEY_PEM) {
+            throw 'Falta el secret LICENSE_PUBLIC_KEY_PEM en el repo (clave publica de licencia).'
+          }
+          $dir = 'backend/src/license/keys'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Set-Content -Path (Join-Path $dir 'license-public.pem') -Value $env:LICENSE_PUBLIC_KEY_PEM -NoNewline
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
