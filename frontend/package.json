@@ -4,10 +4,10 @@
   "version": "0.0.3",
   "type": "module",
   "scripts": {
-    "dev": "npx vite",
-    "build": "npx vite build",
-    "build:electron": "npx vite build --mode electron",
-    "preview": "npx vite preview"
+    "dev": "vite",
+    "build": "vite build",
+    "build:electron": "vite build --mode electron",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

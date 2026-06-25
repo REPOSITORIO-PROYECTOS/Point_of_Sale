@@ -63,7 +63,10 @@ jobs:
 
       - name: Build stack
         shell: pwsh
-        run: npm run build:electron-all
+        run: |
+          npm run build:api
+          npm run build --prefix desktop
+          npm run build:electron --prefix frontend
 
       - name: Prepare backend pack
         shell: pwsh
