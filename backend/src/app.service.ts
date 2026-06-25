@@ -13,17 +13,21 @@ function readPackageVersion(relativeToBackend: string): string {
   }
 }
 
+const VERSION_METADATA = {
+  name: 'point-of-sale',
+  version: readPackageVersion('../package.json'),
+  components: {
+    backend: readPackageVersion('package.json'),
+    frontend: readPackageVersion('../frontend/package.json'),
+    desktop: readPackageVersion('../desktop/package.json'),
+  },
+} as const;
+
 @Injectable()
 export class AppService {
   getVersion() {
     return {
-      name: 'point-of-sale',
-      version: readPackageVersion('../package.json'),
-      components: {
-        backend: readPackageVersion('package.json'),
-        frontend: readPackageVersion('../frontend/package.json'),
-        desktop: readPackageVersion('../desktop/package.json'),
-      },
+      ...VERSION_METADATA,
       nodeEnv: env.nodeEnv,
       timestamp: new Date().toISOString(),
     };

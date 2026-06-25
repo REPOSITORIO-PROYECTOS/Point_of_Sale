@@ -30,7 +30,8 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET ?? 'dev-pos-jwt-secret-change-in-production',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
   devSkipLicense:
-    process.env.NODE_ENV === 'development' && process.env.DEV_SKIP_LICENSE === 'true',
+    process.env.DEV_SKIP_LICENSE === 'true' &&
+    (process.env.NODE_ENV !== 'production' || process.env.STAGING === 'true'),
   licensePublicKeyPath: process.env.LICENSE_PUBLIC_KEY_PATH
     ? path.resolve(process.env.LICENSE_PUBLIC_KEY_PATH)
     : path.join(__dirname, '..', 'license', 'keys', 'license-public.pem'),

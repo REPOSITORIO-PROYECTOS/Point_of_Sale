@@ -20,6 +20,10 @@ function sendUpdateEvent(getMainWindow: () => BrowserWindow | null, event: AppUp
   window?.webContents.send('app-update', event);
 }
 
+function hasUpdaterCredentials(): boolean {
+  return Boolean(process.env.GH_UPDATER_TOKEN ?? process.env.GH_TOKEN);
+}
+
 function configurePrivateGitHubFeed() {
   const token = process.env.GH_UPDATER_TOKEN ?? process.env.GH_TOKEN;
   if (!token) {
@@ -36,7 +40,22 @@ export function setupAutoUpdater(getMainWindow: () => BrowserWindow | null) {
     return;
   }
 
+  if (process.env.POS_DISABLE_AUTO_UPDATE === 'true') {
+    console.info('[auto-updater] deshabilitado (POS_DISABLE_AUTO_UPDATE=true)');
+    return;
+  }
+
+  // Repo GitHub privado: sin token en runtime GitHub responde 404 en releases.atom.
+  if (!hasUpdaterCredentials()) {
+    console.warn(
+      '[auto-updater] omitido: el feed de GitHub Releases es privado y no hay GH_UPDATER_TOKEN. ' +
+        'Publicá con npm run publish:win o configurá token en la caja / POS_DISABLE_AUTO_UPDATE=true.',
+    );
+    return;
+  }
+
   configurePrivateGitHubFeed();
+
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 

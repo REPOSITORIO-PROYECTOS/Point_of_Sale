@@ -10,5 +10,6 @@ Guías paso a paso por escenario. Cada doc es independiente.
 | [04](./04-facturacion-afip-dev.md) | AFIP en desarrollo | Facturación con Docker o sidecar |
 | [05](./05-build-instalador.md) | Build instalador `.exe` | Generar binario local |
 | [06](./06-desplegar-caja.md) | Desplegar en caja | Producción mostrador |
+| [07](./07-despliegue-linux-staging.md) | Staging Linux (2 locales web) | VPS provisional multi-caja |
 
 Índice general: [../README.md](../README.md)

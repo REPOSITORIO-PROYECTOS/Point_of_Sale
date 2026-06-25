@@ -1,0 +1,14 @@
+# POS web staging — TLS delante del contenedor nginx (puerto 8080 en el host).
+#
+# Requisitos:
+#   1. DNS: local-a.tu-dominio.com y local-b.tu-dominio.com → IP del VPS
+#   2. docker compose -f docker-compose.staging.yml up -d --build
+#   3. Copiar este archivo a /etc/caddy/Caddyfile (o incluirlo)
+#   4. systemctl reload caddy
+#
+# El contenedor `web` publica 127.0.0.1:8080 → nginx interno con routing por Host.
+
+local-a.tu-dominio.com, local-b.tu-dominio.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+}

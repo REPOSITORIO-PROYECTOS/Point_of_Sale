@@ -6,8 +6,10 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.publish
 !.env.example
 !.env.*.example
+!.env.publish.example
 
 # AFIP certificates and keys
 *.pem

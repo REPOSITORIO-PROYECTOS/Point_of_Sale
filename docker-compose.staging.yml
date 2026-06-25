@@ -1,0 +1,135 @@
+# Staging POS web — dos locales aislados (Local A + Local B).
+#
+# Requisitos previos en el VPS:
+#   - Docker + Docker Compose v2
+#   - Build del frontend: npm run build:web (genera frontend/dist/)
+#   - cp deploy/staging/.env.example deploy/staging/.env  (editar dominios y secrets)
+#   - DNS A/AAAA: local-a.* y local-b.* → IP del servidor
+#   - Caddy/nginx en el host con deploy/staging/Caddyfile.example
+#
+# Uso:
+#   docker compose -f docker-compose.staging.yml --env-file deploy/staging/.env up -d --build
+
+services:
+  afip:
+    build:
+      context: ./services/afip
+      dockerfile: Dockerfile
+    expose:
+      - "8002"
+    env_file:
+      - path: ./services/afip/.env
+        required: false
+    environment:
+      PRODUCTION: "FALSE"
+      INSTANCE_PORT: "5086"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:8002/api/afipws/test',timeout=5); sys.exit(0 if r.getcode()==200 else 1)\" || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  pos-api-local-a:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    expose:
+      - "3001"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      NODE_ENV: production
+      STAGING: "true"
+      APP_DATA_DIR: /data
+      CORS_ORIGIN: ${STAGING_CORS_ORIGIN_A:-https://local-a.tu-dominio.com}
+      ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
+      AFIP_SERVICE_URL: http://afip:8002
+      AFIP_PUNTO_VENTA: ${AFIP_PUNTO_VENTA_A:-1}
+      AFIP_PRODUCTION: ${AFIP_PRODUCTION:-false}
+      JWT_SECRET: ${STAGING_JWT_SECRET_A:-change-me-local-a}
+      JWT_EXPIRES_IN: 8h
+      DEV_SKIP_LICENSE: ${DEV_SKIP_LICENSE:-true}
+      REMOTE_ENABLED: "false"
+    volumes:
+      - pos-data-local-a:/data
+    depends_on:
+      afip:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3001/api').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  pos-api-local-b:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    expose:
+      - "3001"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      NODE_ENV: production
+      STAGING: "true"
+      APP_DATA_DIR: /data
+      CORS_ORIGIN: ${STAGING_CORS_ORIGIN_B:-https://local-b.tu-dominio.com}
+      ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
+      AFIP_SERVICE_URL: http://afip:8002
+      AFIP_PUNTO_VENTA: ${AFIP_PUNTO_VENTA_B:-2}
+      AFIP_PRODUCTION: ${AFIP_PRODUCTION:-false}
+      JWT_SECRET: ${STAGING_JWT_SECRET_B:-change-me-local-b}
+      JWT_EXPIRES_IN: 8h
+      DEV_SKIP_LICENSE: ${DEV_SKIP_LICENSE:-true}
+      REMOTE_ENABLED: "false"
+    volumes:
+      - pos-data-local-b:/data
+    depends_on:
+      afip:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3001/api').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  web:
+    image: nginx:alpine
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./deploy/staging/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
+      - ./deploy/staging/docker-entrypoint-nginx.sh:/docker-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
+    environment:
+      STAGING_LOCAL_A_HOST: ${STAGING_LOCAL_A_HOST:-local-a.tu-dominio.com}
+      STAGING_LOCAL_B_HOST: ${STAGING_LOCAL_B_HOST:-local-b.tu-dominio.com}
+    depends_on:
+      pos-api-local-a:
+        condition: service_healthy
+      pos-api-local-b:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pos-data-local-a:
+  pos-data-local-b:

@@ -1,4 +1,5 @@
 # Fragmento compartido: publicación en GitHub Releases (electron-updater).
+# Repo privado: en cada caja hace falta GH_UPDATER_TOKEN (read:packages/releases) o usar POS_DISABLE_AUTO_UPDATE=true.
 publish:
   - provider: github
     owner: REPOSITORIO-PROYECTOS

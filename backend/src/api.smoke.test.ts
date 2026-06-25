@@ -18,9 +18,12 @@ async function isApiReachable(): Promise<boolean> {
 
 async function request(path: string, init?: RequestInit): Promise<{ response: Response; body: JsonBody }> {
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     signal: AbortSignal.timeout(8000),
     ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
   });
 
   const body = (await response.json().catch(() => null)) as JsonBody;
@@ -42,7 +45,7 @@ async function ensureAdminToken(): Promise<string> {
     body: JSON.stringify({ username: SMOKE_ADMIN_USERNAME, password: SMOKE_ADMIN_PASSWORD }),
   });
 
-  if (loginAttempt.response.status === 201) {
+  if (loginAttempt.response.status === 200 || loginAttempt.response.status === 201) {
     const token = (loginAttempt.body as Record<string, unknown>).accessToken;
     assert.equal(typeof token, 'string');
     adminToken = token as string;
@@ -62,7 +65,7 @@ async function ensureAdminToken(): Promise<string> {
         confirmPassword: SMOKE_ADMIN_PASSWORD,
       }),
     });
-    assert.equal(setup.response.status, 201);
+    assert.equal(setup.response.status, 201, `setup admin smoke falló: ${JSON.stringify(setup.body)}`);
     const token = (setup.body as Record<string, unknown>).accessToken;
     assert.equal(typeof token, 'string');
     adminToken = token as string;
@@ -70,7 +73,9 @@ async function ensureAdminToken(): Promise<string> {
   }
 
   throw new Error(
-    'No se pudo obtener token admin. Definí POS_TEST_USERNAME y POS_TEST_PASSWORD con credenciales válidas.',
+    `No se pudo obtener token admin para "${SMOKE_ADMIN_USERNAME}". ` +
+      'La BD ya tiene otro administrador: usá npm run test:api:smoke (crea BD aislada) ' +
+      'o definí POS_TEST_USERNAME y POS_TEST_PASSWORD con un admin válido.',
   );
 }
 
@@ -87,7 +92,7 @@ async function authedRequest(path: string, init?: RequestInit) {
 
 function skipIfOffline(t: { skip: (message?: string) => void }): boolean {
   if (!apiLive) {
-    t.skip('pos-api no responde — levantar con: npm run dev:api');
+    t.skip('pos-api no responde — usar: npm run test:api:smoke (levanta API aislada automáticamente)');
     return true;
   }
   return false;
