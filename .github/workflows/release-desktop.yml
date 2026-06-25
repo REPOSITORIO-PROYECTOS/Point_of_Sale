@@ -38,6 +38,8 @@ jobs:
 
       - name: Install dependencies
         shell: pwsh
+        env:
+          NODE_ENV: development
         run: |
           npm ci
           npm ci --prefix frontend
