@@ -62,18 +62,9 @@ Copy-Item $node resources\nodejs\node.exe -Force
 
 `resources/nodejs/` está en `.gitignore` (~70 MB). Hay que repetirlo al cambiar versión de Node.
 
-### Build fuera de OneDrive (recomendado)
+### Si el build falla con `EPERM`
 
-Si el build falla con `EBUSY` o `EPERM`:
-
-```powershell
-cd desktop
-npm run build
-$env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
-npx electron-builder --dir --win --config electron-builder.yml --config.directories.output=C:/Temp/pos-build
-```
-
-Ejecutable: `C:\Temp\pos-build\win-unpacked\Point of Sale.exe`
+Cerrá Point of Sale y procesos que usen `desktop/release`. Para publicar: `npm run publish:win` (limpia `release` automáticamente).
 
 ## Variables útiles
 

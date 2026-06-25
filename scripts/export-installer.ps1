@@ -6,7 +6,7 @@
 # Salida: exports\Point-of-Sale-Setup.exe  (doble clic = instala y abre el POS)
 #
 # Opciones:
-#   -SkipBuild     Reusa el último build en %TEMP%\pos-build (rápido si no cambió código)
+#   -SkipBuild     Reusa el último build en desktop/release (rápido si no cambió código)
 #   -Portable      Carpeta win-unpacked sin NSIS (~5 min, para pruebas)
 #   -Fiscal         Incluye afip-service.exe
 #   -Zip            Además crea un .zip con el instalador (para enviar por mail)
@@ -30,7 +30,7 @@ $desktopDir = Join-Path $repoRoot 'desktop'
 $backendDir = Join-Path $repoRoot 'backend'
 $stamp = Get-Date -Format 'yyyy-MM-dd-HHmmss'
 $exportsDir = Join-Path $repoRoot 'exports'
-$buildOut = if ($env:POS_BUILD_DIR) { $env:POS_BUILD_DIR } else { Join-Path $env:TEMP 'pos-build' }
+$buildOut = if ($env:POS_BUILD_DIR) { $env:POS_BUILD_DIR } else { Join-Path $desktopDir 'release' }
 $dirOnlyMode = $Portable
 
 function Ensure-NodeEmbedded {
@@ -208,10 +208,10 @@ if (-not $SkipBuild) {
     $releaseDir = $buildOut
 } else {
     $candidates = @(
+        (Join-Path $desktopDir 'release'),
         $buildOut,
         (Get-ChildItem -Path $env:TEMP -Directory -Filter 'pos-build-*' -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName),
-        (Join-Path $desktopDir 'release')
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName)
     ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
 
     if (-not $candidates) {

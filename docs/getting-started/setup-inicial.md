@@ -12,7 +12,7 @@ Ejecutar **una sola vez** por máquina de desarrollo.
 ## Pasos
 
 ```powershell
-Set-Location "c:\Users\ticia\OneDrive\Sistemas\Point_of_Sale"
+Set-Location "C:\Users\ticia\SISTEMAS\Point_of_Sale"
 
 # Orquestación raíz
 npm install

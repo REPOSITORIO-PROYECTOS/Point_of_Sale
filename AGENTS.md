@@ -77,7 +77,7 @@ Inicializar antes de `.exe`: `$env:APP_DATA_DIR="$env:APPDATA\PointOfSale"; npm 
 Ver [`docs/ai/build-and-deploy.md`](docs/ai/build-and-deploy.md). Resumen:
 
 - Requiere copiar `node.exe` → `desktop/resources/nodejs/`
-- OneDrive puede bloquear build → usar output `C:/Temp/pos-build`
+- Salida de build: `desktop/release/` (gitignored)
 - Frontend Electron necesita `base: './'` en `vite.config.ts`
 
 ## Reglas para el agente

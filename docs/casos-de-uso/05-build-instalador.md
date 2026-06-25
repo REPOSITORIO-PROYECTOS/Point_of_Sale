@@ -29,16 +29,6 @@ desktop/release/Point-of-Sale-Setup.exe    # instalador NSIS
 desktop/release/win-unpacked/Point of Sale.exe   # con dist:win:dir
 ```
 
-## Si OneDrive bloquea (`EBUSY`)
-
-```powershell
-cd desktop
-$env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
-npx electron-builder --dir --win --config electron-builder.yml --config.directories.output=C:/Temp/pos-build
-```
-
-Ejecutable: `C:\Temp\pos-build\win-unpacked\Point of Sale.exe`
-
 ## Antes de abrir el `.exe`
 
 ```powershell

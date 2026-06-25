@@ -260,22 +260,13 @@ Tras el build, la app runnable está en:
 desktop/release/win-unpacked/Point of Sale.exe
 ```
 
-**Recomendado si OneDrive bloquea el build:** output fuera del repo:
-
-```powershell
-cd desktop
-$env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
-npx electron-builder --dir --win --config electron-builder.yml --config.directories.output=C:/Temp/pos-build
-# Ejecutable: C:\Temp\pos-build\win-unpacked\Point of Sale.exe
-```
-
 ### Problemas conocidos del build (y solución)
 
 | Síntoma | Causa | Solución |
 |---|---|---|
 | Ventana en blanco al abrir el `.exe` | Vite generaba rutas `/assets/...` inválidas en `file://` | Corregido: `base: './'` en `frontend/vite.config.ts` |
 | App se cierra sola / no se ve nada | Backend no levantaba a tiempo | Electron abre la UI aunque la API tarde; inicializar BD con `db:init` |
-| `EBUSY` / `EPERM` al buildear | OneDrive bloquea `backend/dist` o `desktop/release` | Build a `C:\Temp\...` o pausar sync de OneDrive en el repo |
+| `EBUSY` / `EPERM` al buildear | Archivos bloqueados en `desktop/release` o `backend/dist` | Cerrar `.exe`/Node; `npm run publish:win` limpia `release` antes de empaquetar |
 | Instalador NSIS colgado | Firma de código (`signtool`) | `forceCodeSigning: false` en `electron-builder.yml` |
 | API no responde en `.exe` | Falta `node.exe` embebido o BD no inicializada | Copiar `node.exe` a `desktop/resources/nodejs/` y correr `db:init` con `APP_DATA_DIR` |
 

@@ -53,6 +53,6 @@ npm run test:microservices:unit
 |----------|----------|
 | AFIP no levanta | Abrir Docker Desktop; `npm run dev:afip` solo |
 | Puerto 3001 ocupado | Matar proceso o `$env:PORT=3010` en backend |
-| EPERM en build | OneDrive bloqueando — pausar sync |
+| EPERM en build | Cerrar Point of Sale / procesos Node que bloqueen `desktop/release` |
 
 → [Setup inicial](../getting-started/setup-inicial.md) si falta `node_modules` o BD.

@@ -7,7 +7,7 @@ OS de referencia: **Windows / PowerShell**. En bash, adaptar `copy` → `cp` y v
 ## 1. Setup inicial (una vez por máquina)
 
 ```powershell
-Set-Location "c:\Users\ticia\OneDrive\Sistemas\Point_of_Sale"
+Set-Location "C:\Users\ticia\SISTEMAS\Point_of_Sale"
 
 npm install
 npm install --prefix frontend
@@ -151,7 +151,7 @@ Plan de sprints: [`sprint-revision.md`](sprint-revision.md)
 | Puerto 3001 ocupado | `$env:PORT=3010` en backend; ajustar proxy en `frontend/vite.config.ts` si hace falta |
 | Error migración tabla `sales` | `cd backend && npm run db:init` (dropea schema legacy y recrea) |
 | AFIP no responde | Verificar Docker; `npm run dev:afip` solo |
-| `EPERM` en `backend/dist` al build | OneDrive: pausar sync o build fuera del repo |
+| `EPERM` en `backend/dist` al build | Cerrar `.exe`/procesos que usen `dist` o `release`; reintentar build |
 | UI sin datos reales | Verificar que `npm run dev:api` esté levantado; productos ya usan `PosAPI` |
 | Falta React en frontend | `npm install --prefix frontend react@18.3.1 react-dom@18.3.1` |
 

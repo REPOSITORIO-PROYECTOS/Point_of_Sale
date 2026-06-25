@@ -35,12 +35,13 @@ El backend en `.exe` usa por defecto **node.exe embebido** (`resources/nodejs/no
 
 Alternativa más liviana: `POS_USE_ELECTRON_AS_NODE=true` + Visual Studio Build Tools → `electron-rebuild` en `prepare-backend-pack`.
 
-### Si OneDrive bloquea (`EBUSY` / `EPERM`)
+### Si el build falla con `EPERM` / `EBUSY`
+
+Cerrá Point of Sale y cualquier proceso que use `desktop/release` o `backend/dist`, luego reintentá. Override opcional de carpeta de salida:
 
 ```powershell
-cd desktop
-$env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
-npx electron-builder --dir --win --config electron-builder.yml --config.directories.output=C:/Temp/pos-build
+$env:POS_BUILD_DIR = 'C:\Temp\pos-build'
+npm run installer
 ```
 
 ## Antes de abrir el `.exe`
@@ -77,5 +78,5 @@ Detalle humano: [`services/afip/PRODUCTION.md`](../../services/afip/PRODUCTION.m
 | Pantalla blanca en `.exe` | `base: './'` en `frontend/vite.config.ts` |
 | App cierra sola | BD no init; módulos nativos | `db:init` con APP_DATA_DIR; `npm run prepare:backend-pack -Force` (rebuild Electron) |
 | Falta license-public.pem | Build sin postbuild | `npm run build:api` y volver a empaquetar |
-| NSIS colgado / sin Setup.exe | OneDrive o code signing | `CSC_IDENTITY_AUTO_DISCOVERY=false` (ya en scripts); output alternativo `POS_BUILD_DIR=C:/Temp/pos-build npm run installer` |
+| NSIS colgado / sin Setup.exe | Code signing o archivos bloqueados | `CSC_IDENTITY_AUTO_DISCOVERY=false` (ya en scripts); cerrar `.exe` antes de rebuild |
 | `.exe` no en repo | Normal; output en `desktop/release/` gitignored |

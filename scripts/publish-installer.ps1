@@ -30,11 +30,21 @@ function Ensure-NodeEmbedded {
     Write-Host "Node embebido copiado a desktop/resources/nodejs/node.exe" -ForegroundColor Cyan
 }
 
+function Clear-DesktopRelease {
+    $releaseDir = Join-Path $desktopDir 'release'
+    if (-not (Test-Path $releaseDir)) {
+        return
+    }
+    Write-Host "Limpiando $releaseDir ..." -ForegroundColor DarkGray
+    Remove-Item -Recurse -Force $releaseDir
+}
+
 $variant = if ($Fiscal) { 'fiscal' } else { 'standard' }
 Write-Host "Publicando instalador $variant en GitHub Releases..." -ForegroundColor Green
 Write-Host "Token: cargado desde backend/.env o .env.publish" -ForegroundColor DarkGray
 
 Ensure-NodeEmbedded
+Clear-DesktopRelease
 
 Push-Location $repoRoot
 try {

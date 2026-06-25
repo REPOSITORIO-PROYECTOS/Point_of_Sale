@@ -78,7 +78,7 @@ POS **sin** facturación local (solo UI + API, AFIP externo o mock):
 npm run dist:win
 ```
 
-Salida: `desktop/release/` (o carpeta custom si OneDrive bloquea — ver README raíz).
+Salida: `desktop/release/`
 
 ## Código fuente del microservicio
 
