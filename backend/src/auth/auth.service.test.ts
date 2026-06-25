@@ -232,10 +232,14 @@ test('verifyToken rejects invalid token', () => {
     recordFailedLogin: async () => undefined,
     clearLoginAttempts: () => undefined,
   };
+  const cashService: MockCashService = {
+    closeOrphanOpenSessionsForFirstSetup: async () => undefined,
+  };
   const service = new AuthService(
     { count: async () => 0, findOne: async () => null, manager: { transaction: async () => undefined } } as never,
     jwtService as never,
     licenseService as never,
+    cashService as never,
   );
 
   assert.throws(() => service.verifyToken('bad-token'), UnauthorizedException);
