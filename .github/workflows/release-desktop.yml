@@ -135,7 +135,7 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           if ($tag -match '^refs/tags/') { $tag = $tag -replace '^refs/tags/', '' }
-          $notesPath = "docs/releases/$($tag -replace '^v','').md"
+          $notesPath = "docs/releases/$tag.md"
           if (Test-Path $notesPath) {
             gh release edit $tag --draft=false --latest --notes-file $notesPath
           } else {
