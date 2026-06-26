@@ -18,6 +18,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: windows-latest
@@ -88,6 +92,19 @@ jobs:
       - name: Prepare backend pack (Electron as Node, sin node.exe embebido)
         shell: pwsh
         run: ./scripts/prepare-backend-pack.ps1 -Force
+
+      - name: Ensure GitHub release exists (evita carrera al publicar assets)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -match '^refs/tags/') { $tag = $tag -replace '^refs/tags/', '' }
+          $version = $tag -replace '^v', ''
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --draft --title $version --notes "Publicando instalador desde CI..."
+          }
 
       - name: Build AFIP sidecar (fiscal)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.variant == 'fiscal'
