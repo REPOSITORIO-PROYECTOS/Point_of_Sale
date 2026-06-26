@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const BASE_URL = process.env.POS_API_URL ?? 'http://127.0.0.1:3001/api';
+import { POS_PORTS } from './config/pos-ports';
+
+const BASE_URL = process.env.POS_API_URL ?? `http://127.0.0.1:${POS_PORTS.api}/api`;
 
 type JsonBody = Record<string, unknown> | unknown[] | null;
 

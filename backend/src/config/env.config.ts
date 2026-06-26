@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import path from 'node:path';
 import { ensureDesktopPaths, getDesktopPaths } from './desktop-paths';
+import { POS_PORTS } from './pos-ports';
 
 const toNumber = (value: string | undefined, fallback: number) => {
   const parsed = Number(value);
@@ -13,8 +14,8 @@ ensureDesktopPaths(desktopPaths);
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   host: process.env.HOST ?? '127.0.0.1',
-  port: toNumber(process.env.PORT, 3001),
-  corsOrigin: process.env.CORS_ORIGIN ?? '*',
+  port: toNumber(process.env.PORT, POS_PORTS.api),
+  corsOrigin: process.env.CORS_ORIGIN ?? `http://localhost:${POS_PORTS.frontend}`,
   enableSwagger: process.env.ENABLE_SWAGGER !== 'false',
   appDataDir: desktopPaths.appDataDir,
   uploadsDir: desktopPaths.uploadsDir,
@@ -22,10 +23,10 @@ export const env = {
   sqliteDbPath: process.env.SQLITE_DB_PATH
     ? path.resolve(process.env.SQLITE_DB_PATH)
     : desktopPaths.sqliteDbPath,
-  afipServiceUrl: process.env.AFIP_SERVICE_URL ?? 'http://127.0.0.1:5086',
+  afipServiceUrl: process.env.AFIP_SERVICE_URL ?? `http://127.0.0.1:${POS_PORTS.afip}`,
   afipPuntoVenta: toNumber(process.env.AFIP_PUNTO_VENTA, 1),
   afipProduction: process.env.AFIP_PRODUCTION === 'true',
-  remoteRelayUrl: process.env.REMOTE_RELAY_URL ?? 'http://127.0.0.1:5090',
+  remoteRelayUrl: process.env.REMOTE_RELAY_URL ?? `http://127.0.0.1:${POS_PORTS.remoteRelay}`,
   remoteEnabled: process.env.REMOTE_ENABLED !== 'false',
   jwtSecret: process.env.JWT_SECRET ?? 'dev-pos-jwt-secret-change-in-production',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',

@@ -30,4 +30,6 @@ Requiere: Node 20+, Docker Desktop (AFIP). BD dev: `backend/storage/` (`cd backe
 
 ## Puertos
 
-5173 frontend | 3001 api | 5086 afip
+58173 frontend | 58001 api | 58086 afip | 58090 relay | 58174 portal remoto
+
+Ver `config/ports.json`.

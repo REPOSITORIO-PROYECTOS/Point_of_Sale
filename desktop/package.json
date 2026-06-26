@@ -6,7 +6,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "npm run build && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 electron .",
+    "dev": "npm run build && cross-env ELECTRON_RENDERER_URL=http://localhost:58173 electron .",
     "test:smoke": "tsx --test src/bootstrap.smoke.test.ts src/updater-config.test.ts",
     "dist:win": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.yml",
     "dist:win:dir": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --win --config electron-builder.pack.yml",

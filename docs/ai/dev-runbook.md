@@ -55,9 +55,9 @@ Levanta en paralelo:
 
 | Proceso | Script interno | URL |
 |---------|----------------|-----|
-| Frontend Vite | `npm run dev --prefix frontend` | http://localhost:5173 |
-| Backend NestJS | `npm run start:dev --prefix backend` | http://127.0.0.1:3001/api |
-| AFIP Docker | `docker compose -f docker-compose.dev.yml up afip` | http://127.0.0.1:5086 |
+| Frontend Vite | `npm run dev --prefix frontend` | http://localhost:58173 |
+| Backend NestJS | `npm run start:dev --prefix backend` | http://127.0.0.1:58001/api |
+| AFIP Docker | `docker compose -f docker-compose.dev.yml up afip` | http://127.0.0.1:58086 |
 
 **Requisito:** Docker Desktop corriendo.
 

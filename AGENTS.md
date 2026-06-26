@@ -10,12 +10,12 @@ Monorepo POS: **frontend** (React/Vite) + **backend** (NestJS/SQLite) + **deskto
 
 | Carpeta | Rol | Puerto dev |
 |---------|-----|------------|
-| `frontend/` | UI | `5173` |
-| `backend/` | API negocio | `3001` |
-| `services/afip/` | Wrapper Docker/sidecar AFIP | `5086` |
+| `frontend/` | UI | `58173` |
+| `backend/` | API negocio | `58001` |
+| `services/afip/` | Wrapper Docker/sidecar AFIP | `58086` |
 | `desktop/` | Shell `.exe` | — |
 
-**AFIP:** código Python en repo externo `servicio_afip`. `backend/` solo hace HTTP a `:5086`. **No** hay lógica fiscal en NestJS.
+**AFIP:** código Python en repo externo `servicio_afip`. `backend/` solo hace HTTP a `:58086`. **No** hay lógica fiscal en NestJS.
 
 ## Correr en desarrollo (comando preferido)
 
@@ -35,9 +35,9 @@ npm run dev:stack
 Verificar:
 
 ```powershell
-curl http://127.0.0.1:3001/api
-curl http://127.0.0.1:5086/api/afipws/test
-# UI: http://localhost:5173
+curl http://127.0.0.1:58001/api
+curl http://127.0.0.1:58086/api/afipws/test
+# UI: http://localhost:58173
 ```
 
 ### Electron en dev (opcional)
@@ -53,8 +53,8 @@ npm run dev:desktop
 ### Sin Docker (solo UI + API)
 
 ```powershell
-npm run dev:web    # :5173
-npm run dev:api    # :3001
+npm run dev:web    # :58173
+npm run dev:api    # :58001
 ```
 
 AFIP no estará disponible; `/api/integrations/afip/health` puede marcar AFIP unreachable (esperado).

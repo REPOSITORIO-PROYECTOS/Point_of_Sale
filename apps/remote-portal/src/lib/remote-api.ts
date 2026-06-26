@@ -434,7 +434,7 @@ function getWebSocketBase(): string {
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${protocol}://${window.location.hostname}:5090`;
+  return `${protocol}://${window.location.hostname}:58090`;
 }
 
 export function createPortalWebSocket(clientNumber: string, onMessage: (data: unknown) => void): WebSocket {

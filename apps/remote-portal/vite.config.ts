@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
+import { POS_PORTS } from '../../config/ports.mjs';
 
 export default defineConfig({
   base: '/',
@@ -41,10 +42,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    port: POS_PORTS.remotePortal,
+    strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:5090',
+        target: `http://127.0.0.1:${POS_PORTS.remoteRelay}`,
         changeOrigin: true,
         rewrite: (requestPath) => requestPath.replace(/^\/api/, ''),
       },

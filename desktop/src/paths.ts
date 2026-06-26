@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { POS_PORTS } from './pos-ports';
 
 const appFolderName = 'PointOfSale';
 
@@ -45,7 +46,7 @@ export function resolveBackendCwd(isPackaged: boolean) {
 
 export function resolveFrontendUrl(isDev: boolean, isPackaged: boolean) {
   if (isDev) {
-    return process.env.ELECTRON_RENDERER_URL ?? 'http://localhost:5173';
+    return process.env.ELECTRON_RENDERER_URL ?? `http://localhost:${POS_PORTS.frontend}`;
   }
 
   if (isPackaged) {
@@ -55,12 +56,12 @@ export function resolveFrontendUrl(isDev: boolean, isPackaged: boolean) {
   return `file://${path.resolve(__dirname, '../../frontend/dist/index.html').replace(/\\/g, '/')}`;
 }
 
-export function getApiHealthUrl(port = Number(process.env.PORT ?? 3001)) {
+export function getApiHealthUrl(port = Number(process.env.PORT ?? POS_PORTS.api)) {
   return `http://127.0.0.1:${port}/api`;
 }
 
 export function getAfipPort() {
-  return Number(process.env.AFIP_PORT ?? 5086);
+  return Number(process.env.AFIP_PORT ?? POS_PORTS.afip);
 }
 
 export function getAfipHealthUrl(port = getAfipPort()) {

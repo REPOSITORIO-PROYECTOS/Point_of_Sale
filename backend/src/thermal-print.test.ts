@@ -18,6 +18,6 @@ test('thermalPrintableWidthMm leaves safe margins', () => {
 
 test('sanitizePrintableImageUrl rejects relative paths', () => {
   assert.equal(sanitizePrintableImageUrl('/branding/logo.png'), undefined);
-  assert.equal(sanitizePrintableImageUrl('http://127.0.0.1:5173/logo.png'), 'http://127.0.0.1:5173/logo.png');
+  assert.equal(sanitizePrintableImageUrl(`http://127.0.0.1:58173/logo.png`), 'http://127.0.0.1:58173/logo.png');
   assert.equal(sanitizePrintableImageUrl('data:image/png;base64,abc'), 'data:image/png;base64,abc');
 });

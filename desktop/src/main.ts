@@ -3,6 +3,7 @@ import { registerDevKeyboardShortcuts } from './dev-shortcuts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { bootstrapLocalServices, stopLocalServices } from './local-services';
+import { POS_PORTS } from './pos-ports';
 import { resolveFrontendUrl } from './paths';
 import {
   printEscposDocument,
@@ -63,7 +64,7 @@ async function resolveEffectivePrinterOptions(
 
 function resolvePrintBaseUrl(isDev: boolean, isPackaged: boolean): string {
   if (isDev) {
-    const rendererUrl = process.env.ELECTRON_RENDERER_URL ?? 'http://localhost:5173';
+    const rendererUrl = process.env.ELECTRON_RENDERER_URL ?? `http://localhost:${POS_PORTS.frontend}`;
     return rendererUrl.endsWith('/') ? rendererUrl : `${rendererUrl}/`;
   }
 
@@ -137,7 +138,7 @@ async function printReceiptHtml(payload: {
 }
 
 const isDev = !app.isPackaged;
-const apiPort = Number(process.env.PORT ?? 3001);
+const apiPort = Number(process.env.PORT ?? POS_PORTS.api);
 
 let mainWindow: BrowserWindow | null = null;
 

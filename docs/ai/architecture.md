@@ -41,9 +41,9 @@
 
 | Puerto | Servicio |
 |--------|----------|
-| 5173 | Vite frontend |
-| 3001 | NestJS pos-api |
-| 5086 | servicio_afip (host) |
+| 58173 | Vite frontend |
+| 58001 | NestJS pos-api |
+| 58086 | servicio_afip (host) |
 
 ## Scripts raíz (package.json)
 

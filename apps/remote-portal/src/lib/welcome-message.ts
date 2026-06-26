@@ -8,7 +8,7 @@ export function getPortalPublicUrl(): string {
     return window.location.origin;
   }
 
-  return 'http://localhost:5174';
+  return 'http://localhost:58174';
 }
 
 export type ClientWelcomeParams = {

@@ -9,6 +9,7 @@ import { registerSnapshotRoutes } from './routes/snapshots.js';
 import { registerTenantRoutes } from './routes/tenants.js';
 import { wsHub } from './ws/hub.js';
 import { store } from './store/memory-store.js';
+import { POS_PORTS } from './pos-ports.js';
 
 async function seedDeveloperAccount(): Promise<void> {
   const email = process.env.DEV_PORTAL_EMAIL ?? 'developer@pos.local';
@@ -63,9 +64,9 @@ async function seedDemoData(): Promise<void> {
   }
 }
 
-const port = Number(process.env.PORT ?? 5090);
+const port = Number(process.env.PORT ?? POS_PORTS.remoteRelay);
 const host = process.env.HOST ?? '127.0.0.1';
-const corsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5174')
+const corsOrigins = (process.env.CORS_ORIGINS ?? `http://localhost:${POS_PORTS.remotePortal}`)
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);

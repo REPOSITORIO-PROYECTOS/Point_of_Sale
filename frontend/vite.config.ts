@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import path from 'path'
 import { readFileSync } from 'node:fs'
+import { POS_PORTS } from '../config/ports.mjs'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
@@ -41,9 +42,11 @@ export default defineConfig({
   },
 
   server: {
+    port: Number(process.env.VITE_DEV_PORT ?? POS_PORTS.frontend),
+    strictPort: true,
     proxy: {
       '/api': {
-        target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3001',
+        target: process.env.API_PROXY_TARGET ?? `http://127.0.0.1:${POS_PORTS.api}`,
         changeOrigin: true,
       },
     },

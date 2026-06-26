@@ -11,6 +11,7 @@ import {
   resolveBackendEntry,
   resolveBundledNodeExecutable,
 } from './paths';
+import { POS_PORTS } from './pos-ports';
 
 type ManagedProcess = {
   name: string;
@@ -123,7 +124,7 @@ export function startBackend(isDev: boolean, isPackaged: boolean, apiPort: numbe
     PORT: String(apiPort),
     APP_DATA_DIR: appDataDir,
     ENABLE_SWAGGER: isDev ? 'true' : 'false',
-    AFIP_SERVICE_URL: process.env.AFIP_SERVICE_URL ?? 'http://127.0.0.1:5086',
+    AFIP_SERVICE_URL: process.env.AFIP_SERVICE_URL ?? `http://127.0.0.1:${POS_PORTS.afip}`,
     ...(runtime.mode === 'fork-electron' ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
   };
 
@@ -153,7 +154,7 @@ export function startAfipSidecar(isPackaged: boolean) {
 
   if (!sidecarExecutable || !fs.existsSync(sidecarExecutable)) {
     console.warn(
-      '[local-services] AFIP sidecar not found. Fiscal features require AFIP at http://127.0.0.1:5086 (Docker in dev or built sidecar in prod).',
+      `[local-services] AFIP sidecar not found. Fiscal features require AFIP at http://127.0.0.1:${POS_PORTS.afip} (Docker in dev or built sidecar in prod).`,
     );
     return null;
   }
@@ -166,7 +167,7 @@ export function startAfipSidecar(isPackaged: boolean) {
     env: {
       ...process.env,
       PRODUCTION: process.env.AFIP_PRODUCTION ?? 'FALSE',
-      INSTANCE_PORT: process.env.AFIP_PORT ?? '5086',
+      INSTANCE_PORT: process.env.AFIP_PORT ?? String(POS_PORTS.afip),
       CERT: pathIfExists(path.join(certDir, 'user.crt'), 'user.crt'),
       PRIVATEKEY: pathIfExists(path.join(certDir, 'user.key'), 'user.key'),
       APP_DATA_DIR: appDataDir,

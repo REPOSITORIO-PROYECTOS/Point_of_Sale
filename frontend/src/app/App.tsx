@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { POS_PORTS } from "@/lib/pos-ports";
 
 import { POSScreenEnhanced } from "./components/pos/POSScreenEnhanced";
 
@@ -87,7 +88,7 @@ function AppContent() {
               <h1 className="text-xl font-semibold text-foreground">API no disponible</h1>
               <p className="max-w-md text-muted-foreground">
                 No se pudo conectar con el backend en{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-sm">127.0.0.1:3001</code>.
+                <code className="rounded bg-muted px-1.5 py-0.5 text-sm">127.0.0.1:{POS_PORTS.api}</code>.
                 Ejecutá <code className="rounded bg-muted px-1.5 py-0.5 text-sm">npm run dev:api</code> o{" "}
                 <code className="rounded bg-muted px-1.5 py-0.5 text-sm">npm run dev:stack</code> desde la raíz del
                 proyecto.

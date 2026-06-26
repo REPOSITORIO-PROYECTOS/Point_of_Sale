@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
-const POS_API_URL = process.env.POS_API_URL ?? 'http://127.0.0.1:3001/api';
-const AFIP_URL = process.env.AFIP_SERVICE_URL ?? 'http://127.0.0.1:5086';
+import { POS_PORTS } from '../config/ports.mjs';
+
+const POS_API_URL = process.env.POS_API_URL ?? `http://127.0.0.1:${POS_PORTS.api}/api`;
+const AFIP_URL = process.env.AFIP_SERVICE_URL ?? `http://127.0.0.1:${POS_PORTS.afip}`;
 const AFIP_TEST_PATHS = ['/api/afipws/test', '/afipws/test'];
 
 const results = [];

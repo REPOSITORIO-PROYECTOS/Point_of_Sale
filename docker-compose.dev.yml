@@ -4,13 +4,13 @@ services:
       context: ./services/afip
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:5086:8002"
+      - "127.0.0.1:58086:8002"
     env_file:
       - path: ./services/afip/.env
         required: false
     environment:
       PRODUCTION: "FALSE"
-      INSTANCE_PORT: "5086"
+      INSTANCE_PORT: "58086"
     restart: unless-stopped
     healthcheck:
       test:
@@ -28,12 +28,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:58001:3001"
     environment:
       HOST: 0.0.0.0
       PORT: 3001
       NODE_ENV: development
-      CORS_ORIGIN: http://localhost:5173
+      CORS_ORIGIN: http://localhost:58173
       ENABLE_SWAGGER: "true"
       AFIP_SERVICE_URL: http://afip:8002
       AFIP_PUNTO_VENTA: "1"
