@@ -15,6 +15,7 @@ export type ProductResponse = {
   id: string;
   name: string;
   price: number;
+  openPrice?: boolean;
   cost?: number;
   categories: string[];
   stock?: number;
@@ -48,6 +49,7 @@ function mapDtoToEntity(payload: CreateProductDto | (UpdateProductDto & { id?: s
     ...(payload.id ? { id: payload.id } : {}),
     ...(payload.name !== undefined ? { name: payload.name } : {}),
     ...(payload.price !== undefined ? { price: payload.price } : {}),
+    ...(payload.openPrice !== undefined ? { openPrice: payload.openPrice } : {}),
     ...(payload.cost !== undefined ? { cost: payload.cost } : {}),
     ...(payload.categories !== undefined ? { categories: stringifyJsonArray(payload.categories) } : {}),
     ...(payload.stock !== undefined ? { stock: payload.stock } : {}),
@@ -336,6 +338,7 @@ function toProductResponse(entity: ProductEntity): ProductResponse {
     id: entity.id,
     name: entity.name,
     price: entity.price,
+    ...(entity.openPrice ? { openPrice: true } : {}),
     ...(entity.cost != null ? { cost: entity.cost } : {}),
     categories,
     ...(entity.stock != null ? { stock: entity.stock } : {}),

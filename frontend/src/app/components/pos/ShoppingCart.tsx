@@ -1,4 +1,5 @@
 import { CartItem } from "../../../lib/wails-bridge";
+import { getCartLineKey } from "../../../lib/open-price-product";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Separator } from "../ui/separator";
@@ -6,8 +7,8 @@ import { Plus, Minus, Trash2, ShoppingCart as CartIcon } from "lucide-react";
 
 interface ShoppingCartProps {
   items: CartItem[];
-  onUpdateQuantity: (productId: string, delta: number) => void;
-  onRemoveItem: (productId: string) => void;
+  onUpdateQuantity: (lineKey: string, delta: number) => void;
+  onRemoveItem: (lineKey: string) => void;
   onCheckout: () => void;
   onCancel: () => void;
   onHold: () => void;
@@ -46,21 +47,34 @@ export function ShoppingCart({
           </div>
         ) : (
           <div className="space-y-2">
-            {items.map((item) => (
-              <Card key={item.id} className="p-3">
+            {items.map((item) => {
+              const lineKey = getCartLineKey(item);
+              const isOpenPriceLine = Boolean(item.cartLineId);
+              return (
+              <Card key={lineKey} className="p-3">
                 <div className="flex items-center gap-3">
                   <div className="flex-1">
                     <h4 className="font-medium">{item.name}</h4>
                     <p className="text-sm text-muted-foreground">
-                      ${item.price.toFixed(2)} each
+                      ${item.price.toFixed(2)} {isOpenPriceLine ? "(ajuste)" : "c/u"}
                     </p>
                   </div>
+                  {isOpenPriceLine ? (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-9 text-destructive"
+                      onClick={() => onRemoveItem(lineKey)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  ) : (
                   <div className="flex items-center gap-2">
                     <Button
                       size="icon"
                       variant="outline"
                       className="size-9"
-                      onClick={() => onUpdateQuantity(item.id, -1)}
+                      onClick={() => onUpdateQuantity(lineKey, -1)}
                     >
                       <Minus className="size-4" />
                     </Button>
@@ -71,7 +85,7 @@ export function ShoppingCart({
                       size="icon"
                       variant="outline"
                       className="size-9"
-                      onClick={() => onUpdateQuantity(item.id, 1)}
+                      onClick={() => onUpdateQuantity(lineKey, 1)}
                     >
                       <Plus className="size-4" />
                     </Button>
@@ -79,11 +93,12 @@ export function ShoppingCart({
                       size="icon"
                       variant="ghost"
                       className="size-9 text-destructive"
-                      onClick={() => onRemoveItem(item.id)}
+                      onClick={() => onRemoveItem(lineKey)}
                     >
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
+                  )}
                 </div>
                 <Separator className="my-2" />
                 <div className="flex justify-between items-center">
@@ -93,7 +108,8 @@ export function ShoppingCart({
                   </span>
                 </div>
               </Card>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>

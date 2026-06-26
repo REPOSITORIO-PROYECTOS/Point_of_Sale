@@ -50,6 +50,7 @@ import {
   productInCategory,
 } from "../../../lib/product-categories";
 import { applyPriceIncrease, type PriceRoundMode } from "../../../lib/price-utils";
+import { isOpenPriceProduct } from "../../../lib/open-price-product";
 
 const ADMIN_RESULT_LIMIT = 100;
 const SEARCH_DEBOUNCE_MS = 250;
@@ -83,6 +84,7 @@ export function ProductsManagementView() {
     unit: "unidad" as "unidad" | "gramos" | "kilogramos" | "litros" | "mililitros",
     quantity: "",
     supplier: "",
+    openPrice: false,
   });
   const [barcodes, setBarcodes] = useState<string[]>([]);
   const [newBarcode, setNewBarcode] = useState("");
@@ -165,6 +167,7 @@ export function ProductsManagementView() {
       unit: "unidad",
       quantity: "",
       supplier: "",
+      openPrice: false,
     });
     setBarcodes([]);
     setNewBarcode("");
@@ -185,6 +188,7 @@ export function ProductsManagementView() {
       unit: product.unit || "unidad",
       quantity: product.quantity?.toString() || "",
       supplier: product.supplier || "",
+      openPrice: Boolean(product.openPrice),
     });
     setBarcodes(product.barcodes || []);
     setNewBarcode("");
@@ -193,7 +197,8 @@ export function ProductsManagementView() {
   };
 
   const handleSave = async () => {
-    if (!formData.id || !formData.name || !formData.price || formData.categories.length === 0) {
+    const priceValue = formData.openPrice ? "0" : formData.price;
+    if (!formData.id || !formData.name || !priceValue || formData.categories.length === 0) {
       toast.error("Completa los campos obligatorios");
       return;
     }
@@ -201,7 +206,8 @@ export function ProductsManagementView() {
     const newProduct: Product = {
       id: formData.id,
       name: formData.name,
-      price: parseFloat(formData.price),
+      price: parseFloat(priceValue),
+      openPrice: formData.openPrice,
       cost: formData.cost ? parseFloat(formData.cost) : undefined,
       categories: formData.categories,
       stock: formData.stock ? parseInt(formData.stock) : undefined,
@@ -310,22 +316,30 @@ export function ProductsManagementView() {
     let updatedProducts = [...products];
     let affectedCount = 0;
 
-    const increaseProductPrice = (product: Product): Product => ({
-      ...product,
-      price: applyPriceIncrease(product.price, percentage, priceRoundMode),
-      cost: product.cost ? product.cost * (1 + percentage) : product.cost,
-    });
+    const increaseProductPrice = (product: Product): Product => {
+      if (isOpenPriceProduct(product)) {
+        return product;
+      }
+      return {
+        ...product,
+        price: applyPriceIncrease(product.price, percentage, priceRoundMode),
+        cost: product.cost ? product.cost * (1 + percentage) : product.cost,
+      };
+    };
 
     if (increaseType === "general") {
-      updatedProducts = updatedProducts.map((p) => increaseProductPrice(p));
-      affectedCount = updatedProducts.length;
+      updatedProducts = updatedProducts.map((p) => {
+        if (isOpenPriceProduct(p)) return p;
+        affectedCount++;
+        return increaseProductPrice(p);
+      });
     } else if (increaseType === "category") {
       if (!selectedCategory) {
         toast.error("Selecciona una categoría");
         return;
       }
       updatedProducts = updatedProducts.map((p) => {
-        if (productInCategory(p, selectedCategory)) {
+        if (productInCategory(p, selectedCategory) && !isOpenPriceProduct(p)) {
           affectedCount++;
           return increaseProductPrice(p);
         }
@@ -337,7 +351,7 @@ export function ProductsManagementView() {
         return;
       }
       updatedProducts = updatedProducts.map((p) => {
-        if (selectedProducts.has(p.id)) {
+        if (selectedProducts.has(p.id) && !isOpenPriceProduct(p)) {
           affectedCount++;
           return increaseProductPrice(p);
         }
@@ -583,7 +597,11 @@ export function ProductsManagementView() {
                               : "-"}
                           </TableCell>
                           <TableCell className="font-semibold">
-                            ${product.price.toFixed(2)}
+                            {isOpenPriceProduct(product) ? (
+                              <span className="text-muted-foreground">A definir</span>
+                            ) : (
+                              `$${product.price.toFixed(2)}`
+                            )}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {product.cost
@@ -846,6 +864,28 @@ export function ProductsManagementView() {
               )}
             </div>
 
+            <div className="flex items-start gap-3 rounded-lg border p-3">
+              <Checkbox
+                id="openPrice"
+                checked={formData.openPrice}
+                onCheckedChange={(checked) =>
+                  setFormData({
+                    ...formData,
+                    openPrice: checked === true,
+                    price: checked === true ? "0" : formData.price,
+                  })
+                }
+              />
+              <div className="space-y-1">
+                <Label htmlFor="openPrice" className="cursor-pointer">
+                  Precio abierto (ajuste)
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  El precio queda en $0 y el cajero ingresa el monto al vender (panadería, golosinas, etc.).
+                </p>
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="price">Precio de Venta ($) *</Label>
               <Input
@@ -853,12 +893,13 @@ export function ProductsManagementView() {
                 type="number"
                 step="0.01"
                 min="0"
-                value={formData.price}
+                value={formData.openPrice ? "0" : formData.price}
                 onChange={(e) =>
                   setFormData({ ...formData, price: e.target.value })
                 }
                 placeholder="0.00"
                 className="mt-1"
+                disabled={formData.openPrice}
               />
             </div>
 

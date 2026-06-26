@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNumber,
@@ -26,6 +27,14 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   price!: number;
+
+  @ApiPropertyOptional({
+    description: 'Si es true, el precio se ingresa al vender (producto de ajuste)',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  openPrice?: boolean;
 
   @Type(() => Number)
   @ApiPropertyOptional({ example: 800 })

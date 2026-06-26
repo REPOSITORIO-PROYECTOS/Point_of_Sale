@@ -303,6 +303,7 @@ function toProductPayload(product: Product) {
     id: product.id,
     name: product.name,
     price: product.price,
+    openPrice: product.openPrice,
     cost: product.cost,
     categories: product.categories,
     stock: product.stock,

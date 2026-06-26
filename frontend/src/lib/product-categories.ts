@@ -1,11 +1,13 @@
 import type { Product } from "./wails-bridge";
 
 export const DEFAULT_CATEGORIES = [
+  "Ajuste",
   "Cafetería",
   "Panadería",
   "Bebidas",
   "Comida",
   "Snacks",
+  "Golosinas",
   "Fiambrería",
   "Otros",
 ] as const;

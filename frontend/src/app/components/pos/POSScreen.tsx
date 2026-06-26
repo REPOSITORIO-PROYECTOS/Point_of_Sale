@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PosAPI } from "../../../lib/pos-api";
 import { useTheme } from "../../../lib/theme-context";
 import { CartItem, Transaction, WailsAPI, Product } from "../../../lib/wails-bridge";
+import { createOpenPriceCartLine, getCartLineKey } from "../../../lib/open-price-product";
 import { ProductCatalog } from "./ProductCatalog";
 import { ShoppingCart } from "./ShoppingCart";
 import { toast } from "sonner";
@@ -10,12 +11,19 @@ export function POSScreen() {
   const { themeConfig } = useTheme();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = (product: Product, _weight?: number, openPriceAmount?: number) => {
+    if (openPriceAmount != null && openPriceAmount > 0) {
+      const line = createOpenPriceCartLine(product, openPriceAmount);
+      setCartItems((prev) => [...prev, line]);
+      toast.success(`${product.name} - $${openPriceAmount.toFixed(2)} agregado al carrito`);
+      return;
+    }
+
     setCartItems((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      const existing = prev.find((item) => item.id === product.id && !item.cartLineId);
       if (existing) {
         return prev.map((item) =>
-          item.id === product.id
+          getCartLineKey(item) === getCartLineKey(existing)
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
@@ -25,11 +33,11 @@ export function POSScreen() {
     toast.success(`${product.name} agregado al carrito`);
   };
 
-  const handleUpdateQuantity = (productId: string, delta: number) => {
+  const handleUpdateQuantity = (lineKey: string, delta: number) => {
     setCartItems((prev) => {
       return prev
         .map((item) =>
-          item.id === productId
+          getCartLineKey(item) === lineKey
             ? { ...item, quantity: item.quantity + delta }
             : item
         )
@@ -37,8 +45,8 @@ export function POSScreen() {
     });
   };
 
-  const handleRemoveItem = (productId: string) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== productId));
+  const handleRemoveItem = (lineKey: string) => {
+    setCartItems((prev) => prev.filter((item) => getCartLineKey(item) !== lineKey));
     toast.success("Artículo eliminado del carrito");
   };
 

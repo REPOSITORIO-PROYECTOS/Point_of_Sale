@@ -1,4 +1,5 @@
 import { CartItem } from "../../../lib/wails-bridge";
+import { getCartLineKey } from "../../../lib/open-price-product";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Separator } from "../ui/separator";
@@ -6,8 +7,8 @@ import { Plus, Minus, Trash2, ShoppingCart as CartIcon, Weight } from "lucide-re
 
 interface ShoppingCartEnhancedProps {
   items: CartItem[];
-  onUpdateQuantity: (productId: string, delta: number) => void;
-  onRemoveItem: (productId: string) => void;
+  onUpdateQuantity: (lineKey: string, delta: number) => void;
+  onRemoveItem: (lineKey: string) => void;
   onCheckout: () => void;
   onCancel: () => void;
   onHold: () => void;
@@ -48,53 +49,73 @@ export function ShoppingCartEnhanced({
         ) : (
           <div className="space-y-2">
             {items.map((item) => {
+              const lineKey = getCartLineKey(item);
               const isByWeight = item.unit === "kilogramos" || item.unit === "gramos";
+              const isOpenPriceLine = Boolean(item.cartLineId);
               return (
-                <Card key={item.id} className="p-3">
+                <Card key={lineKey} className="p-3">
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h4 className="font-medium">{item.name}</h4>
-                        {isByWeight && <Weight className="size-4 text-muted-foreground" />}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        ${item.price.toFixed(2)} {isByWeight ? "/kg" : "c/u"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="size-9"
-                        onClick={() => onUpdateQuantity(item.id, isByWeight ? -0.1 : -1)}
-                      >
-                        <Minus className="size-4" />
-                      </Button>
-                      <div className="w-16 text-center">
-                        <span className="font-semibold">
-                          {isByWeight ? item.quantity.toFixed(2) : item.quantity}
-                        </span>
-                        {isByWeight && (
-                          <div className="text-xs text-muted-foreground">kg</div>
+                        {isByWeight && !isOpenPriceLine && (
+                          <Weight className="size-4 text-muted-foreground" />
                         )}
                       </div>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="size-9"
-                        onClick={() => onUpdateQuantity(item.id, isByWeight ? 0.1 : 1)}
-                      >
-                        <Plus className="size-4" />
-                      </Button>
+                      <p className="text-sm text-muted-foreground">
+                        ${item.price.toFixed(2)}{" "}
+                        {isOpenPriceLine
+                          ? "(ajuste)"
+                          : isByWeight
+                            ? "/kg"
+                            : "c/u"}
+                      </p>
+                    </div>
+                    {isOpenPriceLine ? (
                       <Button
                         size="icon"
                         variant="ghost"
                         className="size-9 text-destructive"
-                        onClick={() => onRemoveItem(item.id)}
+                        onClick={() => onRemoveItem(lineKey)}
                       >
                         <Trash2 className="size-4" />
                       </Button>
-                    </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="size-9"
+                          onClick={() => onUpdateQuantity(lineKey, isByWeight ? -0.1 : -1)}
+                        >
+                          <Minus className="size-4" />
+                        </Button>
+                        <div className="w-16 text-center">
+                          <span className="font-semibold">
+                            {isByWeight ? item.quantity.toFixed(2) : item.quantity}
+                          </span>
+                          {isByWeight && (
+                            <div className="text-xs text-muted-foreground">kg</div>
+                          )}
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="size-9"
+                          onClick={() => onUpdateQuantity(lineKey, isByWeight ? 0.1 : 1)}
+                        >
+                          <Plus className="size-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-9 text-destructive"
+                          onClick={() => onRemoveItem(lineKey)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <Separator className="my-2" />
                   <div className="flex justify-between items-center">

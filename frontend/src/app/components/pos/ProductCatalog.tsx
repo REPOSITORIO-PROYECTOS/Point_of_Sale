@@ -5,7 +5,8 @@ import { getProductCategories } from "../../../lib/product-categories";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
-import { Search, Plus, Weight, Lock, Unlock, ArrowUpDown, Loader2 } from "lucide-react";
+import { Search, Plus, Weight, Lock, Unlock, ArrowUpDown, Loader2, DollarSign } from "lucide-react";
+import { isOpenPriceProduct } from "../../../lib/open-price-product";
 import { isCashSessionOpen } from "../../../lib/cash-session";
 import {
   Dialog,
@@ -22,7 +23,7 @@ const CATALOG_RESULT_LIMIT = 80;
 const SEARCH_DEBOUNCE_MS = 250;
 
 interface ProductCatalogProps {
-  onAddToCart: (product: Product, weight?: number) => void;
+  onAddToCart: (product: Product, weight?: number, openPriceAmount?: number) => void;
   cashSession?: unknown;
   onOpenCash?: () => void;
   onCloseCash?: () => void;
@@ -44,9 +45,11 @@ export function ProductCatalog({
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
+  const [openPriceDialogOpen, setOpenPriceDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [weight, setWeight] = useState("");
   const [amount, setAmount] = useState("");
+  const [openPriceAmount, setOpenPriceAmount] = useState("");
   const [weightInputMode, setWeightInputMode] = useState<"weight" | "amount">("weight");
   const barcodeLookupRef = useRef(false);
   const searchRequestRef = useRef(0);
@@ -101,13 +104,32 @@ export function ProductCatalog({
   }, [searchQuery, selectedCategory, selectedSupplier]);
 
   const handleProductClick = (product: Product) => {
-    if (product.unit === "kilogramos" || product.unit === "gramos") {
+    if (isOpenPriceProduct(product)) {
+      setSelectedProduct(product);
+      setOpenPriceDialogOpen(true);
+    } else if (product.unit === "kilogramos" || product.unit === "gramos") {
       setSelectedProduct(product);
       setWeightDialogOpen(true);
     } else {
       onAddToCart(product);
     }
   };
+
+  const resetOpenPriceDialog = () => {
+    setOpenPriceAmount("");
+    setSelectedProduct(null);
+  };
+
+  const handleOpenPriceConfirm = () => {
+    const parsedAmount = parseFloat(openPriceAmount);
+    if (selectedProduct && parsedAmount > 0) {
+      onAddToCart(selectedProduct, undefined, parsedAmount);
+      setOpenPriceDialogOpen(false);
+      resetOpenPriceDialog();
+    }
+  };
+
+  const quickOpenPriceAmounts = [100, 200, 300, 500, 1000, 1500];
 
   const resetWeightDialog = () => {
     setWeight("");
@@ -336,16 +358,29 @@ export function ProductCatalog({
                           {product.supplier}
                         </p>
                       )}
-                      {(product.unit === "kilogramos" || product.unit === "gramos") && (
+                      {(product.unit === "kilogramos" || product.unit === "gramos") &&
+                        !isOpenPriceProduct(product) && (
                         <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                           <Weight className="size-3" />
                           Por peso
                         </div>
                       )}
+                      {isOpenPriceProduct(product) && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                          <DollarSign className="size-3" />
+                          Precio a definir
+                        </div>
+                      )}
                       <p className="text-2xl font-bold mt-2">
-                        ${product.price.toFixed(2)}
-                        {(product.unit === "kilogramos" || product.unit === "gramos") && (
-                          <span className="text-sm text-muted-foreground ml-1">/kg</span>
+                        {isOpenPriceProduct(product) ? (
+                          <span className="text-muted-foreground text-lg">A definir</span>
+                        ) : (
+                          <>
+                            ${product.price.toFixed(2)}
+                            {(product.unit === "kilogramos" || product.unit === "gramos") && (
+                              <span className="text-sm text-muted-foreground ml-1">/kg</span>
+                            )}
+                          </>
                         )}
                       </p>
                     </div>
@@ -487,6 +522,83 @@ export function ProductCatalog({
             <Button
               onClick={handleWeightConfirm}
               disabled={!resolveWeightKg()}
+            >
+              <Plus className="size-4 mr-1" />
+              Agregar al Carrito
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={openPriceDialogOpen}
+        onOpenChange={(open) => {
+          setOpenPriceDialogOpen(open);
+          if (!open) resetOpenPriceDialog();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="size-5" />
+              {selectedProduct?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Ingresá el monto de este ajuste en pesos
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="openPriceAmount">Monto ($)</Label>
+              <Input
+                id="openPriceAmount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={openPriceAmount}
+                onChange={(e) => setOpenPriceAmount(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleOpenPriceConfirm();
+                  }
+                }}
+                placeholder="0.00"
+                className="text-2xl h-14 mt-1"
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">Montos rápidos</Label>
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                {quickOpenPriceAmounts.map((value) => (
+                  <Button
+                    key={value}
+                    variant="outline"
+                    onClick={() => setOpenPriceAmount(value.toString())}
+                    className="h-12"
+                  >
+                    ${value}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpenPriceDialogOpen(false);
+                resetOpenPriceDialog();
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleOpenPriceConfirm}
+              disabled={!openPriceAmount || parseFloat(openPriceAmount) <= 0}
             >
               <Plus className="size-4 mr-1" />
               Agregar al Carrito

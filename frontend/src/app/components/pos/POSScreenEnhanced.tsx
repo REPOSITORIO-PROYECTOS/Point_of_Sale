@@ -7,6 +7,11 @@ import type { Product, CartItem, Transaction, PaymentMethod, CashSession } from 
 import { WailsAPI } from "../../../lib/wails-bridge";
 import { getExpectedCashBreakdown, getExpectedCashInDrawer } from "../../../lib/cash-expected";
 import {
+  createOpenPriceCartLine,
+  getCartLineKey,
+  isOpenPriceProduct,
+} from "../../../lib/open-price-product";
+import {
   CASH_DATA_UPDATED_EVENT,
   isCashSessionOpen,
   notifyCashDataUpdated,
@@ -165,19 +170,28 @@ export function POSScreenEnhanced({
     }
   };
 
-  const handleAddToCart = (product: Product, weight?: number) => {
+  const handleAddToCart = (product: Product, weight?: number, openPriceAmount?: number) => {
     if (!isCashSessionOpen(cashSession)) {
       setNoCashDialogOpen(true);
       toast.error("Debes abrir caja antes de realizar ventas");
       return;
     }
 
+    if (openPriceAmount != null && openPriceAmount > 0) {
+      const line = createOpenPriceCartLine(product, openPriceAmount);
+      setCartItems((prev) => [...prev, line]);
+      toast.success(`${product.name} - $${openPriceAmount.toFixed(2)} agregado al carrito`);
+      return;
+    }
+
     const quantity = weight || 1;
     setCartItems((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      const existing = prev.find(
+        (item) => item.id === product.id && !item.cartLineId && !isOpenPriceProduct(item),
+      );
       if (existing) {
         return prev.map((item) =>
-          item.id === product.id
+          getCartLineKey(item) === getCartLineKey(existing)
             ? { ...item, quantity: item.quantity + quantity }
             : item
         );
@@ -191,11 +205,11 @@ export function POSScreenEnhanced({
     }
   };
 
-  const handleUpdateQuantity = (productId: string, delta: number) => {
+  const handleUpdateQuantity = (lineKey: string, delta: number) => {
     setCartItems((prev) => {
       return prev
         .map((item) =>
-          item.id === productId
+          getCartLineKey(item) === lineKey
             ? { ...item, quantity: item.quantity + delta }
             : item
         )
@@ -203,8 +217,8 @@ export function POSScreenEnhanced({
     });
   };
 
-  const handleRemoveItem = (productId: string) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== productId));
+  const handleRemoveItem = (lineKey: string) => {
+    setCartItems((prev) => prev.filter((item) => getCartLineKey(item) !== lineKey));
     toast.success("Artículo eliminado del carrito");
   };
 

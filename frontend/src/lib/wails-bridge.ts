@@ -23,6 +23,8 @@ export interface Product {
   id: string;
   name: string;
   price: number;
+  /** Precio se define al vender (ajuste: panadería, golosinas, etc.) */
+  openPrice?: boolean;
   cost?: number;
   categories: string[];
   stock?: number;
@@ -36,6 +38,8 @@ export interface Product {
 
 export interface CartItem extends Product {
   quantity: number;
+  /** Línea única para productos de precio abierto (mismo SKU, distinto monto). */
+  cartLineId?: string;
 }
 
 export interface Transaction {

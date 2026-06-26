@@ -27,6 +27,10 @@ export class ProductEntity {
   @Column('float', { default: 0 })
   price!: number;
 
+  /** Precio se define al vender (ajuste: panadería, golosinas, etc.) */
+  @Column({ type: 'boolean', default: false })
+  openPrice!: boolean;
+
   @Column('float', { nullable: true })
   cost?: number | null;
 
