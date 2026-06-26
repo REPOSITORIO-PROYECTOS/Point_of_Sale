@@ -21,7 +21,7 @@ cd backend; npm install; npm run build; cd ..
 cd desktop; npm install; npm run build; cd ..
 npm run build:web:electron
 
-# 2. Empaquetar (ensure:embedded-node copia node.exe; prepare-backend-pack valida licencia y nativos)
+# 2. Empaquetar (prepare-backend-pack recompila nativos para Electron; NSIS compression: normal)
 npm run dist:win          # sin AFIP → desktop/release/Point-of-Sale-Setup.exe
 # o
 npm run build:afip-sidecar  # Python 3.11
@@ -31,9 +31,9 @@ npm run dist:win:fiscal     # con AFIP
 Salida instalador: `desktop/release/Point-of-Sale-Setup.exe`  
 Salida portable (sin NSIS): `npm run dist:win:dir` → `desktop/release/win-unpacked/`
 
-El backend en `.exe` usa por defecto **node.exe embebido** (`resources/nodejs/node.exe`, copiado automáticamente desde el Node del sistema).
+El backend en `.exe` usa **Electron como Node** (`ELECTRON_RUN_AS_NODE`); no se embebe `node.exe` (~70 MB menos).
 
-Alternativa más liviana: `POS_USE_ELECTRON_AS_NODE=true` + Visual Studio Build Tools → `electron-rebuild` en `prepare-backend-pack`.
+Legacy: `POS_USE_EMBEDDED_NODE=true` + `npm run ensure:embedded-node` + entrada `nodejs/node.exe` en electron-builder.
 
 ### Si el build falla con `EPERM` / `EBUSY`
 

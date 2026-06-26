@@ -120,11 +120,13 @@ function Get-PackFingerprint {
         Select-Object -First 1
 
     $distStamp = if ($latestDist) { $latestDist.LastWriteTimeUtc.Ticks } else { '0' }
-    $runtimeMode = if ($env:POS_USE_ELECTRON_AS_NODE -eq 'true') { 'electron-node' } else { 'embedded-node' }
+    $useEmbeddedNode = $env:POS_USE_EMBEDDED_NODE -eq 'true'
+    $runtimeMode = if ($useEmbeddedNode) { 'embedded-node' } else { 'electron-node' }
     return "$lockHash|$distStamp|electron:$ElectronVersion|$runtimeMode"
 }
 
 $electronVersion = Get-ElectronVersion
+$useEmbeddedNode = $env:POS_USE_EMBEDDED_NODE -eq 'true'
 $fingerprint = Get-PackFingerprint -ElectronVersion $electronVersion
 $stagingReady = (Test-Path $hashFile) -and
     (Test-Path (Join-Path $stagingDir 'node_modules')) -and
@@ -165,10 +167,10 @@ try {
     Pop-Location
 }
 
-if ($env:POS_USE_ELECTRON_AS_NODE -eq 'true') {
-    Invoke-ElectronNativeRebuild -ModuleDir $stagingDir -ElectronVersion $electronVersion
-} else {
+if ($useEmbeddedNode) {
     Write-Host "Modo node.exe embebido: omitiendo electron-rebuild (módulos nativos para Node del sistema)." -ForegroundColor Cyan
+} else {
+    Invoke-ElectronNativeRebuild -ModuleDir $stagingDir -ElectronVersion $electronVersion
 }
 
 Assert-NativeModules -ModuleDir $stagingDir

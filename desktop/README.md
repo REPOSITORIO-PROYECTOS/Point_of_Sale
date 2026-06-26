@@ -7,7 +7,7 @@ Documentación general del monorepo: [`../README.md`](../README.md)
 ## Qué corre al abrir el `.exe` (sin Docker)
 
 1. Electron carga la UI React desde `resources/frontend/`
-2. Spawnea **pos-api** con `resources/nodejs/node.exe` → `127.0.0.1:3001`
+2. Spawnea **pos-api** con Electron como Node (`ELECTRON_RUN_AS_NODE`) → `127.0.0.1:58001`
 3. Spawnea **afip-service.exe** solo si el build fue `dist:win:fiscal` → `127.0.0.1:5086`
 4. Persiste datos en `%APPDATA%\PointOfSale\` (SQLite, uploads, logs, certificados AFIP)
 
@@ -74,7 +74,7 @@ Cerrá Point of Sale y procesos que usen `desktop/release`. Para publicar: `npm 
 | `AFIP_SIDECAR_PATH` | auto | Ruta manual al sidecar |
 | `POS_BACKEND_NODE` | `resources/nodejs/node.exe` | Override del Node embebido |
 | `APP_DATA_DIR` | `%APPDATA%\PointOfSale` | Override de datos |
-| `PORT` | `3001` | Puerto de pos-api |
+| `PORT` | `58001` | Puerto de pos-api |
 | `POS_DISABLE_AUTO_UPDATE` | — | `true` desactiva búsqueda de actualizaciones |
 | `GH_UPDATER_TOKEN` | — | PAT GitHub (lectura releases); preferir `updater.env` en AppData |
 

@@ -74,12 +74,6 @@ jobs:
           }
           node scripts/set-version.mjs $tag
 
-      - name: Embed Node.js for desktop
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path desktop/resources/nodejs | Out-Null
-          Copy-Item (Get-Command node).Source desktop/resources/nodejs/node.exe -Force
-
       - name: Build stack
         shell: pwsh
         run: |
@@ -91,9 +85,9 @@ jobs:
         working-directory: frontend
         run: npm run build:electron
 
-      - name: Prepare backend pack
+      - name: Prepare backend pack (Electron as Node, sin node.exe embebido)
         shell: pwsh
-        run: ./scripts/prepare-backend-pack.ps1
+        run: ./scripts/prepare-backend-pack.ps1 -Force
 
       - name: Build AFIP sidecar (fiscal)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.variant == 'fiscal'
