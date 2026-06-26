@@ -94,6 +94,7 @@ jobs:
         run: ./scripts/prepare-backend-pack.ps1 -Force
 
       - name: Ensure GitHub release exists (evita carrera al publicar assets)
+        if: github.event_name == 'push'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
