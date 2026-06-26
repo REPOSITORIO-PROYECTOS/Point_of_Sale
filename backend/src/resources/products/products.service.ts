@@ -76,9 +76,10 @@ export class ProductsService {
     const query = params.q?.trim();
     if (query) {
       const pattern = `%${query.toLowerCase()}%`;
-      qb.andWhere('(LOWER(product.name) LIKE :pattern OR product.barcodes LIKE :pattern)', {
-        pattern,
-      });
+      qb.andWhere(
+        '(LOWER(product.name) LIKE :pattern OR LOWER(product.id) LIKE :pattern OR product.barcodes LIKE :pattern OR product.categories LIKE :pattern)',
+        { pattern },
+      );
     }
 
     const category = params.category?.trim();

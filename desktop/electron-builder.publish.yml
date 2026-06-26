@@ -1,5 +1,7 @@
 # Fragmento compartido: publicación en GitHub Releases (electron-updater).
-# Repo privado: en cada caja hace falta GH_UPDATER_TOKEN (read:packages/releases) o usar POS_DISABLE_AUTO_UPDATE=true.
+# Owner: github.com/REPOSITORIO-PROYECTOS/Point_of_Sale (repo público desde 2026-06).
+# Cajas: POS_UPDATER_PUBLIC_REPO=true en %APPDATA%\PointOfSale\updater.env (sin PAT).
+# Repo privado: GH_UPDATER_TOKEN en updater.env o POS_DISABLE_AUTO_UPDATE=true.
 publish:
   - provider: github
     owner: REPOSITORIO-PROYECTOS

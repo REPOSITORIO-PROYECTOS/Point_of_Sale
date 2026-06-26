@@ -1,6 +1,14 @@
 import type { BrowserWindow } from 'electron';
 import { app, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import {
+  canRunAutoUpdater,
+  getUpdaterEnvPath,
+  hasUpdaterCredentials,
+  isAutoUpdateDisabled,
+  isPublicGitHubFeed,
+  loadUpdaterConfigFromAppData,
+} from './updater-config';
 
 export type AppUpdateEvent = {
   status:
@@ -9,19 +17,27 @@ export type AppUpdateEvent = {
     | 'not-available'
     | 'progress'
     | 'downloaded'
-    | 'error';
+    | 'error'
+    | 'skipped';
   payload?: unknown;
+};
+
+export type AppUpdateCheckResponse = {
+  ok: boolean;
+  version?: string | null;
+  message?: string;
+  skipped?: boolean;
+  reason?: 'disabled' | 'no_token' | 'not_packaged';
 };
 
 const BOOT_CHECK_DELAY_MS = 30_000;
 
+const SKIP_MESSAGE =
+  'Actualizaciones automáticas no configuradas. Copiá updater.env a %APPDATA%\\PointOfSale o desactivá con POS_DISABLE_AUTO_UPDATE=true.';
+
 function sendUpdateEvent(getMainWindow: () => BrowserWindow | null, event: AppUpdateEvent) {
   const window = getMainWindow();
   window?.webContents.send('app-update', event);
-}
-
-function hasUpdaterCredentials(): boolean {
-  return Boolean(process.env.GH_UPDATER_TOKEN ?? process.env.GH_TOKEN);
 }
 
 function configurePrivateGitHubFeed() {
@@ -31,34 +47,71 @@ function configurePrivateGitHubFeed() {
   }
 
   autoUpdater.requestHeaders = {
-    Authorization: `token ${token}`,
+    Authorization: `Bearer ${token}`,
   };
 }
 
-export function setupAutoUpdater(getMainWindow: () => BrowserWindow | null) {
-  if (!app.isPackaged) {
-    return;
+function toFriendlyErrorMessage(raw: string): string {
+  if (raw.includes('404') || raw.includes('releases.atom')) {
+    return 'No se encontró el release en GitHub. Verificá que exista una versión publicada y que el token tenga acceso de lectura.';
   }
 
-  if (process.env.POS_DISABLE_AUTO_UPDATE === 'true') {
-    console.info('[auto-updater] deshabilitado (POS_DISABLE_AUTO_UPDATE=true)');
-    return;
+  if (raw.includes('401') || raw.includes('Bad credentials') || raw.includes('authentication')) {
+    return 'Token de GitHub inválido o expirado. Actualizá GH_UPDATER_TOKEN en updater.env.';
   }
 
-  // Repo GitHub privado: sin token en runtime GitHub responde 404 en releases.atom.
-  if (!hasUpdaterCredentials()) {
-    console.warn(
-      '[auto-updater] omitido: el feed de GitHub Releases es privado y no hay GH_UPDATER_TOKEN. ' +
-        'Publicá con npm run publish:win o configurá token en la caja / POS_DISABLE_AUTO_UPDATE=true.',
-    );
-    return;
+  if (raw.includes('ENOTFOUND') || raw.includes('network') || raw.includes('ETIMEDOUT')) {
+    return 'Sin conexión a internet. Reintentá cuando haya red disponible.';
   }
 
-  configurePrivateGitHubFeed();
+  return 'No se pudo comprobar actualizaciones. Contactá soporte o actualizá manualmente con el instalador.';
+}
 
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+function registerVersionIpc() {
+  ipcMain.handle('app-get-version', () => app.getVersion());
+}
 
+function registerSkippedIpc(getMainWindow: () => BrowserWindow | null, reason: AppUpdateCheckResponse['reason']) {
+  ipcMain.handle('app-update-check', async (): Promise<AppUpdateCheckResponse> => {
+    sendUpdateEvent(getMainWindow, {
+      status: 'skipped',
+      payload: { reason, message: reason === 'disabled' ? 'Actualizaciones deshabilitadas' : SKIP_MESSAGE },
+    });
+    return {
+      ok: false,
+      skipped: true,
+      reason,
+      message: reason === 'disabled' ? 'Actualizaciones deshabilitadas' : SKIP_MESSAGE,
+    };
+  });
+
+  ipcMain.handle('app-update-install', () => {
+    // noop cuando el updater no está activo
+  });
+}
+
+function registerActiveUpdaterIpc(getMainWindow: () => BrowserWindow | null) {
+  ipcMain.handle('app-update-check', async (): Promise<AppUpdateCheckResponse> => {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      return {
+        ok: true,
+        version: result?.updateInfo?.version ?? null,
+      };
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : 'Error al buscar actualizaciones';
+      const message = toFriendlyErrorMessage(raw);
+      sendUpdateEvent(getMainWindow, { status: 'error', payload: { message, raw } });
+      return { ok: false, message };
+    }
+  });
+
+  ipcMain.handle('app-update-install', () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
+}
+
+function wireAutoUpdaterEvents(getMainWindow: () => BrowserWindow | null) {
   autoUpdater.on('checking-for-update', () => {
     sendUpdateEvent(getMainWindow, { status: 'checking' });
   });
@@ -80,35 +133,58 @@ export function setupAutoUpdater(getMainWindow: () => BrowserWindow | null) {
   });
 
   autoUpdater.on('error', (error) => {
+    const message = toFriendlyErrorMessage(error.message);
     sendUpdateEvent(getMainWindow, {
       status: 'error',
-      payload: { message: error.message },
+      payload: { message, raw: error.message },
     });
   });
+}
 
-  ipcMain.handle('app-get-version', () => app.getVersion());
+export function setupAutoUpdater(getMainWindow: () => BrowserWindow | null) {
+  registerVersionIpc();
 
-  ipcMain.handle('app-update-check', async () => {
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      return {
-        ok: true,
-        version: result?.updateInfo?.version ?? null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al buscar actualizaciones';
-      sendUpdateEvent(getMainWindow, { status: 'error', payload: { message } });
-      return { ok: false, message };
-    }
-  });
+  if (!app.isPackaged) {
+    registerSkippedIpc(getMainWindow, 'not_packaged');
+    return;
+  }
 
-  ipcMain.handle('app-update-install', () => {
-    autoUpdater.quitAndInstall(false, true);
-  });
+  const config = loadUpdaterConfigFromAppData();
+  if (config.loaded) {
+    console.info(`[auto-updater] configuración cargada desde ${config.path}`);
+  } else {
+    console.info(`[auto-updater] sin ${getUpdaterEnvPath()} — usando variables de entorno del sistema`);
+  }
+
+  if (isAutoUpdateDisabled()) {
+    console.info('[auto-updater] deshabilitado (POS_DISABLE_AUTO_UPDATE=true)');
+    registerSkippedIpc(getMainWindow, 'disabled');
+    return;
+  }
+
+  if (!canRunAutoUpdater()) {
+    console.warn(
+      '[auto-updater] omitido: configurá POS_UPDATER_PUBLIC_REPO=true (repo público) o GH_UPDATER_TOKEN en ' +
+        `${getUpdaterEnvPath()}.`,
+    );
+    registerSkippedIpc(getMainWindow, 'no_token');
+    return;
+  }
+
+  if (hasUpdaterCredentials()) {
+    configurePrivateGitHubFeed();
+  } else if (isPublicGitHubFeed()) {
+    console.info('[auto-updater] usando feed público de GitHub Releases (sin PAT)');
+  }
+  registerActiveUpdaterIpc(getMainWindow);
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  wireAutoUpdaterEvents(getMainWindow);
 
   setTimeout(() => {
     void autoUpdater.checkForUpdates().catch((error: Error) => {
-      console.warn('[auto-updater] check inicial falló:', error.message);
+      console.warn('[auto-updater] check inicial falló:', toFriendlyErrorMessage(error.message));
     });
   }, BOOT_CHECK_DELAY_MS);
 }

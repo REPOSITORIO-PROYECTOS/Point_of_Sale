@@ -1,13 +1,13 @@
 {
   "name": "point-of-sale-desktop",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "description": "Electron shell for Point of Sale",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 electron .",
-    "test:smoke": "tsx --test src/bootstrap.smoke.test.ts",
+    "test:smoke": "tsx --test src/bootstrap.smoke.test.ts src/updater-config.test.ts",
     "dist:win": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.yml",
     "dist:win:dir": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --win --config electron-builder.pack.yml",
     "dist:win:fiscal": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.fiscal.yml",

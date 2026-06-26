@@ -75,6 +75,53 @@ Cerrá Point of Sale y procesos que usen `desktop/release`. Para publicar: `npm 
 | `POS_BACKEND_NODE` | `resources/nodejs/node.exe` | Override del Node embebido |
 | `APP_DATA_DIR` | `%APPDATA%\PointOfSale` | Override de datos |
 | `PORT` | `3001` | Puerto de pos-api |
+| `POS_DISABLE_AUTO_UPDATE` | — | `true` desactiva búsqueda de actualizaciones |
+| `GH_UPDATER_TOKEN` | — | PAT GitHub (lectura releases); preferir `updater.env` en AppData |
+
+## Auto-actualización en cajas
+
+El `.exe` empaquetado consulta **GitHub Releases** (`electron-updater`). El repo es privado: cada caja necesita un token de lectura o desactivar el updater.
+
+### Configurar una caja (recomendado)
+
+```powershell
+# Desde la raíz del repo, en la PC de la caja:
+.\scripts\deploy-updater-config.ps1 -Token ghp_tu_pat_solo_lectura
+```
+
+Esto escribe `%APPDATA%\PointOfSale\updater.env`. Reiniciá Point of Sale.
+
+Plantilla manual: copiar [`updater.env.example`](../updater.env.example) → `%APPDATA%\PointOfSale\updater.env`.
+
+### Desactivar actualizaciones (sin token)
+
+```powershell
+.\scripts\deploy-updater-config.ps1 -Disable
+# o variable de usuario: POS_DISABLE_AUTO_UPDATE=true
+```
+
+### Publicar nueva versión (desde dev)
+
+```powershell
+npm run version:set 0.0.5
+git add -A && git commit -m "chore: release 0.0.5"
+git tag v0.0.5
+git push && git push origin v0.0.5   # CI publica en Releases
+# o local:
+npm run publish:win:fiscal
+```
+
+Verificá en GitHub Releases: `Point-of-Sale-Setup.exe` + `latest.yml`.
+
+### Troubleshooting
+
+| Síntoma | Causa | Solución |
+|---------|-------|----------|
+| Banner 404 / `releases.atom` | Sin token o sin release publicado | `deploy-updater-config.ps1 -Token ...` y publicar release |
+| Token inválido | PAT expirado | Renovar PAT y actualizar `updater.env` |
+| Sin banner pero no actualiza | `POS_DISABLE_AUTO_UPDATE=true` | Quitar flag o usar `-Token` en deploy script |
+
+Los datos en AppData (SQLite, certificados AFIP) **no se borran** al instalar una actualización.
 
 ## Documentación relacionada
 

@@ -71,6 +71,21 @@ Requisitos: Python 3.11, Git, PyInstaller (instalado por el script).
 
 Detalle humano: [`services/afip/PRODUCTION.md`](../../services/afip/PRODUCTION.md)
 
+## Auto-actualización (cajas con `.exe`)
+
+1. **Publicar** versión en GitHub Releases (`latest.yml` + `Point-of-Sale-Setup.exe`):
+   - Tag `vX.Y.Z` → workflow [`.github/workflows/release-desktop.yml`](../../.github/workflows/release-desktop.yml)
+   - O local: `npm run publish:win:fiscal` (requiere `GITHUB_TOKEN` en `backend/.env`)
+2. **Configurar cada caja** con PAT de solo lectura:
+   ```powershell
+   .\scripts\deploy-updater-config.ps1 -Token ghp_...
+   ```
+3. Reiniciar POS → footer **Buscar actualización** o esperar check automático (~30 s).
+
+Sin token: usar `deploy-updater-config.ps1 -Disable` o actualización manual (USB + reinstalar `.exe`).
+
+Ver también [`desktop/README.md`](../../desktop/README.md) (troubleshooting 404).
+
 ## Gotchas de build (IA debe conocer)
 
 | Issue | Fix |

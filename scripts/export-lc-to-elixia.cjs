@@ -156,6 +156,46 @@ function isPlaceholderName(name) {
   return !text || text === 'XX' || /^Artículo\s+\d+$/i.test(text);
 }
 
+const SHORT_NAME_WHITELIST = new Set([
+  'MELBA',
+  'OPERA',
+  'RAID',
+  'TITA',
+  'COCA',
+  'PEPSI',
+  'SPEED',
+  'SAVORA',
+  'PAN',
+  'ARROZ',
+  'GOLOSINAS',
+  'PANADERIA',
+  'PREPIZAS',
+  'PILAS',
+]);
+
+const PRODUCT_HINT_RE = /\d|ML|LT|LTS|KG|GRS|GR\b|CC|UN\b|AA\b|GO\b|X\d/i;
+
+function shortInternalCodeReason(text) {
+  const t = text.trim();
+  if (!t || /\s/.test(t)) return null;
+
+  if (/^\d{1,5}[A-Za-zÁÉÍÓÚáéíóúÑñ]{4,}$/.test(t)) {
+    return 'código con dígito adelante (ej. 5margsa)';
+  }
+  if (/^\d{1,5}[A-Za-zÁÉÍÓÚáéíóúÑñ]+-\d/.test(t)) {
+    return 'código tipo 5ACAN-0001';
+  }
+  if (/^[A-Za-zÁÉÍÓÚáéíóúÑñ]{4,8}$/.test(t)) {
+    const upper = t.toUpperCase();
+    if (SHORT_NAME_WHITELIST.has(upper)) return null;
+    if (PRODUCT_HINT_RE.test(t)) return null;
+    if (t.length <= 6) return 'nombre corto tipo código (4-6 letras)';
+  }
+  if (/^[A-Z]{3}$/.test(t)) return 'código de 3 letras (ej. AAA)';
+
+  return null;
+}
+
 function incoherentNameReason(name) {
   const text = cleanText(name);
   if (!text) return 'nombre vacío';
@@ -165,6 +205,10 @@ function incoherentNameReason(name) {
   if (!/[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(text)) return 'sin letras (solo código numérico)';
   if (/^AOE\b/i.test(text) || /\bAOE\s+AOE\b/i.test(text)) return 'patrón AOE';
   if (/^[A-Z]{2,5}\s+\d{3,}$/i.test(text)) return 'código tipo SIG 1234';
+
+  const shortCode = shortInternalCodeReason(text);
+  if (shortCode) return shortCode;
+
   return null;
 }
 
@@ -188,15 +232,15 @@ function writeCsv(filePath, headers, rows) {
   fs.writeFileSync(filePath, `\uFEFF${lines.join('\r\n')}`, 'utf8');
 }
 
+function maxPositive(...values) {
+  const numbers = values.map(toNumber).filter((n) => n !== null && n > 0);
+  if (!numbers.length) return null;
+  return Math.max(...numbers);
+}
+
 function deriveSalePrice(row) {
-  const pvMin = toNumber(row.pv_min);
-  if (pvMin && pvMin > 0) return pvMin;
-
-  const pvInt = toNumber(row.pv_int);
-  if (pvInt && pvInt > 0) return pvInt;
-
-  const pvMay = toNumber(row.pv_may);
-  if (pvMay && pvMay > 0) return pvMay;
+  const sqlSale = maxPositive(row.pv_min, row.pv_int, row.pv_may, row.precio_ofer);
+  if (sqlSale !== null) return sqlSale;
 
   const shelf = toNumber(row.precio_gondola);
   if (shelf && shelf > 0) return shelf;
@@ -205,6 +249,14 @@ function deriveSalePrice(row) {
   if (avgSale && avgSale > 0) return avgSale;
 
   return null;
+}
+
+function hasValidSalePrice(row) {
+  const sale = deriveSalePrice(row);
+  if (sale === null || sale <= 0) return false;
+  const cost = deriveCost(row);
+  if (cost !== null && cost > 0 && sale <= cost) return false;
+  return true;
 }
 
 function deriveCost(row) {
@@ -342,6 +394,7 @@ async function loadArticles(db) {
       COALESCE(${sqlArtTable ? 'a.PrecioVta1' : 'NULL'}, x.PVMin) AS pv_min,
       COALESCE(${sqlArtTable ? 'a.PrecioVta2' : 'NULL'}, x.PVInt) AS pv_int,
       COALESCE(${sqlArtTable ? 'a.PrecioVta3' : 'NULL'}, x.PVMay) AS pv_may,
+      ${sqlArtTable ? 'a.PrecioOfer' : 'NULL'} AS precio_ofer,
       COALESCE(x.IDProveedor, ${sqlArtTable ? 'a.IDProveedor' : 'NULL'}) AS id_proveedor,
       COALESCE(x.IDRubro, ${sqlArtTable ? 'a.IDRubro' : 'NULL'}) AS id_rubro,
       COALESCE(x.IDMoneda, ${sqlArtTable ? 'a.IDMoneda' : 'NULL'}) AS id_moneda,
@@ -393,8 +446,8 @@ function mapElixiaRow(row, rubroNameById) {
     PorcDto: formatDecimal(row.porc_dto1 ?? '0', 1),
     PorcRec: formatDecimal(row.porc_dto2 ?? '0', 1),
     PrecioFlete: formatDecimal(row.precio_flete ?? '0'),
-    PVMin: formatDecimal(sale ?? row.pv_min),
-    PVInt: formatDecimal(toNumber(row.pv_int) ?? sale),
+    PVMin: formatDecimal(sale),
+    PVInt: formatDecimal(row.pv_int),
     PVMay: formatDecimal(row.pv_may),
     CodBarra: cleanText(row.cod_barra),
     Nota: cleanText(row.nota) || (rubroNameById.get(idRubro) ? `Rubro: ${rubroNameById.get(idRubro)}` : ''),
@@ -442,7 +495,8 @@ function writeReadme(outDir, stats) {
     `- Rubros: ${stats.rubros}`,
     `- Artículos exportados: ${stats.articles}`,
     `- Con nombre real (no placeholder): ${stats.withRealName}`,
-    `- Con precio de venta estimado: ${stats.withSalePrice}`,
+    `- Con precio de venta (máx. Vta1/2/3/Ofer): ${stats.withSalePrice}`,
+    `- Venta > costo: ${stats.saleHigherThanCost}`,
     `- Con stock > 0: ${stats.withStock}`,
     `- Con código de barras: ${stats.withBarcode}`,
     `- Excluidos por nombre incoherente: ${stats.excluded}`,
@@ -477,7 +531,8 @@ async function main() {
 
     for (const row of allArticles) {
       const name = deriveName(row);
-      const reason = incoherentNameReason(name);
+      const reason = incoherentNameReason(name)
+        || (!hasValidSalePrice(row) ? 'sin precio de venta válido (solo costo o vacío)' : null);
       if (reason) {
         excludedRows.push({
           IDArt: cleanText(row.id_art),
@@ -513,6 +568,11 @@ async function main() {
       withRealName: articles.filter((r) => !isPlaceholderName(deriveName(r))).length,
       sqlArtCount,
       withSalePrice: elixiaRows.filter((r) => cleanText(r.PVMin) !== '' && toNumber(r.PVMin) > 0).length,
+      saleHigherThanCost: elixiaRows.filter((r) => {
+        const sale = toNumber(r.PVMin);
+        const cost = toNumber(r.PrecioCosto);
+        return sale !== null && sale > 0 && (cost === null || cost <= 0 || sale > cost);
+      }).length,
       withStock: posRows.filter((r) => toNumber(r.Stock) > 0).length,
       withBarcode: elixiaRows.filter((r) => cleanText(r.CodBarra) !== '').length,
       warnings: [],
@@ -548,9 +608,10 @@ async function main() {
     console.log('Export listo en:', outDir);
     console.log(`  Rubros: ${stats.rubros}`);
     console.log(`  Artículos exportados: ${stats.articles}`);
-    console.log(`  Excluidos (nombre raro): ${stats.excluded}`);
+    console.log(`  Excluidos: ${stats.excluded}`);
     console.log(`  Con nombre real: ${stats.withRealName}`);
-    console.log(`  Con precio venta: ${stats.withSalePrice}`);
+    console.log(`  Con precio venta (máx): ${stats.withSalePrice}`);
+    console.log(`  Venta > costo: ${stats.saleHigherThanCost}`);
     console.log(`  Con stock > 0: ${stats.withStock}`);
     console.log(`  Con código de barras: ${stats.withBarcode}`);
     if (stats.warnings.length) {

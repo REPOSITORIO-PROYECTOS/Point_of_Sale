@@ -18,7 +18,8 @@ export type AppUpdateEvent = {
     | 'not-available'
     | 'progress'
     | 'downloaded'
-    | 'error';
+    | 'error'
+    | 'skipped';
   payload?: unknown;
 };
 
@@ -26,6 +27,8 @@ type AppUpdateCheckResult = {
   ok: boolean;
   version?: string | null;
   message?: string;
+  skipped?: boolean;
+  reason?: 'disabled' | 'no_token' | 'not_packaged';
 };
 
 contextBridge.exposeInMainWorld('desktop', {

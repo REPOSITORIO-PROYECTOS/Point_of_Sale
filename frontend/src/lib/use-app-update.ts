@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { isElectronEnvironment } from "./desktop-api";
+import { isElectronEnvironment, type AppUpdateCheckResult } from "./desktop-api";
 
 export type AppUpdateStatus =
   | "idle"
@@ -9,12 +9,22 @@ export type AppUpdateStatus =
   | "downloading"
   | "ready"
   | "not-available"
-  | "error";
+  | "error"
+  | "skipped";
 
 type AppUpdateEvent = {
-  status: "checking" | "available" | "not-available" | "progress" | "downloaded" | "error";
+  status:
+    | "checking"
+    | "available"
+    | "not-available"
+    | "progress"
+    | "downloaded"
+    | "error"
+    | "skipped";
   payload?: unknown;
 };
+
+const SKIPPED_TOAST_KEY = "pos-update-skipped-toast-shown";
 
 function readVersionFromPayload(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
@@ -22,12 +32,20 @@ function readVersionFromPayload(payload: unknown): string | null {
   return typeof version === "string" ? version : null;
 }
 
+function readMessageFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const message = (payload as { message?: unknown }).message;
+  return typeof message === "string" ? message : null;
+}
+
 export function useAppUpdate() {
   const [status, setStatus] = useState<AppUpdateStatus>("idle");
   const [remoteVersion, setRemoteVersion] = useState<string | null>(null);
   const [progressPercent, setProgressPercent] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [skipReason, setSkipReason] = useState<AppUpdateCheckResult["reason"] | null>(null);
   const isDesktop = isElectronEnvironment();
+  const skippedToastShown = useRef(false);
 
   useEffect(() => {
     if (!isDesktop || !window.desktop?.onUpdateStatus) {
@@ -76,10 +94,25 @@ export function useAppUpdate() {
         case "not-available":
           setStatus("not-available");
           break;
+        case "skipped": {
+          const reason = (event.payload as { reason?: AppUpdateCheckResult["reason"] } | undefined)?.reason;
+          setSkipReason(reason ?? null);
+          setStatus("skipped");
+          setErrorMessage(null);
+
+          if (!skippedToastShown.current && reason === "no_token" && !sessionStorage.getItem(SKIPPED_TOAST_KEY)) {
+            skippedToastShown.current = true;
+            sessionStorage.setItem(SKIPPED_TOAST_KEY, "1");
+            toast.message("Actualizaciones automáticas no configuradas", {
+              description: "Configurá updater.env en AppData o actualizá manualmente con el instalador.",
+              duration: 6000,
+            });
+          }
+          break;
+        }
         case "error": {
           const message =
-            (event.payload as { message?: string } | undefined)?.message ??
-            "No se pudo comprobar actualizaciones";
+            readMessageFromPayload(event.payload) ?? "No se pudo comprobar actualizaciones";
           setStatus("error");
           setErrorMessage(message);
           break;
@@ -100,6 +133,19 @@ export function useAppUpdate() {
     setStatus("checking");
     setErrorMessage(null);
     const result = await window.desktop.checkForUpdates();
+
+    if (result.skipped) {
+      setSkipReason(result.reason ?? null);
+      setStatus("skipped");
+      if (result.reason === "no_token") {
+        toast.message("Actualizaciones no configuradas", {
+          description: result.message,
+          duration: 5000,
+        });
+      }
+      return result;
+    }
+
     if (!result.ok) {
       setStatus("error");
       setErrorMessage(result.message ?? "Error al buscar actualizaciones");
@@ -113,13 +159,16 @@ export function useAppUpdate() {
       setRemoteVersion(result.version);
     }
 
-    if (status !== "ready" && status !== "downloading" && status !== "available") {
-      setStatus("not-available");
+    setStatus((current) => {
+      if (current === "ready" || current === "downloading" || current === "available") {
+        return current;
+      }
       toast.message("Ya tenés la última versión");
-    }
+      return "not-available";
+    });
 
     return result;
-  }, [status]);
+  }, []);
 
   const installUpdate = useCallback(async () => {
     if (!window.desktop?.installUpdate) {
@@ -134,6 +183,7 @@ export function useAppUpdate() {
     remoteVersion,
     progressPercent,
     errorMessage,
+    skipReason,
     checkForUpdates,
     installUpdate,
   };

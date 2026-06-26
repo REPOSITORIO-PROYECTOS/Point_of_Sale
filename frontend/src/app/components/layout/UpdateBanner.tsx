@@ -10,7 +10,8 @@ export function UpdateBanner() {
     return null;
   }
 
-  const showBanner = status === "available" || status === "downloading" || status === "ready" || status === "error";
+  const showBanner =
+    status === "available" || status === "downloading" || status === "ready" || status === "error";
 
   if (!showBanner) {
     return null;

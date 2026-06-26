@@ -16,7 +16,14 @@ export function isElectronEnvironment(): boolean {
 }
 
 export type AppUpdateEvent = {
-  status: "checking" | "available" | "not-available" | "progress" | "downloaded" | "error";
+  status:
+    | "checking"
+    | "available"
+    | "not-available"
+    | "progress"
+    | "downloaded"
+    | "error"
+    | "skipped";
   payload?: unknown;
 };
 
@@ -24,6 +31,8 @@ export type AppUpdateCheckResult = {
   ok: boolean;
   version?: string | null;
   message?: string;
+  skipped?: boolean;
+  reason?: "disabled" | "no_token" | "not_packaged";
 };
 
 export async function printReceiptElectron(payload: ElectronPrintPayload): Promise<void> {

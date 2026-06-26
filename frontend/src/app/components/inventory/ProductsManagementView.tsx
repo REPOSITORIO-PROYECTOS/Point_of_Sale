@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -27,7 +27,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { Package, Plus, Edit, Trash2, AlertTriangle, Search, X, Barcode, TrendingUp } from "lucide-react";
+import {
+  Package,
+  Plus,
+  Edit,
+  Trash2,
+  AlertTriangle,
+  Search,
+  X,
+  Barcode,
+  TrendingUp,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PosAPI } from "../../../lib/pos-api";
 import type { Product } from "../../../lib/wails-bridge";
@@ -40,10 +51,17 @@ import {
 } from "../../../lib/product-categories";
 import { applyPriceIncrease, type PriceRoundMode } from "../../../lib/price-utils";
 
+const ADMIN_RESULT_LIMIT = 100;
+const SEARCH_DEBOUNCE_MS = 250;
+
 export function ProductsManagementView() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
+  const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const searchRequestRef = useRef(0);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [priceIncreaseDialogOpen, setPriceIncreaseDialogOpen] = useState(false);
@@ -68,10 +86,50 @@ export function ProductsManagementView() {
   const [newCategory, setNewCategory] = useState("");
 
   useEffect(() => {
-    loadProducts();
+    void PosAPI.getProductCategories()
+      .then(setCatalogCategories)
+      .catch((error) => console.error("Failed to load categories:", error));
   }, []);
 
-  const loadProducts = async () => {
+  useEffect(() => {
+    const trimmed = searchTerm.trim();
+    if (trimmed.length < 2) {
+      setDisplayedProducts([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const requestId = ++searchRequestRef.current;
+    setIsSearching(true);
+
+    const timer = window.setTimeout(() => {
+      void PosAPI.searchProducts({ q: trimmed, limit: ADMIN_RESULT_LIMIT })
+        .then((results) => {
+          if (searchRequestRef.current !== requestId) return;
+          setDisplayedProducts(results);
+        })
+        .catch((error) => {
+          if (searchRequestRef.current !== requestId) return;
+          console.error("Product search failed:", error);
+          setDisplayedProducts([]);
+          toast.error("Error al buscar productos");
+        })
+        .finally(() => {
+          if (searchRequestRef.current !== requestId) return;
+          setIsSearching(false);
+        });
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (!priceIncreaseDialogOpen || products.length > 0) return;
+    void loadFullCatalog();
+  }, [priceIncreaseDialogOpen, products.length]);
+
+  const loadFullCatalog = async () => {
+    setLoadingCatalog(true);
     try {
       const data = await PosAPI.getProducts();
       setProducts(data);
@@ -79,7 +137,7 @@ export function ProductsManagementView() {
       console.error("Failed to load products:", error);
       toast.error("Error al cargar productos");
     } finally {
-      setLoading(false);
+      setLoadingCatalog(false);
     }
   };
 
@@ -144,10 +202,16 @@ export function ProductsManagementView() {
       if (selectedProduct) {
         await PosAPI.updateProduct(newProduct);
         setProducts(products.map((p) => (p.id === selectedProduct.id ? newProduct : p)));
+        setDisplayedProducts(
+          displayedProducts.map((p) => (p.id === selectedProduct.id ? newProduct : p)),
+        );
         toast.success("Producto actualizado");
       } else {
         await PosAPI.createProduct(newProduct);
         setProducts([...products, newProduct]);
+        if (searchTerm.trim().length >= 2) {
+          setDisplayedProducts([...displayedProducts, newProduct]);
+        }
         toast.success("Producto agregado");
       }
       setEditDialogOpen(false);
@@ -264,6 +328,15 @@ export function ProductsManagementView() {
     try {
       const savedProducts = await PosAPI.replaceProducts(updatedProducts);
       setProducts(savedProducts);
+      if (searchTerm.trim().length >= 2) {
+        const refreshed = await PosAPI.searchProducts({
+          q: searchTerm.trim(),
+          limit: ADMIN_RESULT_LIMIT,
+        });
+        setDisplayedProducts(refreshed);
+      } else {
+        setDisplayedProducts([]);
+      }
       setPriceIncreaseDialogOpen(false);
       setIncreasePercentage("");
       setPriceRoundMode("none");
@@ -288,12 +361,30 @@ export function ProductsManagementView() {
     setSelectedProducts(newSelection);
   };
 
-  const getUniqueCategories = () => getAllCategoriesFromProducts(products);
+  const getUniqueCategories = () =>
+    catalogCategories.length > 0 ? catalogCategories : getAllCategoriesFromProducts(products);
+
+  const selectionProducts =
+    searchTerm.trim().length >= 2
+      ? products.filter(
+          (product) =>
+            product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            product.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            getProductCategories(product).some((category) =>
+              category.toLowerCase().includes(searchTerm.toLowerCase()),
+            ) ||
+            (product.barcodes &&
+              product.barcodes.some((barcode) =>
+                barcode.toLowerCase().includes(searchTerm.toLowerCase()),
+              )),
+        )
+      : [];
 
   const handleDelete = async (productId: string) => {
     try {
       await PosAPI.deleteProduct(productId);
       setProducts(products.filter((p) => p.id !== productId));
+      setDisplayedProducts(displayedProducts.filter((p) => p.id !== productId));
       toast.success("Producto dado de baja");
     } catch (error) {
       console.error("Failed to delete product:", error);
@@ -301,15 +392,8 @@ export function ProductsManagementView() {
     }
   };
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getProductCategories(p).some((category) =>
-        category.toLowerCase().includes(searchTerm.toLowerCase()),
-      ) ||
-      (p.barcodes && p.barcodes.some((b) => b.toLowerCase().includes(searchTerm.toLowerCase())))
-  );
+  const trimmedSearch = searchTerm.trim();
+  const showProductTable = trimmedSearch.length >= 2;
 
   const getStockBadge = (product: Product) => {
     if (!product.stock) return null;
@@ -358,13 +442,6 @@ export function ProductsManagementView() {
 
         <div className="flex-1 min-h-0 overflow-auto p-6">
           <div className="max-w-7xl mx-auto space-y-6">
-            {loading ? (
-              <div className="py-16 text-center text-muted-foreground">
-                Cargando productos...
-              </div>
-            ) : (
-              <>
-            {/* Búsqueda */}
             <div className="flex items-center gap-4">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -376,16 +453,17 @@ export function ProductsManagementView() {
                 />
               </div>
               <div className="text-sm text-muted-foreground">
-                {filteredProducts.length} productos
+                {showProductTable
+                  ? `${displayedProducts.length} resultado(s)`
+                  : "Escribí al menos 2 letras para buscar"}
               </div>
             </div>
 
-            {/* Tabla de Productos */}
             <Card>
               <CardHeader>
                 <CardTitle>Catálogo de Productos</CardTitle>
                 <CardDescription>
-                  Lista completa de productos disponibles
+                  Buscá por nombre, código, categoría o código de barras
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -404,16 +482,30 @@ export function ProductsManagementView() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredProducts.length === 0 ? (
+                      {!showProductTable ? (
                         <TableRow>
                           <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
-                            {searchTerm
-                              ? "No hay productos que coincidan con la búsqueda"
-                              : "No hay productos cargados. Usá «Agregar Producto» para empezar."}
+                            Escribí al menos 2 letras para ver productos. Usá «Agregar Producto»
+                            para cargar ítems nuevos.
+                          </TableCell>
+                        </TableRow>
+                      ) : isSearching ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                            <span className="inline-flex items-center gap-2">
+                              <Loader2 className="size-4 animate-spin" />
+                              Buscando productos...
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ) : displayedProducts.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                            No hay productos que coincidan con la búsqueda
                           </TableCell>
                         </TableRow>
                       ) : (
-                      filteredProducts.map((product) => (
+                      displayedProducts.map((product) => (
                         <TableRow key={product.id}>
                           <TableCell className="font-mono font-medium">
                             <div>{product.id}</div>
@@ -475,10 +567,14 @@ export function ProductsManagementView() {
                     </TableBody>
                   </Table>
                 </div>
+                {showProductTable && displayedProducts.length >= ADMIN_RESULT_LIMIT && (
+                  <p className="text-sm text-muted-foreground mt-3 text-center">
+                    Mostrando los primeros {ADMIN_RESULT_LIMIT} resultados. Acotá la búsqueda para
+                    encontrar más rápido.
+                  </p>
+                )}
               </CardContent>
             </Card>
-              </>
-            )}
           </div>
         </div>
       </div>
@@ -529,7 +625,7 @@ export function ProductsManagementView() {
                 Un producto puede pertenecer a varias categorías
               </p>
               <div className="grid grid-cols-2 gap-2 border rounded-lg p-3 max-h-40 overflow-y-auto">
-                {getAllCategoriesFromProducts(products).map((category) => (
+                {getUniqueCategories().map((category) => (
                   <label
                     key={category}
                     htmlFor={`category-${category}`}
@@ -861,7 +957,18 @@ export function ProductsManagementView() {
                   </p>
                 </div>
                 <div className="max-h-60 overflow-y-auto">
-                  {filteredProducts.map((product) => (
+                  {loadingCatalog ? (
+                    <div className="p-6 text-center text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin inline mr-2" />
+                      Cargando catálogo...
+                    </div>
+                  ) : selectionProducts.length === 0 ? (
+                    <div className="p-6 text-center text-muted-foreground text-sm">
+                      Escribí al menos 2 letras en el buscador principal para listar productos a
+                      seleccionar.
+                    </div>
+                  ) : (
+                  selectionProducts.map((product) => (
                     <div
                       key={product.id}
                       className="flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-muted/50"
@@ -887,7 +994,8 @@ export function ProductsManagementView() {
                         </div>
                       )}
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               </div>
             )}

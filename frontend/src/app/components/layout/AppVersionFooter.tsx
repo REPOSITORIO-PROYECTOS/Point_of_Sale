@@ -15,7 +15,7 @@ export function AppVersionFooter({ onOpenRecovery, clientNumberMasked }: AppVers
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
   const clickTimer = useRef<number | null>(null);
   const isRecoveryAvailable = isElectronEnvironment() || import.meta.env.DEV;
-  const { checkForUpdates, status: updateStatus } = useAppUpdate();
+  const { checkForUpdates, status: updateStatus, skipReason } = useAppUpdate();
   const displayVersion = desktopVersion ?? __APP_VERSION__;
 
   useEffect(() => {
@@ -69,7 +69,16 @@ export function AppVersionFooter({ onOpenRecovery, clientNumberMasked }: AppVers
         <button
           type="button"
           className="inline-flex items-center gap-1 hover:underline disabled:opacity-50"
-          disabled={updateStatus === "checking" || updateStatus === "downloading"}
+          disabled={
+            updateStatus === "checking" ||
+            updateStatus === "downloading" ||
+            updateStatus === "skipped"
+          }
+          title={
+            updateStatus === "skipped" && skipReason === "no_token"
+              ? "Configurá updater.env en %APPDATA%\\PointOfSale"
+              : undefined
+          }
           onClick={() => void checkForUpdates()}
         >
           <RefreshCw
