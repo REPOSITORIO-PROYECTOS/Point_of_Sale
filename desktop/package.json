@@ -1,6 +1,6 @@
 {
   "name": "point-of-sale-desktop",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "description": "Electron shell for Point of Sale",
   "main": "dist/main.js",
