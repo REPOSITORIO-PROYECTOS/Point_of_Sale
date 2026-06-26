@@ -12,7 +12,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
 import type { ReceiptPreviewState } from "../../../lib/receipt-preview-types";
-import { printReceipt } from "../../../lib/print-receipt";
+import { printHtmlDocument, printReceipt } from "../../../lib/print-receipt";
 import { generateReceiptPdf, isElectronEnvironment } from "../../../lib/desktop-api";
 
 type ReceiptPreviewDialogProps = {
@@ -46,14 +46,13 @@ export function ReceiptPreviewDialog({ preview, open, onOpenChange }: ReceiptPre
   }
 
   const handlePrint = async () => {
-    if (!preview.printPayload) {
-      toast.error("No hay datos de impresión para este ticket");
-      return;
-    }
-
     setIsPrinting(true);
     try {
-      await printReceipt(preview.printPayload);
+      if (preview.printPayload) {
+        await printReceipt(preview.printPayload);
+      } else {
+        await printHtmlDocument(preview.html, preview.widthMm);
+      }
       toast.success("Ticket enviado a la impresora");
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo imprimir";
@@ -210,17 +209,16 @@ export function ReceiptPreviewDialog({ preview, open, onOpenChange }: ReceiptPre
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {preview.printPayload ? (
-              <Button type="button" onClick={() => void handlePrint()} disabled={isPrinting}>
-                <Printer className="size-4 mr-2" />
-                {isPrinting ? "Imprimiendo..." : "Imprimir"}
-              </Button>
-            ) : (
+            <Button type="button" onClick={() => void handlePrint()} disabled={isPrinting}>
+              <Printer className="size-4 mr-2" />
+              {isPrinting ? "Imprimiendo..." : "Imprimir"}
+            </Button>
+            {!preview.printPayload && isElectronEnvironment() ? (
               <Button type="button" variant="outline" onClick={() => void handleOpenPdf()}>
                 <Eye className="size-4 mr-2" />
                 Abrir PDF
               </Button>
-            )}
+            ) : null}
           </div>
         </DialogFooter>
       </DialogContent>

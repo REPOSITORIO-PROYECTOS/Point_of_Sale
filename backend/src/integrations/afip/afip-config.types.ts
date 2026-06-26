@@ -17,6 +17,8 @@ export type AfipConfigStatus = {
   billingDefaults: AfipBillingDefaults;
   hasCertificate: boolean;
   hasPrivateKey: boolean;
+  hasPendingCsr: boolean;
+  pendingCsr: string | null;
   certPath: string;
   keyPath: string;
   configPath: string;

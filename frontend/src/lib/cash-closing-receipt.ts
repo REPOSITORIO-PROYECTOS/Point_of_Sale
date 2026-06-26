@@ -1,8 +1,38 @@
 import type { CashClosingDetail } from "./pos-api";
+import type { ReceiptPreviewState } from "./receipt-preview-types";
+import { canPrintDirectly, previewHtmlDocument, printHtmlDocument } from "./print-receipt";
 import { buildCierreLoteHtml } from "./receipt-template";
 import type { CierreLoteReceiptData, ReceiptWidthMm } from "./receipt-templates/types";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+
+export type CashClosingReceiptBusinessContext = {
+  businessName?: string | null;
+  taxId?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+};
+
+export function enrichCashClosingForReceipt(
+  closing: CashClosingDetail,
+  business?: CashClosingReceiptBusinessContext,
+): CashClosingDetail {
+  if (!business) {
+    return closing;
+  }
+
+  return {
+    ...closing,
+    businessData: {
+      name: business.businessName ?? closing.businessData?.name ?? "",
+      rut: business.taxId ?? closing.businessData?.rut ?? "",
+      phone: business.phone ?? closing.businessData?.phone ?? "",
+      email: business.email ?? closing.businessData?.email ?? "",
+      address: business.address ?? closing.businessData?.address ?? "",
+    },
+  };
+}
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: "Efectivo",
@@ -17,8 +47,27 @@ function paymentLabel(method: string): string {
   return PAYMENT_LABELS[method] ?? method;
 }
 
-function formatSaleTime(iso: string): string {
-  return format(new Date(iso), "dd/MM HH:mm", { locale: es });
+function toAmount(value: unknown): number {
+  const amount = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function formatSaleTimeForReceipt(time: string, sessionStart?: string): string {
+  if (!time.trim()) {
+    return "—";
+  }
+
+  const parsed = new Date(time);
+  if (!Number.isNaN(parsed.getTime())) {
+    return format(parsed, "dd/MM HH:mm", { locale: es });
+  }
+
+  if (sessionStart) {
+    const sessionDate = format(new Date(sessionStart), "dd/MM", { locale: es });
+    return `${sessionDate} ${time}`;
+  }
+
+  return time;
 }
 
 function summarizeSaleItems(
@@ -35,20 +84,22 @@ export function mapCashClosingDetailToCierreLote(
 ): CierreLoteReceiptData {
   const movementTotals = closing.movementTotals;
   const salesByMethod = closing.salesByMethod ?? { cash: 0, card: 0, transfer: 0, qr: 0 };
+  const movements = closing.movements ?? [];
+  const sales = closing.sales ?? [];
 
-  const ingresos = movementTotals?.incomeTotal ?? 0;
-  const egresos = movementTotals?.expenseTotal ?? 0;
-  const cashIncome = movementTotals?.cashIncome ?? 0;
-  const cashExpense = movementTotals?.cashExpense ?? 0;
-  const cashNet = movementTotals?.cashNet ?? cashIncome - cashExpense;
+  const ingresos = toAmount(movementTotals?.incomeTotal);
+  const egresos = toAmount(movementTotals?.expenseTotal);
+  const cashIncome = toAmount(movementTotals?.cashIncome);
+  const cashExpense = toAmount(movementTotals?.cashExpense);
+  const cashNet = toAmount(movementTotals?.cashNet ?? cashIncome - cashExpense);
 
-  const egresosBuzon = closing.movements
+  const egresosBuzon = movements
     .filter((movement) => movement.type === "expense" && movement.paymentMethod === "buzon")
-    .reduce((sum, movement) => sum + movement.amount, 0);
+    .reduce((sum, movement) => sum + toAmount(movement.amount), 0);
 
   const egresosEfectivo = Math.max(0, cashExpense - egresosBuzon);
   const referenciaEnCajon =
-    closing.initialBalance + salesByMethod.cash + cashNet;
+    toAmount(closing.initialBalance) + toAmount(salesByMethod.cash) + cashNet;
 
   return {
     empresa: {
@@ -59,15 +110,15 @@ export function mapCashClosingDetailToCierreLote(
       id: closing.id,
       fechaApertura: new Date(closing.startTime),
       fechaCierre: new Date(closing.endTime),
-      saldoInicial: closing.initialBalance,
-      saldoFinalCalculado: closing.expectedAmount,
-      saldoFinalDeclarado: closing.countedAmount,
-      diferencia: closing.difference,
+      saldoInicial: toAmount(closing.initialBalance),
+      saldoFinalCalculado: toAmount(closing.expectedAmount),
+      saldoFinalDeclarado: toAmount(closing.countedAmount),
+      diferencia: toAmount(closing.difference),
     },
     usuarioApertura: closing.openedByUsername ?? closing.user ?? "—",
     usuarioCierre: closing.closedByUsername ?? closing.user ?? "—",
     totales: {
-      ventas: closing.totalSales,
+      ventas: toAmount(closing.totalSales),
       propinas: 0,
       ingresos,
       egresos,
@@ -75,36 +126,36 @@ export function mapCashClosingDetailToCierreLote(
       egresosBuzon,
     },
     desgloseMetodosPago: {
-      efectivo: salesByMethod.cash,
-      transferencia: salesByMethod.transfer,
-      bancario: salesByMethod.card + salesByMethod.qr,
+      efectivo: toAmount(salesByMethod.cash),
+      transferencia: toAmount(salesByMethod.transfer),
+      bancario: toAmount(salesByMethod.card) + toAmount(salesByMethod.qr),
     },
-    desgloseIngresos: closing.movements
+    desgloseIngresos: movements
       .filter((movement) => movement.type === "income")
       .map((movement) => ({
         concepto: movement.description,
-        monto: movement.amount,
+        monto: toAmount(movement.amount),
       })),
-    desgloseEgresos: closing.movements
+    desgloseEgresos: movements
       .filter((movement) => movement.type === "expense")
       .map((movement) => ({
         concepto: movement.description,
-        monto: movement.amount,
+        monto: toAmount(movement.amount),
         metodoPagoLabel: paymentLabel(movement.paymentMethod),
       })),
     arqueoEfectivo: {
-      saldoInicial: closing.initialBalance,
-      ventasEfectivo: salesByMethod.cash,
+      saldoInicial: toAmount(closing.initialBalance),
+      ventasEfectivo: toAmount(salesByMethod.cash),
       ingresosEfectivo: cashIncome,
       egresosEfectivo,
       egresosBuzon,
       referenciaEnCajon,
     },
-    detalleVentas: closing.sales.map((sale) => ({
-      hora: formatSaleTime(sale.time),
-      resumen: summarizeSaleItems(sale.items),
+    detalleVentas: sales.map((sale) => ({
+      hora: formatSaleTimeForReceipt(sale.time, closing.startTime),
+      resumen: summarizeSaleItems(sale.items ?? []),
       metodoPago: paymentLabel(sale.paymentMethod),
-      monto: sale.amount,
+      monto: toAmount(sale.amount),
     })),
     fechaEmision: new Date(),
   };
@@ -138,4 +189,39 @@ export function buildCashClosingReceiptText(closing: CashClosingDetail): string 
   }
 
   return lines.join("\n");
+}
+
+export function buildCashClosingPreviewState(
+  closing: CashClosingDetail,
+  options: {
+    widthMm?: ReceiptWidthMm;
+    business?: CashClosingReceiptBusinessContext;
+  } = {},
+): ReceiptPreviewState {
+  const widthMm = options.widthMm ?? 80;
+  const enriched = enrichCashClosingForReceipt(closing, options.business);
+  return {
+    html: buildCashClosingReceiptHtml(enriched, widthMm),
+    text: buildCashClosingReceiptText(enriched),
+    widthMm,
+    title: `Cierre de caja #${closing.id.slice(-8)}`,
+  };
+}
+
+export async function emitCashClosingReceipt(
+  closing: CashClosingDetail,
+  options: {
+    widthMm?: ReceiptWidthMm;
+    business?: CashClosingReceiptBusinessContext;
+    previewOnly?: boolean;
+  } = {},
+): Promise<void> {
+  const preview = buildCashClosingPreviewState(closing, options);
+
+  if (options.previewOnly || !canPrintDirectly()) {
+    previewHtmlDocument(preview);
+    return;
+  }
+
+  await printHtmlDocument(preview.html, preview.widthMm);
 }

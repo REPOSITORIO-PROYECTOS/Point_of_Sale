@@ -10,6 +10,7 @@ import type { AfipStoredConfig } from './afip-config.types';
 const configFileName = 'config.json';
 const certificateFileName = 'user.crt';
 const privateKeyFileName = 'user.key';
+const pendingCsrFileName = 'pending.csr';
 
 export function getAfipStorageDir() {
   return path.join(env.appDataDir, 'afip');
@@ -33,6 +34,10 @@ export function getAfipPrivateKeyPath() {
   }
 
   return path.join(getAfipStorageDir(), privateKeyFileName);
+}
+
+export function getAfipPendingCsrPath() {
+  return path.join(getAfipStorageDir(), pendingCsrFileName);
 }
 
 export function ensureAfipStorageDir() {
@@ -127,6 +132,41 @@ export function hasAfipCertificateFile() {
 
 export function hasAfipPrivateKeyFile() {
   return fs.existsSync(getAfipPrivateKeyPath());
+}
+
+export function writePendingAfipCsr(content: string) {
+  ensureAfipStorageDir();
+  fs.writeFileSync(getAfipPendingCsrPath(), normalizePem(content), 'utf8');
+}
+
+export function readPendingAfipCsr() {
+  const csrPath = getAfipPendingCsrPath();
+
+  if (!fs.existsSync(csrPath)) {
+    return null;
+  }
+
+  return fs.readFileSync(csrPath, 'utf8');
+}
+
+export function hasPendingAfipCsrFile() {
+  return fs.existsSync(getAfipPendingCsrPath());
+}
+
+export function clearPendingAfipCsr() {
+  const csrPath = getAfipPendingCsrPath();
+
+  if (fs.existsSync(csrPath)) {
+    fs.unlinkSync(csrPath);
+  }
+}
+
+export function clearAfipCredentialFiles() {
+  for (const filePath of [getAfipCertificatePath(), getAfipPrivateKeyPath(), getAfipPendingCsrPath()]) {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
 }
 
 function normalizePem(content: string) {

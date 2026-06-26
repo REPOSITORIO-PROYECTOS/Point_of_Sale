@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Put } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PublicRoute } from '@/decorators/public-routes.decorator';
 import { env } from '@/config/env.config';
@@ -48,6 +48,17 @@ export class AfipController {
 
     return {
       message: 'AFIP credentials imported successfully',
+      status,
+    };
+  }
+
+  @Delete('credentials')
+  @PublicRoute()
+  resetCredentials() {
+    const status = this.afipConfigService.resetCredentials();
+
+    return {
+      message: 'Credenciales AFIP reiniciadas. Podés generar una nueva clave y CSR.',
       status,
     };
   }

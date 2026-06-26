@@ -20,16 +20,23 @@ export class ProductsController {
     return this.service.listCategories();
   }
 
+  @Get('suppliers')
+  listSuppliers() {
+    return this.service.listSuppliers();
+  }
+
   @Get('search')
   search(
     @Query('q') q?: string,
     @Query('category') category?: string,
+    @Query('supplier') supplier?: string,
     @Query('limit') limit?: string,
   ) {
     const parsedLimit = limit ? Number(limit) : undefined;
     return this.service.search({
       q,
       category,
+      supplier,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
     });
   }

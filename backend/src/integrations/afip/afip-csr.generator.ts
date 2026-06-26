@@ -1,4 +1,4 @@
-import { createSign, generateKeyPairSync } from 'node:crypto';
+import { createPrivateKey, createPublicKey, createSign, generateKeyPairSync } from 'node:crypto';
 
 type GenerateAfipCsrInput = {
   cuit: string;
@@ -96,12 +96,9 @@ function toPem(label: string, der: Buffer): string {
   return `-----BEGIN ${label}-----\n${body}\n-----END ${label}-----\n`;
 }
 
-export function generateAfipCsr(input: GenerateAfipCsrInput): GenerateAfipCsrResult {
-  const { privateKey, publicKey } = generateKeyPairSync('rsa', {
-    modulusLength: 2048,
-    publicKeyEncoding: { type: 'spki', format: 'der' },
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-  });
+function buildCsrPem(privateKeyPem: string, input: GenerateAfipCsrInput): string {
+  const privateKey = createPrivateKey(privateKeyPem);
+  const publicKey = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }) as Buffer;
 
   const certificationRequestInfo = encodeSequence([
     encodeInteger(0),
@@ -120,8 +117,25 @@ export function generateAfipCsr(input: GenerateAfipCsrInput): GenerateAfipCsrRes
     encodeBitString(signature),
   ]);
 
+  return toPem('CERTIFICATE REQUEST', csrDer);
+}
+
+export function generateAfipCsrFromPrivateKey(
+  privateKeyPem: string,
+  input: GenerateAfipCsrInput,
+): string {
+  return buildCsrPem(privateKeyPem, input);
+}
+
+export function generateAfipCsr(input: GenerateAfipCsrInput): GenerateAfipCsrResult {
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'der' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
   return {
     privateKeyPem: privateKey,
-    csrPem: toPem('CERTIFICATE REQUEST', csrDer),
+    csrPem: buildCsrPem(privateKey, input),
   };
 }

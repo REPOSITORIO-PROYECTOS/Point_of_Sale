@@ -1,19 +1,23 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { env } from '@/config/env.config';
-import { generateAfipCsr } from './afip-csr.generator';
+import { generateAfipCsr, generateAfipCsrFromPrivateKey } from './afip-csr.generator';
 import type { AfipBillingDefaults } from './afip-billing-defaults';
 import { normalizeAfipBillingDefaults } from './afip-billing-defaults';
 import type { AfipConfigStatus, AfipStoredConfig } from './afip-config.types';
 import {
+  clearAfipCredentialFiles,
+  clearPendingAfipCsr,
   ensureAfipStorageDir,
   getAfipCertificatePath,
   getAfipConfigPath,
   getAfipPrivateKeyPath,
   hasAfipCertificateFile,
   hasAfipPrivateKeyFile,
+  hasPendingAfipCsrFile,
   readAfipBillingDefaults,
   readAfipCertificate,
   readAfipPrivateKey,
+  readPendingAfipCsr,
   readStoredAfipConfig,
   validateCertificatePem,
   validateCuit,
@@ -21,6 +25,7 @@ import {
   writeAfipBillingDefaults,
   writeAfipCertificate,
   writeAfipPrivateKey,
+  writePendingAfipCsr,
   writeStoredAfipConfig,
 } from './afip-config.storage';
 import type { AfipCredentials } from './afip.types';
@@ -64,6 +69,7 @@ export class AfipConfigService {
 
     const configured = Boolean(cuit && hasCertificate && hasPrivateKey);
     const pendingCertificate = Boolean(cuit && hasPrivateKey && !hasCertificate);
+    const pendingCsr = pendingCertificate ? readPendingAfipCsr() : null;
 
     return {
       configured,
@@ -74,11 +80,27 @@ export class AfipConfigService {
       billingDefaults: stored?.billingDefaults ?? readAfipBillingDefaults(),
       hasCertificate,
       hasPrivateKey,
+      hasPendingCsr: hasPendingAfipCsrFile(),
+      pendingCsr,
       certPath: getAfipCertificatePath(),
       keyPath: getAfipPrivateKeyPath(),
       configPath: getAfipConfigPath(),
       updatedAt: stored?.updatedAt ?? null,
     };
+  }
+
+  resetCredentials() {
+    clearAfipCredentialFiles();
+
+    const existing = readStoredAfipConfig();
+    if (existing) {
+      writeStoredAfipConfig({
+        ...existing,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    return this.getStatus();
   }
 
   updateBillingDefaults(input: AfipBillingDefaults) {
@@ -100,6 +122,7 @@ export class AfipConfigService {
 
       writeAfipCertificate(certificado);
       writeAfipPrivateKey(clavePrivada);
+      clearPendingAfipCsr();
 
       const existing = readStoredAfipConfig();
       const config: AfipStoredConfig = {
@@ -127,7 +150,7 @@ export class AfipConfigService {
 
     if (status.hasCertificate) {
       throw new BadRequestException(
-        'A certificate is already configured. Remove it before generating a new key pair.',
+        'Ya hay un certificado configurado. Reiniciá las credenciales AFIP antes de generar una nueva clave.',
       );
     }
 
@@ -135,11 +158,44 @@ export class AfipConfigService {
       const cuit = validateCuit(input.cuit);
       const organization = input.organization?.trim() || 'PointOfSale';
       const commonName = input.commonName?.trim() || 'PointOfSale';
-      const { privateKeyPem, csrPem } = generateAfipCsr({
-        cuit,
-        organization,
-        commonName,
-      });
+      const csrInput = { cuit, organization, commonName };
+
+      if (status.hasPrivateKey) {
+        const pendingCsr = readPendingAfipCsr();
+        if (pendingCsr) {
+          const nextStatus = this.savePrivateKey({
+            cuit,
+            clavePrivada: readAfipPrivateKey(),
+            puntoVenta: input.puntoVenta,
+            production: input.production,
+          });
+
+          return {
+            csr: pendingCsr,
+            status: nextStatus,
+            reusedExistingKey: true,
+          };
+        }
+
+        const csrPem = generateAfipCsrFromPrivateKey(readAfipPrivateKey(), csrInput);
+        writePendingAfipCsr(csrPem);
+
+        const nextStatus = this.savePrivateKey({
+          cuit,
+          clavePrivada: readAfipPrivateKey(),
+          puntoVenta: input.puntoVenta,
+          production: input.production,
+        });
+
+        return {
+          csr: csrPem,
+          status: nextStatus,
+          reusedExistingKey: true,
+        };
+      }
+
+      const { privateKeyPem, csrPem } = generateAfipCsr(csrInput);
+      writePendingAfipCsr(csrPem);
 
       const nextStatus = this.savePrivateKey({
         cuit,
@@ -151,13 +207,16 @@ export class AfipConfigService {
       return {
         csr: csrPem,
         status: nextStatus,
+        reusedExistingKey: false,
       };
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
       }
 
-      throw new BadRequestException(error instanceof Error ? error.message : 'Could not generate AFIP CSR');
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'No se pudo generar el pedido CSR de AFIP',
+      );
     }
   }
 
@@ -209,6 +268,7 @@ export class AfipConfigService {
       }
 
       writeAfipCertificate(certificado);
+      clearPendingAfipCsr();
 
       writeStoredAfipConfig({
         ...stored,

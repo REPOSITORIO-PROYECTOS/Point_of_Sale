@@ -139,6 +139,10 @@ export function buildReceiptPreviewState(
   };
 }
 
+export function canPrintDirectly(): boolean {
+  return isElectronEnvironment() || isWailsEnvironment();
+}
+
 export async function printThermalHtml(
   html: string,
   receiptWidthMm: ReceiptWidthMm = 80,
@@ -235,7 +239,12 @@ export function previewHtmlDocument(input: {
 
 export async function printHtmlDocument(html: string, widthMm: ReceiptWidthMm = 80): Promise<void> {
   if (isElectronEnvironment()) {
-    await printReceiptElectron({ widthMm, html });
+    const printerSettings = await loadPrinterSettings();
+    await printReceiptElectron({
+      widthMm,
+      html,
+      printer: toPrinterPrintOptions(printerSettings),
+    });
     return;
   }
 

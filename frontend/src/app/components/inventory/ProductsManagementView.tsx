@@ -58,9 +58,11 @@ export function ProductsManagementView() {
   const [products, setProducts] = useState<Product[]>([]);
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
   const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
+  const [catalogSuppliers, setCatalogSuppliers] = useState<string[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedSupplierFilter, setSelectedSupplierFilter] = useState("");
   const searchRequestRef = useRef(0);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -80,6 +82,7 @@ export function ProductsManagementView() {
     minStock: "",
     unit: "unidad" as "unidad" | "gramos" | "kilogramos" | "litros" | "mililitros",
     quantity: "",
+    supplier: "",
   });
   const [barcodes, setBarcodes] = useState<string[]>([]);
   const [newBarcode, setNewBarcode] = useState("");
@@ -89,11 +92,15 @@ export function ProductsManagementView() {
     void PosAPI.getProductCategories()
       .then(setCatalogCategories)
       .catch((error) => console.error("Failed to load categories:", error));
+    void PosAPI.getProductSuppliers()
+      .then(setCatalogSuppliers)
+      .catch((error) => console.error("Failed to load suppliers:", error));
   }, []);
 
   useEffect(() => {
     const trimmed = searchTerm.trim();
-    if (trimmed.length < 2) {
+    const hasSupplierFilter = Boolean(selectedSupplierFilter);
+    if (trimmed.length < 2 && !hasSupplierFilter) {
       setDisplayedProducts([]);
       setIsSearching(false);
       return;
@@ -103,7 +110,11 @@ export function ProductsManagementView() {
     setIsSearching(true);
 
     const timer = window.setTimeout(() => {
-      void PosAPI.searchProducts({ q: trimmed, limit: ADMIN_RESULT_LIMIT })
+      void PosAPI.searchProducts({
+        q: trimmed.length >= 2 ? trimmed : undefined,
+        supplier: hasSupplierFilter ? selectedSupplierFilter : undefined,
+        limit: ADMIN_RESULT_LIMIT,
+      })
         .then((results) => {
           if (searchRequestRef.current !== requestId) return;
           setDisplayedProducts(results);
@@ -121,7 +132,7 @@ export function ProductsManagementView() {
     }, SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, selectedSupplierFilter]);
 
   useEffect(() => {
     if (!priceIncreaseDialogOpen || products.length > 0) return;
@@ -153,6 +164,7 @@ export function ProductsManagementView() {
       minStock: "",
       unit: "unidad",
       quantity: "",
+      supplier: "",
     });
     setBarcodes([]);
     setNewBarcode("");
@@ -172,6 +184,7 @@ export function ProductsManagementView() {
       minStock: product.minStock?.toString() || "",
       unit: product.unit || "unidad",
       quantity: product.quantity?.toString() || "",
+      supplier: product.supplier || "",
     });
     setBarcodes(product.barcodes || []);
     setNewBarcode("");
@@ -196,6 +209,7 @@ export function ProductsManagementView() {
       barcodes: barcodes.length > 0 ? barcodes : undefined,
       unit: formData.unit,
       quantity: formData.quantity ? parseFloat(formData.quantity) : undefined,
+      supplier: formData.supplier.trim() || undefined,
     };
 
     try {
@@ -209,10 +223,16 @@ export function ProductsManagementView() {
       } else {
         await PosAPI.createProduct(newProduct);
         setProducts([...products, newProduct]);
-        if (searchTerm.trim().length >= 2) {
+        if (searchTerm.trim().length >= 2 || selectedSupplierFilter) {
           setDisplayedProducts([...displayedProducts, newProduct]);
         }
         toast.success("Producto agregado");
+      }
+      const trimmedSupplier = formData.supplier.trim();
+      if (trimmedSupplier && !catalogSuppliers.includes(trimmedSupplier)) {
+        setCatalogSuppliers((current) =>
+          [...current, trimmedSupplier].sort((a, b) => a.localeCompare(b, "es")),
+        );
       }
       setEditDialogOpen(false);
     } catch (error) {
@@ -381,7 +401,9 @@ export function ProductsManagementView() {
             (product.barcodes &&
               product.barcodes.some((barcode) =>
                 barcode.toLowerCase().includes(searchTerm.toLowerCase()),
-              )),
+              )) ||
+            (product.supplier &&
+              product.supplier.toLowerCase().includes(searchTerm.toLowerCase()))),
         )
       : [];
 
@@ -398,7 +420,7 @@ export function ProductsManagementView() {
   };
 
   const trimmedSearch = searchTerm.trim();
-  const showProductTable = trimmedSearch.length >= 2;
+  const showProductTable = trimmedSearch.length >= 2 || Boolean(selectedSupplierFilter);
 
   const getStockBadge = (product: Product) => {
     if (!product.stock) return null;
@@ -447,20 +469,38 @@ export function ProductsManagementView() {
 
         <div className="flex-1 min-h-0 overflow-auto p-6">
           <div className="max-w-7xl mx-auto space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="relative flex-1 max-w-md">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="relative flex-1 min-w-[240px] max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por nombre, código, categoría o código de barra..."
+                  placeholder="Buscar por nombre, código, categoría, proveedor o código de barra..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
+              <Select
+                value={selectedSupplierFilter || "__all__"}
+                onValueChange={(value) =>
+                  setSelectedSupplierFilter(value === "__all__" ? "" : value)
+                }
+              >
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Filtrar por proveedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todos los proveedores</SelectItem>
+                  {catalogSuppliers.map((supplier) => (
+                    <SelectItem key={supplier} value={supplier}>
+                      {supplier}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <div className="text-sm text-muted-foreground">
                 {showProductTable
                   ? `${displayedProducts.length} resultado(s)`
-                  : "Escribí al menos 2 letras para buscar"}
+                  : "Escribí al menos 2 letras o elegí un proveedor"}
               </div>
             </div>
 
@@ -468,7 +508,7 @@ export function ProductsManagementView() {
               <CardHeader>
                 <CardTitle>Catálogo de Productos</CardTitle>
                 <CardDescription>
-                  Buscá por nombre, código, categoría o código de barras
+                  Buscá por nombre, código, categoría, proveedor o código de barras
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -478,6 +518,7 @@ export function ProductsManagementView() {
                       <TableRow>
                         <TableHead className="w-[120px]">Código</TableHead>
                         <TableHead>Nombre</TableHead>
+                        <TableHead className="w-[150px]">Proveedor</TableHead>
                         <TableHead className="w-[180px]">Categorías</TableHead>
                         <TableHead className="w-[110px]">Cantidad</TableHead>
                         <TableHead className="w-[100px]">Precio</TableHead>
@@ -489,14 +530,14 @@ export function ProductsManagementView() {
                     <TableBody>
                       {!showProductTable ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
-                            Escribí al menos 2 letras para ver productos. Usá «Agregar Producto»
+                          <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
+                            Escribí al menos 2 letras o elegí un proveedor para ver productos. Usá «Agregar Producto»
                             para cargar ítems nuevos.
                           </TableCell>
                         </TableRow>
                       ) : isSearching ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                          <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
                             <span className="inline-flex items-center gap-2">
                               <Loader2 className="size-4 animate-spin" />
                               Buscando productos...
@@ -505,7 +546,7 @@ export function ProductsManagementView() {
                         </TableRow>
                       ) : displayedProducts.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                          <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
                             No hay productos que coincidan con la búsqueda
                           </TableCell>
                         </TableRow>
@@ -523,6 +564,9 @@ export function ProductsManagementView() {
                           </TableCell>
                           <TableCell className="font-medium">
                             {product.name}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {product.supplier || "-"}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
@@ -622,6 +666,28 @@ export function ProductsManagementView() {
                 placeholder="Café Espresso"
                 className="mt-1"
               />
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="supplier">Proveedor</Label>
+              <Input
+                id="supplier"
+                list="product-suppliers-list"
+                value={formData.supplier}
+                onChange={(e) =>
+                  setFormData({ ...formData, supplier: e.target.value })
+                }
+                placeholder="Ej: Distribuidora Norte"
+                className="mt-1"
+              />
+              <datalist id="product-suppliers-list">
+                {catalogSuppliers.map((supplier) => (
+                  <option key={supplier} value={supplier} />
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground mt-1">
+                Elegí uno existente o escribí un proveedor nuevo
+              </p>
             </div>
 
             <div className="col-span-2">

@@ -31,6 +31,7 @@ export interface Product {
   barcodes?: string[];
   unit?: "unidad" | "gramos" | "kilogramos" | "litros" | "mililitros";
   quantity?: number;
+  supplier?: string;
 }
 
 export interface CartItem extends Product {

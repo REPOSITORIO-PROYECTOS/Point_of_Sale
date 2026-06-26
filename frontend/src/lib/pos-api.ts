@@ -311,6 +311,7 @@ function toProductPayload(product: Product) {
     barcodes: product.barcodes,
     unit: product.unit,
     quantity: product.quantity,
+    supplier: product.supplier,
   };
 }
 
@@ -323,6 +324,8 @@ export type AfipConfigStatus = {
   billingDefaults: AfipBillingDefaults;
   hasCertificate: boolean;
   hasPrivateKey: boolean;
+  hasPendingCsr?: boolean;
+  pendingCsr?: string | null;
   certPath: string;
   keyPath: string;
   configPath: string;
@@ -432,10 +435,11 @@ export const PosAPI = {
       normalizeProduct(product),
     ),
 
-  searchProducts: (params: { q?: string; category?: string; limit?: number } = {}) => {
+  searchProducts: (params: { q?: string; category?: string; supplier?: string; limit?: number } = {}) => {
     const searchParams = new URLSearchParams();
     if (params.q?.trim()) searchParams.set("q", params.q.trim());
     if (params.category?.trim()) searchParams.set("category", params.category.trim());
+    if (params.supplier?.trim()) searchParams.set("supplier", params.supplier.trim());
     if (params.limit != null) searchParams.set("limit", String(params.limit));
     const query = searchParams.toString();
     return request<Product[]>(`/products/search${query ? `?${query}` : ""}`).then((products) =>
@@ -444,6 +448,8 @@ export const PosAPI = {
   },
 
   getProductCategories: () => request<string[]>("/products/categories"),
+
+  getProductSuppliers: () => request<string[]>("/products/suppliers"),
 
   getProducts: async () => {
     const products = await request<Product[]>("/products");
@@ -573,6 +579,10 @@ export const PosAPI = {
     request<{ message: string; status: AfipConfigStatus }>("/integrations/afip/credentials", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  resetAfipCredentials: () =>
+    request<{ message: string; status: AfipConfigStatus }>("/integrations/afip/credentials", {
+      method: "DELETE",
     }),
   saveAfipPrivateKey: (payload: SaveAfipPrivateKeyPayload) =>
     request<{ message: string; status: AfipConfigStatus }>("/integrations/afip/private-key", {

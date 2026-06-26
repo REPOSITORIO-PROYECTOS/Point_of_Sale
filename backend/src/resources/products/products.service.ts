@@ -23,6 +23,7 @@ export type ProductResponse = {
   barcodes?: string[];
   unit?: ProductEntity['unit'];
   quantity?: number;
+  supplier?: string;
 };
 
 function parseJsonArray(value: string | null | undefined): string[] {
@@ -55,6 +56,7 @@ function mapDtoToEntity(payload: CreateProductDto | (UpdateProductDto & { id?: s
     ...(payload.barcodes !== undefined ? { barcodes: stringifyJsonArray(payload.barcodes) } : {}),
     ...(payload.unit !== undefined ? { unit: payload.unit } : {}),
     ...(payload.quantity !== undefined ? { quantity: payload.quantity } : {}),
+    ...(payload.supplier !== undefined ? { supplier: payload.supplier?.trim() || null } : {}),
   };
 }
 
@@ -69,7 +71,7 @@ export class ProductsService {
     return this.repository.find({ order: { name: 'ASC' } }).then((items) => items.map(toProductResponse));
   }
 
-  async search(params: { q?: string; category?: string; limit?: number }) {
+  async search(params: { q?: string; category?: string; supplier?: string; limit?: number }) {
     const limit = Math.min(Math.max(params.limit ?? 80, 1), 200);
     const qb = this.repository.createQueryBuilder('product').orderBy('product.name', 'ASC').take(limit);
 
@@ -77,7 +79,7 @@ export class ProductsService {
     if (query) {
       const pattern = `%${query.toLowerCase()}%`;
       qb.andWhere(
-        '(LOWER(product.name) LIKE :pattern OR LOWER(product.id) LIKE :pattern OR product.barcodes LIKE :pattern OR product.categories LIKE :pattern)',
+        '(LOWER(product.name) LIKE :pattern OR LOWER(product.id) LIKE :pattern OR product.barcodes LIKE :pattern OR product.categories LIKE :pattern OR LOWER(product.supplier) LIKE :pattern)',
         { pattern },
       );
     }
@@ -87,6 +89,11 @@ export class ProductsService {
       qb.andWhere('product.categories LIKE :categoryPattern', {
         categoryPattern: `%"${category.replace(/"/g, '')}"%`,
       });
+    }
+
+    const supplier = params.supplier?.trim();
+    if (supplier) {
+      qb.andWhere('LOWER(product.supplier) = LOWER(:supplier)', { supplier });
     }
 
     const items = await qb.getMany();
@@ -261,6 +268,20 @@ export class ProductsService {
     return [...categories].sort((left, right) => left.localeCompare(right, 'es'));
   }
 
+  async listSuppliers(): Promise<string[]> {
+    const entities = await this.repository.find({ select: ['supplier'] });
+    const suppliers = new Set<string>();
+
+    for (const entity of entities) {
+      const trimmed = entity.supplier?.trim();
+      if (trimmed) {
+        suppliers.add(trimmed);
+      }
+    }
+
+    return [...suppliers].sort((left, right) => left.localeCompare(right, 'es'));
+  }
+
   async increasePricesByCategory(category: string, percent: number) {
     const normalizedCategory = category.trim();
     if (!normalizedCategory) {
@@ -323,5 +344,6 @@ function toProductResponse(entity: ProductEntity): ProductResponse {
     ...(barcodes.length > 0 ? { barcodes } : {}),
     ...(entity.unit ? { unit: entity.unit } : {}),
     ...(entity.quantity != null ? { quantity: entity.quantity } : {}),
+    ...(entity.supplier ? { supplier: entity.supplier } : {}),
   };
 }

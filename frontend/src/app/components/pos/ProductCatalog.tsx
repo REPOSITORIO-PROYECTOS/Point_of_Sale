@@ -38,7 +38,9 @@ export function ProductCatalog({
 }: ProductCatalogProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
+  const [suppliers, setSuppliers] = useState<string[]>([]);
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
@@ -53,14 +55,18 @@ export function ProductCatalog({
     void PosAPI.getProductCategories()
       .then(setCategories)
       .catch((error) => console.error("Failed to load categories:", error));
+    void PosAPI.getProductSuppliers()
+      .then(setSuppliers)
+      .catch((error) => console.error("Failed to load suppliers:", error));
   }, []);
 
   useEffect(() => {
     const trimmed = searchQuery.trim();
     const hasQuery = trimmed.length >= 2;
     const hasCategory = Boolean(selectedCategory);
+    const hasSupplier = Boolean(selectedSupplier);
 
-    if (!hasQuery && !hasCategory) {
+    if (!hasQuery && !hasCategory && !hasSupplier) {
       setDisplayedProducts([]);
       setIsSearching(false);
       return;
@@ -73,6 +79,7 @@ export function ProductCatalog({
       void PosAPI.searchProducts({
         q: hasQuery ? trimmed : undefined,
         category: hasCategory ? selectedCategory ?? undefined : undefined,
+        supplier: hasSupplier ? selectedSupplier ?? undefined : undefined,
         limit: CATALOG_RESULT_LIMIT,
       })
         .then((results) => {
@@ -91,7 +98,7 @@ export function ProductCatalog({
     }, hasQuery ? SEARCH_DEBOUNCE_MS : 0);
 
     return () => window.clearTimeout(timer);
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, selectedSupplier]);
 
   const handleProductClick = (product: Product) => {
     if (product.unit === "kilogramos" || product.unit === "gramos") {
@@ -145,6 +152,7 @@ export function ProductCatalog({
       event.preventDefault();
       setSearchQuery("");
       setSelectedCategory(null);
+      setSelectedSupplier(null);
       handleProductClick(match);
     } catch {
       // Sin coincidencia por código: la búsqueda por texto sigue en el listado.
@@ -155,7 +163,8 @@ export function ProductCatalog({
 
   const isOpen = isCashSessionOpen(cashSession);
   const trimmedQuery = searchQuery.trim();
-  const showCatalogGrid = trimmedQuery.length >= 2 || Boolean(selectedCategory);
+  const showCatalogGrid =
+    trimmedQuery.length >= 2 || Boolean(selectedCategory) || Boolean(selectedSupplier);
 
   return (
     <div className="flex flex-col h-full">
@@ -164,7 +173,7 @@ export function ProductCatalog({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Buscar o escanear código de barras..."
+            placeholder="Buscar por nombre, proveedor o escanear código de barras..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}
@@ -237,7 +246,7 @@ export function ProductCatalog({
             variant={selectedCategory === null ? "default" : "outline"}
             onClick={() => setSelectedCategory(null)}
           >
-            Todas
+            Todas las categorías
           </Button>
           {categories.map((category) => (
             <Button
@@ -255,12 +264,38 @@ export function ProductCatalog({
         </div>
       )}
 
+      {suppliers.length > 0 && (
+        <div className="px-4 py-3 border-b flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={selectedSupplier === null ? "default" : "outline"}
+            onClick={() => setSelectedSupplier(null)}
+          >
+            Todos los proveedores
+          </Button>
+          {suppliers.map((supplier) => (
+            <Button
+              key={supplier}
+              type="button"
+              size="sm"
+              variant={selectedSupplier === supplier ? "default" : "outline"}
+              onClick={() =>
+                setSelectedSupplier((current) => (current === supplier ? null : supplier))
+              }
+            >
+              {supplier}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <div className="flex-1 overflow-auto p-4">
         {!showCatalogGrid ? (
           <div className="text-center py-16 text-muted-foreground space-y-2">
             <p className="text-lg font-medium">Buscá o escaneá un producto</p>
             <p className="text-sm">
-              Escribí al menos 2 letras o elegí una categoría para ver el catálogo.
+              Escribí al menos 2 letras o elegí una categoría o proveedor para ver el catálogo.
             </p>
             <p className="text-sm">Con lector de barras, escaneá y presioná Enter.</p>
           </div>
@@ -294,6 +329,11 @@ export function ProductCatalog({
                       {getProductCategories(product).length > 0 && (
                         <p className="text-xs text-muted-foreground mt-1 truncate">
                           {getProductCategories(product).join(", ")}
+                        </p>
+                      )}
+                      {product.supplier && (
+                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                          {product.supplier}
                         </p>
                       )}
                       {(product.unit === "kilogramos" || product.unit === "gramos") && (

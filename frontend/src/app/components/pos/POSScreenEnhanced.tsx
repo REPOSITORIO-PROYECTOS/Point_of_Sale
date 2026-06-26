@@ -55,6 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { emitCashClosingReceipt } from "../../../lib/cash-closing-receipt";
 import { toast } from "sonner";
 import { useKeyboardShortcuts } from "../../../lib/use-keyboard-shortcuts";
 import { ListOrdered, DollarSign, AlertTriangle, TrendingUp, TrendingDown, Lock, Unlock, ArrowUpDown } from "lucide-react";
@@ -449,7 +450,7 @@ export function POSScreenEnhanced({
     try {
       const expectedCash = getExpectedCashInDrawer(latestSession);
 
-      await PosAPI.closeCashSession(expectedCash, parsedCounted);
+      const closedSession = await PosAPI.closeCashSession(expectedCash, parsedCounted);
       resetAfterCashClose();
       notifyCashSessionClosed();
 
@@ -460,6 +461,24 @@ export function POSScreenEnhanced({
         toast.success(`Caja cerrada — sobrante de $${variance.toFixed(2)}`);
       } else {
         toast.warning(`Caja cerrada — faltante de $${Math.abs(variance).toFixed(2)}`);
+      }
+
+      try {
+        const closingDetail = await PosAPI.getCashClosingDetail(closedSession.id);
+        await emitCashClosingReceipt(closingDetail, {
+          widthMm: themeConfig.receiptWidthMm ?? 80,
+          business: {
+            businessName: businessSettings.businessName,
+            taxId: businessSettings.taxId,
+            phone: businessSettings.phone,
+            email: businessSettings.email,
+            address: businessSettings.address,
+          },
+        });
+      } catch (printError) {
+        console.warn("Cash closing receipt print failed:", printError);
+        const detail = printError instanceof Error ? printError.message : "Error desconocido";
+        toast.warning(`Caja cerrada, pero no se pudo imprimir el ticket: ${detail}`);
       }
     } catch (error) {
       console.error("Failed to close cash:", error);

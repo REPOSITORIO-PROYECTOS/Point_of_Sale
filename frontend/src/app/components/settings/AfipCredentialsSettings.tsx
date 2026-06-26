@@ -59,6 +59,7 @@ export function AfipCredentialsSettings() {
   const [billingIdCondicionIva, setBillingIdCondicionIva] = useState(String(DEFAULT_AFIP_BILLING_DEFAULTS.idCondicionIva));
   const [billingIvaRate, setBillingIvaRate] = useState(String(DEFAULT_AFIP_BILLING_DEFAULTS.ivaRatePercent));
   const [isSavingBillingDefaults, setIsSavingBillingDefaults] = useState(false);
+  const [isResettingCredentials, setIsResettingCredentials] = useState(false);
 
   const loadStatus = async () => {
     setIsLoading(true);
@@ -69,6 +70,9 @@ export function AfipCredentialsSettings() {
       setCuit(config.cuit ?? "");
       setPuntoVenta(String(config.puntoVenta ?? 1));
       setProduction(config.production ?? false);
+      if (config.pendingCsr) {
+        setCsr(config.pendingCsr);
+      }
       const billing = normalizeAfipBillingDefaults(config.billingDefaults);
       setBillingTipoAfip(String(billing.tipoAfip));
       setBillingTipoDocumento(String(billing.tipoDocumento));
@@ -120,11 +124,16 @@ export function AfipCredentialsSettings() {
   };
 
   const handleGenerateCsr = async () => {
+    if (!isValidAfipCuit(cuit)) {
+      toast.error("Completá el CUIT emisor con 11 dígitos antes de generar la clave");
+      return;
+    }
+
     setIsGeneratingCsr(true);
 
     try {
       const result = await PosAPI.generateAfipCsr({
-        cuit,
+        cuit: normalizeAfipCuit(cuit),
         organization,
         commonName,
         puntoVenta: Number(puntoVenta),
@@ -134,11 +143,37 @@ export function AfipCredentialsSettings() {
       setCsr(result.csr);
       setStatus(result.status);
       setClavePrivada("");
-      toast.success("Clave generada y guardada. Subí el CSR a AFIP y después importá el .crt aprobado.");
+      toast.success(
+        result.status.hasPrivateKey
+          ? "Clave lista. Descargá el CSR y subilo a WSASS/AFIP."
+          : "Clave generada y guardada. Subí el CSR a AFIP y después importá el .crt aprobado.",
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo generar el CSR");
     } finally {
       setIsGeneratingCsr(false);
+    }
+  };
+
+  const handleResetCredentials = async () => {
+    const confirmed = window.confirm(
+      "¿Reiniciar credenciales AFIP? Se borrarán la clave, el certificado y el CSR guardados en este equipo.",
+    );
+    if (!confirmed) return;
+
+    setIsResettingCredentials(true);
+
+    try {
+      const result = await PosAPI.resetAfipCredentials();
+      setStatus(result.status);
+      setCsr("");
+      setCertificado("");
+      setClavePrivada("");
+      toast.success("Credenciales reiniciadas. Ya podés generar una nueva clave y CSR.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron reiniciar las credenciales");
+    } finally {
+      setIsResettingCredentials(false);
     }
   };
 
@@ -273,6 +308,14 @@ export function AfipCredentialsSettings() {
   const showCertificateStep = Boolean(status?.pendingCertificate || (status?.hasPrivateKey && !status?.hasCertificate));
   const privateKeyValidation = validateAfipPrivateKeyPem(clavePrivada);
   const canSavePrivateKey = isValidAfipCuit(cuit) && privateKeyValidation.ok;
+  const generateCsrBlockedReason = status?.hasCertificate
+    ? "Ya hay un certificado configurado. Reiniciá las credenciales si necesitás generar una clave nueva."
+    : !cuit.trim()
+      ? "Completá el CUIT emisor (11 dígitos) en la sección superior."
+      : !isValidAfipCuit(cuit)
+        ? "El CUIT debe tener exactamente 11 dígitos."
+        : null;
+  const canGenerateCsr = !isGeneratingCsr && !generateCsrBlockedReason;
   const privateKeySaveHint = !isValidAfipCuit(cuit)
     ? "Completá el CUIT emisor (11 dígitos) arriba"
     : !privateKeyValidation.ok && clavePrivada.trim()
@@ -470,15 +513,43 @@ export function AfipCredentialsSettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {status?.hasCertificate ? (
+            <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+              Ya tenés certificado y clave configurados. Si querés generar un CSR nuevo, primero reiniciá las
+              credenciales (se borran solo en este equipo).
+            </p>
+          ) : null}
+
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" onClick={() => void loadStatus()} disabled={isLoading || isGeneratingCsr}>
+            <Button
+              variant="outline"
+              onClick={() => void loadStatus()}
+              disabled={isLoading || isGeneratingCsr || isResettingCredentials}
+            >
               Recargar
             </Button>
-            <Button onClick={() => void handleGenerateCsr()} disabled={isGeneratingCsr || !cuit || status?.hasCertificate}>
+            {(status?.hasCertificate || status?.hasPrivateKey || status?.hasPendingCsr) && (
+              <Button
+                variant="outline"
+                onClick={() => void handleResetCredentials()}
+                disabled={isResettingCredentials || isGeneratingCsr}
+              >
+                {isResettingCredentials ? "Reiniciando..." : "Reiniciar credenciales"}
+              </Button>
+            )}
+            <Button onClick={() => void handleGenerateCsr()} disabled={!canGenerateCsr}>
               <KeyRound className="size-4 mr-2" />
-              {isGeneratingCsr ? "Generando..." : "Generar clave y CSR"}
+              {isGeneratingCsr
+                ? "Generando..."
+                : status?.hasPrivateKey && !status?.hasCertificate
+                  ? "Recuperar / regenerar CSR"
+                  : "Generar clave y CSR"}
             </Button>
           </div>
+
+          {generateCsrBlockedReason ? (
+            <p className="text-sm text-amber-700 dark:text-amber-400">{generateCsrBlockedReason}</p>
+          ) : null}
 
           {(csr || showCertificateStep) && (
             <div className="space-y-3 rounded-lg border p-4">

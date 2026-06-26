@@ -51,6 +51,9 @@ export class ProductEntity {
   @Column('float', { nullable: true })
   quantity?: number | null;
 
+  @Column({ type: 'text', nullable: true })
+  supplier?: string | null;
+
   @CreateDateColumn({ type: 'datetime' })
   createdAt!: Date;
 

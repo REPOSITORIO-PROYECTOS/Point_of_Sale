@@ -76,4 +76,9 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   quantity?: number;
+
+  @ApiPropertyOptional({ example: 'Distribuidora Norte' })
+  @IsOptional()
+  @IsString()
+  supplier?: string;
 }
