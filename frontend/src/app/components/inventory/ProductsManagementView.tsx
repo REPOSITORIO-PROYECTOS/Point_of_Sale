@@ -403,7 +403,7 @@ export function ProductsManagementView() {
                 barcode.toLowerCase().includes(searchTerm.toLowerCase()),
               )) ||
             (product.supplier &&
-              product.supplier.toLowerCase().includes(searchTerm.toLowerCase()))),
+              product.supplier.toLowerCase().includes(searchTerm.toLowerCase())),
         )
       : [];
 
