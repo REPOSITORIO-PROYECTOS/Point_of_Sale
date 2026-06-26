@@ -126,3 +126,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:win:fiscal:publish --prefix desktop
+
+      - name: Publish GitHub release (quitar draft)
+        if: github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -match '^refs/tags/') { $tag = $tag -replace '^refs/tags/', '' }
+          $notesPath = "docs/releases/$($tag -replace '^v','').md"
+          if (Test-Path $notesPath) {
+            gh release edit $tag --draft=false --latest --notes-file $notesPath
+          } else {
+            gh release edit $tag --draft=false --latest
+          }
