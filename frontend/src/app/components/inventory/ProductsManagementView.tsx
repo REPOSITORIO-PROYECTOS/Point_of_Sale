@@ -347,7 +347,12 @@ export function ProductsManagementView() {
       );
     } catch (error) {
       console.error("Failed to update prices:", error);
-      toast.error("Error al actualizar precios");
+      const message = error instanceof Error ? error.message : "";
+      toast.error(
+        /token|sesión|401|unauthorized/i.test(message)
+          ? "Sesión expirada. Volvé a iniciar sesión."
+          : "Error al actualizar precios",
+      );
     }
   };
 

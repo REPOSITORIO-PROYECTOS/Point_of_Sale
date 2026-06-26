@@ -52,11 +52,14 @@ import {
 import { CashViewAdvanced } from "../cash/CashViewAdvanced";
 import { ClosingDetailModal } from "./ClosingDetailModal";
 import { CASH_SESSION_CLOSED_EVENT } from "../../../lib/cash-session";
+import { useAuth } from "../../../lib/auth-context";
 
 const PAGE_SIZE = 10;
 
 export function AuditView() {
-  const [cashAuditTab, setCashAuditTab] = useState("cash");
+  const { isAdmin } = useAuth();
+  const showLiveCash = isAdmin;
+  const [cashAuditTab, setCashAuditTab] = useState(showLiveCash ? "cash" : "history");
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<string>("all");
@@ -200,7 +203,9 @@ export function AuditView() {
             <div>
               <h1 className="text-2xl font-semibold">Auditoría</h1>
               <p className="text-sm text-muted-foreground">
-                Monitoreo de caja activa e historial de cierres
+                {showLiveCash
+                  ? "Monitoreo de caja activa e historial de cierres"
+                  : "Historial de cierres de caja para control y supervisión"}
               </p>
             </div>
           </div>
@@ -209,17 +214,19 @@ export function AuditView() {
         <Tabs value={cashAuditTab} onValueChange={handleCashAuditTabChange} className="flex-1 flex flex-col min-h-0">
           <div className="px-6 pt-4 shrink-0">
             <TabsList>
-              <TabsTrigger value="cash">Caja Activa</TabsTrigger>
+              {showLiveCash && <TabsTrigger value="cash">Caja Activa</TabsTrigger>}
               <TabsTrigger value="history">Historial de Cierres</TabsTrigger>
             </TabsList>
           </div>
 
+          {showLiveCash && (
           <TabsContent
             value="cash"
             className="flex-1 min-h-0 overflow-hidden m-0 data-[state=active]:flex data-[state=active]:flex-col"
           >
             <CashViewAdvanced />
           </TabsContent>
+          )}
 
           <TabsContent value="history" className="flex-1 min-h-0 overflow-auto p-6 m-0">
             <div className="max-w-7xl mx-auto space-y-6">

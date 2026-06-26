@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { AuthUser, UpdateProfilePayload } from "./pos-api";
+import type { RolePermissions } from "./user-roles";
 
 export type AuthContextValue = {
   user: AuthUser | null;
@@ -12,6 +13,9 @@ export type AuthContextValue = {
   updateProfile: (payload: UpdateProfilePayload) => Promise<void>;
   logout: () => void;
   isAdmin: boolean;
+  permissions: RolePermissions;
+  canViewAudit: boolean;
+  canEditProducts: boolean;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

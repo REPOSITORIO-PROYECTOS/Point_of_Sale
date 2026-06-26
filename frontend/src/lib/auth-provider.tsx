@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { AuthContext, type AuthContextValue } from "./auth-context";
 import { PosAPI, type AuthUser, type UpdateProfilePayload } from "./pos-api";
+import { getPermissionsForRole } from "./user-roles";
 
 const AUTH_TOKEN_KEY = "pos.auth.token";
 const AUTH_USER_KEY = "pos.auth.user";
@@ -71,6 +73,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    function onAuthExpired() {
+      logout();
+      toast.error("Sesión expirada", {
+        description: "Volvé a iniciar sesión para importar o editar productos.",
+        duration: 8000,
+      });
+    }
+
+    window.addEventListener("pos:auth-expired", onAuthExpired);
+    return () => window.removeEventListener("pos:auth-expired", onAuthExpired);
+  }, [logout]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
@@ -117,8 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [token, logout]);
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
+  const value = useMemo<AuthContextValue>(() => {
+    const permissions = getPermissionsForRole(user?.role ?? "");
+
+    return {
       user,
       token,
       isLoading,
@@ -129,9 +146,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logout,
       isAdmin: user?.role === "admin",
-    }),
-    [user, token, isLoading, needsSetup, apiUnavailable, login, setupAdmin, updateProfile, logout],
-  );
+      permissions,
+      canViewAudit: permissions.canViewAudit,
+      canEditProducts: permissions.canEditProducts,
+    };
+  }, [user, token, isLoading, needsSetup, apiUnavailable, login, setupAdmin, updateProfile, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

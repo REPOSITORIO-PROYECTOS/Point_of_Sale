@@ -6,6 +6,22 @@ import type { PrinterSettings } from "./printer-settings";
 import { mapThemeConfigFromApi } from "./theme-logo";
 import { getApiBaseUrl } from "./api-base-url";
 const AUTH_TOKEN_KEY = "pos.auth.token";
+const AUTH_USER_KEY = "pos.auth.user";
+
+let authExpiredNotified = false;
+
+function clearAuthSession() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+  if (!authExpiredNotified) {
+    authExpiredNotified = true;
+    window.dispatchEvent(new CustomEvent("pos:auth-expired"));
+    window.setTimeout(() => {
+      authExpiredNotified = false;
+    }, 2000);
+  }
+}
 
 export type UserRole = "admin" | "manager" | "cashier" | "auditor";
 
@@ -250,6 +266,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & { message?: string | string[] };
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearAuthSession();
+    }
+
     const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
     throw new Error(message ?? `Request failed (${response.status})`);
   }

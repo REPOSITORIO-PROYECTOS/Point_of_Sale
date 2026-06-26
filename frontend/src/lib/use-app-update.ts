@@ -132,42 +132,53 @@ export function useAppUpdate() {
 
     setStatus("checking");
     setErrorMessage(null);
-    const result = await window.desktop.checkForUpdates();
 
-    if (result.skipped) {
-      setSkipReason(result.reason ?? null);
-      setStatus("skipped");
-      if (result.reason === "no_token") {
-        toast.message("Actualizaciones no configuradas", {
+    try {
+      const result = await window.desktop.checkForUpdates();
+
+      if (result.skipped) {
+        setSkipReason(result.reason ?? null);
+        setStatus("skipped");
+        if (result.reason === "no_token") {
+          toast.message("Actualizaciones no configuradas", {
+            description: result.message,
+            duration: 5000,
+          });
+        }
+        return result;
+      }
+
+      if (!result.ok) {
+        setStatus("error");
+        setErrorMessage(result.message ?? "Error al buscar actualizaciones");
+        toast.error("No se pudo buscar actualizaciones", {
           description: result.message,
-          duration: 5000,
         });
+        return result;
       }
-      return result;
-    }
 
-    if (!result.ok) {
-      setStatus("error");
-      setErrorMessage(result.message ?? "Error al buscar actualizaciones");
-      toast.error("No se pudo buscar actualizaciones", {
-        description: result.message,
+      if (result.version) {
+        setRemoteVersion(result.version);
+      }
+
+      setStatus((current) => {
+        if (current === "ready" || current === "downloading" || current === "available") {
+          return current;
+        }
+        toast.message("Ya tenés la última versión");
+        return "not-available";
       });
+
       return result;
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.includes("No handler registered")
+          ? "Actualizá a la versión 0.0.5 o superior para buscar actualizaciones desde la app."
+          : "No se pudo buscar actualizaciones";
+      setStatus("skipped");
+      setErrorMessage(message);
+      return { ok: false, skipped: true, message };
     }
-
-    if (result.version) {
-      setRemoteVersion(result.version);
-    }
-
-    setStatus((current) => {
-      if (current === "ready" || current === "downloading" || current === "available") {
-        return current;
-      }
-      toast.message("Ya tenés la última versión");
-      return "not-available";
-    });
-
-    return result;
   }, []);
 
   const installUpdate = useCallback(async () => {

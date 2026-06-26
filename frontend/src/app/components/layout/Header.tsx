@@ -45,7 +45,7 @@ interface HeaderProps {
 }
 
 export function Header({ activeTab, onTabChange }: HeaderProps) {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, canEditProducts, canViewAudit } = useAuth();
   const { settings: businessSettings } = useBusinessSettings();
   const { themeConfig } = useTheme();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -101,7 +101,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
             })}
 
             {/* Inventario */}
-            {isAdmin && (
+            {canEditProducts && (
               <Button
                 variant={activeTab === "inventory" ? "secondary" : "ghost"}
                 className={`h-11 px-6 gap-2 ${
@@ -117,7 +117,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
             )}
 
             {/* Auditoría */}
-            {isAdmin && (
+            {canViewAudit && (
               <Button
                 variant={activeTab === "audit" ? "secondary" : "ghost"}
                 className={`h-11 px-6 gap-2 ${

@@ -16,8 +16,16 @@ function roleLabel(role?: string): string {
     return "Administrador";
   }
 
+  if (role === "manager") {
+    return "Gerente";
+  }
+
   if (role === "cashier") {
     return "Cajero";
+  }
+
+  if (role === "auditor") {
+    return "Auditor";
   }
 
   return role ?? "Cajero";

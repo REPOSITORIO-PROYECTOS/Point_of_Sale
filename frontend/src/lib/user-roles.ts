@@ -88,3 +88,24 @@ export const ACCESS_LEVEL_SUMMARIES: Record<AccessLevel, string> = {
 export function getRoleLabel(accessLevel: string): string {
   return ACCESS_LEVEL_LABELS[accessLevel as AccessLevel] ?? accessLevel;
 }
+
+const DEFAULT_PERMISSIONS: RolePermissions = {
+  canViewAudit: false,
+  canEditProducts: false,
+  canManageCash: false,
+  canCancelSales: false,
+  canApplyDiscounts: false,
+  canAccessReports: false,
+};
+
+export function getPermissionsForRole(accessLevel: string): RolePermissions {
+  const role = ROLE_DEFINITIONS.find((definition) => definition.accessLevel === accessLevel);
+  return role?.permissions ?? DEFAULT_PERMISSIONS;
+}
+
+export function hasPermission(
+  accessLevel: string,
+  permission: keyof RolePermissions,
+): boolean {
+  return getPermissionsForRole(accessLevel)[permission];
+}

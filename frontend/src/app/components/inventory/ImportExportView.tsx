@@ -212,10 +212,13 @@ export function ImportExportView() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Error durante la importación";
+      const isAuthError = /token|sesión|401|unauthorized/i.test(message);
       toast.error(
         imported > 0
           ? `${message}. Se importaron ${imported} productos antes del error.`
-          : message,
+          : isAuthError
+            ? "Sesión expirada. Cerrá sesión, volvé a entrar e intentá de nuevo."
+            : message,
       );
     } finally {
       setImporting(false);

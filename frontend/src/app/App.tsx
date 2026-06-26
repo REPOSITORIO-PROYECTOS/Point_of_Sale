@@ -41,7 +41,7 @@ import { HeldOrder } from "./components/pos/OrderQueuePanel";
 
 function AppContent() {
 
-  const { user, isLoading, needsSetup, apiUnavailable } = useAuth();
+  const { user, isLoading, needsSetup, apiUnavailable, canEditProducts, canViewAudit } = useAuth();
 
   const { settings: businessSettings } = useBusinessSettings();
 
@@ -163,9 +163,9 @@ function AppContent() {
                 user.role === "admin" &&
                 businessSettings.parcelsEnabled && <ParcelsView />}
 
-              {activeTab === "inventory" && user.role === "admin" && <ImportExportView />}
+              {activeTab === "inventory" && canEditProducts && <ImportExportView />}
 
-              {activeTab === "audit" && user.role === "admin" && <AuditView />}
+              {activeTab === "audit" && canViewAudit && <AuditView />}
 
             </div>
 
