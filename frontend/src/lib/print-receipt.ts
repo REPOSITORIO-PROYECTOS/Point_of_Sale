@@ -217,3 +217,38 @@ export function previewReceipt(payload: PrintReceiptPayload): void {
 export function previewReceiptText(payload: PrintReceiptPayload): void {
   browserPrintPreviewHandler?.(buildReceiptPreviewState(payload, "Vista previa — modo texto"));
 }
+
+export function previewHtmlDocument(input: {
+  html: string;
+  text?: string;
+  widthMm?: ReceiptWidthMm;
+  title?: string;
+}): void {
+  const widthMm = input.widthMm ?? 80;
+  browserPrintPreviewHandler?.({
+    html: input.html,
+    text: input.text ?? "",
+    widthMm,
+    title: input.title ?? "Vista previa",
+  });
+}
+
+export async function printHtmlDocument(html: string, widthMm: ReceiptWidthMm = 80): Promise<void> {
+  if (isElectronEnvironment()) {
+    await printReceiptElectron({ widthMm, html });
+    return;
+  }
+
+  if (isWailsEnvironment()) {
+    const data = JSON.stringify({ html, widthMm });
+    await window.go!.main!.App!.PrintReceipt(data);
+    return;
+  }
+
+  printReceiptInBrowser(html, widthMm, {
+    html,
+    text: "",
+    widthMm,
+    title: "Impresión",
+  });
+}

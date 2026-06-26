@@ -23,6 +23,15 @@ export function buildCierreLoteHtml(data: CierreLoteReceiptData, widthMm: 55 | 8
     )
     .join("");
 
+  const ventasDetalle = (data.detalleVentas ?? [])
+    .map(
+      (venta) => `<div class="item">
+        <p class="concepto">${escapeHtml(venta.hora)} ${escapeHtml(venta.resumen.slice(0, 28))} [${escapeHtml(venta.metodoPago)}]</p>
+        <p class="monto">${formatMoney(venta.monto)}</p>
+      </div>`,
+    )
+    .join("");
+
   const arqueoBlock = data.arqueoEfectivo
     ? `<p class="section-title">Referencia Efectivo en Cajón</p>
        <hr>
@@ -92,6 +101,7 @@ export function buildCierreLoteHtml(data: CierreLoteReceiptData, widthMm: 55 | 8
     <div class="item"><p>Ventas por Transferencia:</p><p>${formatMoney(data.desgloseMetodosPago.transferencia)}</p></div>
     <div class="item"><p>Ventas por POS:</p><p>${formatMoney(data.desgloseMetodosPago.bancario)}</p></div>
     <div class="item total-line"><p>TOTAL VENTAS:</p><p>${formatMoney(data.totales.ventas)}</p></div>
+    ${ventasDetalle ? `<p class="section-title">Detalle de Ventas</p><hr>${ventasDetalle}` : ""}
     ${arqueoBlock}
     ${ingresosDetalle ? `<p class="section-title">Detalle de Ingresos</p><hr>${ingresosDetalle}` : ""}
     ${egresosDetalle ? `<p class="section-title">Detalle de Egresos</p><hr>${egresosDetalle}` : ""}

@@ -138,5 +138,11 @@ export type CierreLoteReceiptData = {
     egresosBuzon: number;
     referenciaEnCajon: number;
   };
+  detalleVentas?: Array<{
+    hora: string;
+    resumen: string;
+    metodoPago: string;
+    monto: number;
+  }>;
   fechaEmision?: Date;
 };

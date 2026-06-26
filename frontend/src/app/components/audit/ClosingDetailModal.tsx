@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Badge } from "../ui/badge";
 import { Card, CardContent, CardDescription, CardHeader } from "../ui/card";
 import { ScrollArea } from "../ui/scroll-area";
@@ -14,9 +15,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { Button } from "../ui/button";
 import {
   DollarSign,
   CreditCard,
@@ -33,10 +36,20 @@ import {
   TrendingUp,
   Clock,
   AlertCircle,
+  Eye,
+  Printer,
 } from "lucide-react";
 import { format, differenceInMinutes } from "date-fns";
 import { es } from "date-fns/locale";
+import { toast } from "sonner";
 import type { CashClosingDetail } from "../../../lib/pos-api";
+import { useTheme } from "../../../lib/theme-context";
+import { useBusinessSettings } from "../../../lib/business-settings-context";
+import {
+  buildCashClosingReceiptHtml,
+  buildCashClosingReceiptText,
+} from "../../../lib/cash-closing-receipt";
+import { previewHtmlDocument, printHtmlDocument } from "../../../lib/print-receipt";
 
 interface ClosingDetailModalProps {
   closing: CashClosingDetail | null;
@@ -53,6 +66,10 @@ export function ClosingDetailModal({
   open,
   onOpenChange,
 }: ClosingDetailModalProps) {
+  const { themeConfig } = useTheme();
+  const { settings: businessSettings } = useBusinessSettings();
+  const [isPrinting, setIsPrinting] = useState(false);
+
   const getPaymentMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
       cash: "Efectivo",
@@ -97,6 +114,46 @@ export function ClosingDetailModal({
   const hasDifference = closing && Math.abs(closing.difference) >= 0.01;
   const cashIncome = closing?.movementTotals?.cashIncome ?? 0;
   const cashExpense = closing?.movementTotals?.cashExpense ?? 0;
+
+  const resolveClosingForReceipt = (detail: CashClosingDetail): CashClosingDetail => ({
+    ...detail,
+    businessData: {
+      ...detail.businessData,
+      name: businessSettings.businessName ?? detail.businessData.name,
+      rut: businessSettings.taxId ?? detail.businessData.rut,
+      phone: businessSettings.phone ?? detail.businessData.phone,
+      email: businessSettings.email ?? detail.businessData.email,
+      address: businessSettings.address ?? detail.businessData.address,
+    },
+  });
+
+  const handlePreviewClosing = () => {
+    if (!closing) return;
+    const widthMm = themeConfig.receiptWidthMm ?? 80;
+    const enriched = resolveClosingForReceipt(closing);
+    previewHtmlDocument({
+      html: buildCashClosingReceiptHtml(enriched, widthMm),
+      text: buildCashClosingReceiptText(enriched),
+      widthMm,
+      title: `Cierre de caja #${closing.id.slice(-8)}`,
+    });
+  };
+
+  const handlePrintClosing = async () => {
+    if (!closing) return;
+    setIsPrinting(true);
+    try {
+      const widthMm = themeConfig.receiptWidthMm ?? 80;
+      const enriched = resolveClosingForReceipt(closing);
+      await printHtmlDocument(buildCashClosingReceiptHtml(enriched, widthMm), widthMm);
+      toast.success("Cierre enviado a la impresora");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo imprimir el cierre";
+      toast.error(message);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -516,6 +573,19 @@ export function ClosingDetailModal({
             </div>
           </ScrollArea>
         )}
+
+        {closing && !isLoading ? (
+          <DialogFooter className="px-6 py-4 border-t gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={handlePreviewClosing}>
+              <Eye className="size-4 mr-2" />
+              Vista previa ticket
+            </Button>
+            <Button type="button" onClick={() => void handlePrintClosing()} disabled={isPrinting}>
+              <Printer className="size-4 mr-2" />
+              {isPrinting ? "Imprimiendo..." : "Imprimir cierre"}
+            </Button>
+          </DialogFooter>
+        ) : null}
       </DialogContent>
     </Dialog>
   );

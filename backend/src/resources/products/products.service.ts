@@ -168,7 +168,7 @@ export class ProductsService {
       return;
     }
 
-    await this.adjustStock(productId, -quantity);
+    await this.adjustStock(productId, -quantity, { enforceMinimum: false });
   }
 
   async adjustStock(
