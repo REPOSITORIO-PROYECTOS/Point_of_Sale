@@ -1,6 +1,8 @@
 import type { BrowserWindow } from 'electron';
 import { app, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { markAppQuitting } from './app-quit';
+import { stopLocalServicesGracefully } from './local-services';
 import {
   canRunAutoUpdater,
   getUpdaterEnvPath,
@@ -17,6 +19,7 @@ export type AppUpdateEvent = {
     | 'not-available'
     | 'progress'
     | 'downloaded'
+    | 'installing'
     | 'error'
     | 'skipped';
   payload?: unknown;
@@ -30,7 +33,10 @@ export type AppUpdateCheckResponse = {
   reason?: 'disabled' | 'no_token' | 'not_packaged';
 };
 
-const BOOT_CHECK_DELAY_MS = 30_000;
+const BOOT_CHECK_DELAY_MS = 10_000;
+const WINDOWS_FILE_RELEASE_DELAY_MS = 400;
+
+let installInProgress = false;
 
 const SKIP_MESSAGE =
   'Actualizaciones automáticas no configuradas. Copiá updater.env a %APPDATA%\\PointOfSale o desactivá con POS_DISABLE_AUTO_UPDATE=true.';
@@ -85,9 +91,34 @@ function registerSkippedIpc(getMainWindow: () => BrowserWindow | null, reason: A
     };
   });
 
-  ipcMain.handle('app-update-install', () => {
+  ipcMain.handle('app-update-install', async () => {
     // noop cuando el updater no está activo
   });
+}
+
+async function quitAndInstallUpdate(getMainWindow: () => BrowserWindow | null): Promise<void> {
+  if (installInProgress) {
+    return;
+  }
+
+  installInProgress = true;
+  sendUpdateEvent(getMainWindow, { status: 'installing' });
+
+  try {
+    markAppQuitting();
+    await stopLocalServicesGracefully();
+    await new Promise((resolve) => setTimeout(resolve, WINDOWS_FILE_RELEASE_DELAY_MS));
+    // NSIS oneClick: instalación silenciosa; isForceRunAfter relanza la app al terminar.
+    autoUpdater.quitAndInstall(true, true);
+  } catch (error) {
+    installInProgress = false;
+    const raw = error instanceof Error ? error.message : 'No se pudo iniciar la instalación';
+    sendUpdateEvent(getMainWindow, {
+      status: 'error',
+      payload: { message: toFriendlyErrorMessage(raw), raw },
+    });
+    throw error;
+  }
 }
 
 function registerActiveUpdaterIpc(getMainWindow: () => BrowserWindow | null) {
@@ -106,8 +137,8 @@ function registerActiveUpdaterIpc(getMainWindow: () => BrowserWindow | null) {
     }
   });
 
-  ipcMain.handle('app-update-install', () => {
-    autoUpdater.quitAndInstall(false, true);
+  ipcMain.handle('app-update-install', async () => {
+    await quitAndInstallUpdate(getMainWindow);
   });
 }
 
@@ -179,7 +210,8 @@ export function setupAutoUpdater(getMainWindow: () => BrowserWindow | null) {
   registerActiveUpdaterIpc(getMainWindow);
 
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Solo instalar cuando el usuario elige "Reiniciar e instalar" (evita NSIS en segundo plano al cerrar).
+  autoUpdater.autoInstallOnAppQuit = false;
   wireAutoUpdaterEvents(getMainWindow);
 
   setTimeout(() => {

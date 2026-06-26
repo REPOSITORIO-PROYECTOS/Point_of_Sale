@@ -11,7 +11,11 @@ export function UpdateBanner() {
   }
 
   const showBanner =
-    status === "available" || status === "downloading" || status === "ready" || status === "error";
+    status === "available" ||
+    status === "downloading" ||
+    status === "ready" ||
+    status === "installing" ||
+    status === "error";
 
   if (!showBanner) {
     return null;
@@ -41,6 +45,12 @@ export function UpdateBanner() {
           <>
             <RotateCcw className="size-4 shrink-0" />
             <span>Actualización lista para instalar{remoteVersion ? ` (${remoteVersion})` : ""}</span>
+          </>
+        )}
+        {status === "installing" && (
+          <>
+            <RefreshCw className="size-4 shrink-0 animate-spin" />
+            <span>Cerrando servicios e instalando{remoteVersion ? ` ${remoteVersion}` : ""}…</span>
           </>
         )}
         {status === "error" && (

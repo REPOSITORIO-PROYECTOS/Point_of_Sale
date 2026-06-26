@@ -208,12 +208,77 @@ export async function bootstrapLocalServices(options: {
   }
 }
 
+function isProcessAlive(proc: ChildProcess): boolean {
+  return proc.exitCode === null && proc.signalCode === null && !proc.killed;
+}
+
+function forceKillProcess(proc: ChildProcess) {
+  if (!isProcessAlive(proc)) {
+    return;
+  }
+
+  try {
+    if (process.platform === 'win32' && proc.pid) {
+      spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+      return;
+    }
+
+    proc.kill('SIGKILL');
+  } catch {
+    try {
+      proc.kill();
+    } catch {
+      // best effort
+    }
+  }
+}
+
+function waitForProcessExit(proc: ChildProcess, timeoutMs: number): Promise<void> {
+  if (!isProcessAlive(proc)) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      forceKillProcess(proc);
+      resolve();
+    }, timeoutMs);
+
+    proc.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+/** Cierre inmediato (legacy / safety net en before-quit). */
 export function stopLocalServices() {
-  for (const managed of managedProcesses.reverse()) {
-    if (!managed.process.killed) {
+  for (const managed of [...managedProcesses].reverse()) {
+    if (isProcessAlive(managed.process)) {
       managed.process.kill();
     }
   }
+
+  managedProcesses.length = 0;
+}
+
+/**
+ * Detiene API y sidecar AFIP y espera a que liberen archivos/puertos.
+ * Necesario antes de quitAndInstall: NSIS no puede reemplazar binarios con locks activos.
+ */
+export async function stopLocalServicesGracefully(timeoutMs = 8_000): Promise<void> {
+  const pending = [...managedProcesses].reverse();
+
+  for (const managed of pending) {
+    if (isProcessAlive(managed.process)) {
+      managed.process.kill();
+    }
+  }
+
+  await Promise.all(pending.map((managed) => waitForProcessExit(managed.process, timeoutMs)));
 
   managedProcesses.length = 0;
 }

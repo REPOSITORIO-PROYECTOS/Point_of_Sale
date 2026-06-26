@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage } from 'electron';
 import { registerDevKeyboardShortcuts } from './dev-shortcuts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { bootstrapLocalServices, stopLocalServices } from './local-services';
+import { bootstrapLocalServices } from './local-services';
 import { POS_PORTS } from './pos-ports';
 import { resolveFrontendUrl } from './paths';
 import {
@@ -22,6 +22,7 @@ import {
 import type { ElectronPrintPayload, PrinterPrintOptions, ReceiptPrintDocument } from './receipt-print-types';
 import { buildMinimalReceiptHtml, renderReceiptPrintText } from './receipt-print-text';
 import { setupAutoUpdater } from './auto-updater';
+import { registerGracefulQuitHandler } from './app-quit';
 
 type SystemPrinter = {
   name: string;
@@ -306,6 +307,7 @@ async function createWindow() {
 async function bootstrap() {
   await app.whenReady();
   Menu.setApplicationMenu(null);
+  registerGracefulQuitHandler();
 
   ipcMain.handle('print-receipt', async (_event, payload: ElectronPrintPayload) => {
     const startedAt = Date.now();
@@ -360,10 +362,6 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  stopLocalServices();
-});
-
 app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     await createWindow();
@@ -372,6 +370,5 @@ app.on('activate', async () => {
 
 bootstrap().catch((error) => {
   console.error(error);
-  stopLocalServices();
   app.quit();
 });

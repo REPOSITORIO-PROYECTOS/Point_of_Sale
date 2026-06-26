@@ -18,6 +18,7 @@ export type AppUpdateEvent = {
     | 'not-available'
     | 'progress'
     | 'downloaded'
+    | 'installing'
     | 'error'
     | 'skipped';
   payload?: unknown;

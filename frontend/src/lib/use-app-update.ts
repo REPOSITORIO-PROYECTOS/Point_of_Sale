@@ -8,6 +8,7 @@ export type AppUpdateStatus =
   | "available"
   | "downloading"
   | "ready"
+  | "installing"
   | "not-available"
   | "error"
   | "skipped";
@@ -19,6 +20,7 @@ type AppUpdateEvent = {
     | "not-available"
     | "progress"
     | "downloaded"
+    | "installing"
     | "error"
     | "skipped";
   payload?: unknown;
@@ -46,6 +48,7 @@ export function useAppUpdate() {
   const [skipReason, setSkipReason] = useState<AppUpdateCheckResult["reason"] | null>(null);
   const isDesktop = isElectronEnvironment();
   const skippedToastShown = useRef(false);
+  const installRequested = useRef(false);
 
   useEffect(() => {
     if (!isDesktop || !window.desktop?.onUpdateStatus) {
@@ -79,20 +82,28 @@ export function useAppUpdate() {
           const version = readVersionFromPayload(event.payload);
           setRemoteVersion(version);
           setStatus("ready");
-          toast.success("Actualización lista", {
-            description: "Reiniciá la app para instalar la nueva versión.",
-            duration: Infinity,
-            action: {
-              label: "Reiniciar",
-              onClick: () => {
-                void window.desktop?.installUpdate?.();
+          if (!installRequested.current) {
+            toast.success("Actualización lista", {
+              description: "Reiniciá la app para instalar la nueva versión.",
+              duration: Infinity,
+              action: {
+                label: "Reiniciar",
+                onClick: () => {
+                  void window.desktop?.installUpdate?.();
+                },
               },
-            },
-          });
+            });
+          }
           break;
         }
+        case "installing":
+          installRequested.current = true;
+          setStatus("installing");
+          toast.loading("Cerrando e instalando actualización…", { id: "pos-update-install" });
+          break;
         case "not-available":
           setStatus("not-available");
+          toast.message("Ya tenés la última versión");
           break;
         case "skipped": {
           const reason = (event.payload as { reason?: AppUpdateCheckResult["reason"] } | undefined)?.reason;
@@ -115,6 +126,8 @@ export function useAppUpdate() {
             readMessageFromPayload(event.payload) ?? "No se pudo comprobar actualizaciones";
           setStatus("error");
           setErrorMessage(message);
+          installRequested.current = false;
+          toast.dismiss("pos-update-install");
           break;
         }
         default:
@@ -161,14 +174,7 @@ export function useAppUpdate() {
         setRemoteVersion(result.version);
       }
 
-      setStatus((current) => {
-        if (current === "ready" || current === "downloading" || current === "available") {
-          return current;
-        }
-        toast.message("Ya tenés la última versión");
-        return "not-available";
-      });
-
+      // El estado lo gobiernan los eventos IPC (available / not-available / progress).
       return result;
     } catch (error) {
       const message =
@@ -182,10 +188,22 @@ export function useAppUpdate() {
   }, []);
 
   const installUpdate = useCallback(async () => {
-    if (!window.desktop?.installUpdate) {
+    if (!window.desktop?.installUpdate || installRequested.current) {
       return;
     }
-    await window.desktop.installUpdate();
+
+    installRequested.current = true;
+    setStatus("installing");
+
+    try {
+      await window.desktop.installUpdate();
+    } catch {
+      installRequested.current = false;
+      setStatus("ready");
+      toast.error("No se pudo iniciar la instalación", {
+        description: "Cerrá la app manualmente y volvé a abrirla, o reinstalá con el instalador.",
+      });
+    }
   }, []);
 
   return {

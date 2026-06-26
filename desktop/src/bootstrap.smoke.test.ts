@@ -55,7 +55,22 @@ test('auto-updater skips without token and uses Bearer auth', () => {
   assert.match(source, /registerSkippedIpc/);
   assert.match(source, /Bearer \$\{token\}/);
   assert.match(source, /toFriendlyErrorMessage/);
+  assert.match(source, /autoInstallOnAppQuit = false/);
+  assert.match(source, /stopLocalServicesGracefully/);
+  assert.match(source, /quitAndInstall\(true, true\)/);
   assert.doesNotMatch(source, /Authorization: `token \$\{token\}`/);
+});
+
+test('graceful quit waits for child processes before app exit', () => {
+  const source = fs.readFileSync(path.join(srcDir, 'app-quit.ts'), 'utf8');
+  assert.match(source, /stopLocalServicesGracefully/);
+  assert.match(source, /before-quit/);
+});
+
+test('local-services supports graceful shutdown with force kill', () => {
+  const source = fs.readFileSync(path.join(srcDir, 'local-services.ts'), 'utf8');
+  assert.match(source, /stopLocalServicesGracefully/);
+  assert.match(source, /taskkill/);
 });
 
 test('updater.env.example exists at repo root', () => {
