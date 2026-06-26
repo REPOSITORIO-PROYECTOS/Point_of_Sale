@@ -29,8 +29,12 @@ import {
   MapPin,
   FileText,
   Loader2,
+  TrendingDown,
+  TrendingUp,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, differenceInMinutes } from "date-fns";
 import { es } from "date-fns/locale";
 import type { CashClosingDetail } from "../../../lib/pos-api";
 
@@ -78,6 +82,21 @@ export function ClosingDetailModal({
       </Badge>
     );
   };
+
+  const formatDateTime = (value: string) =>
+    format(new Date(value), "dd/MM/yyyy HH:mm", { locale: es });
+
+  const formatTurnDuration = (start: string, end: string) => {
+    const minutes = differenceInMinutes(new Date(end), new Date(start));
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    return remainder > 0 ? `${hours} h ${remainder} min` : `${hours} h`;
+  };
+
+  const hasDifference = closing && Math.abs(closing.difference) >= 0.01;
+  const cashIncome = closing?.movementTotals?.cashIncome ?? 0;
+  const cashExpense = closing?.movementTotals?.cashExpense ?? 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -151,16 +170,45 @@ export function ClosingDetailModal({
               <Separator />
 
               <div>
-                <h3 className="text-lg font-semibold mb-3">Información del Cierre</h3>
-                <div className="grid grid-cols-2 gap-3">
+                <h3 className="text-lg font-semibold mb-3">Turno de Caja</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="size-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Apertura</span>
+                    </div>
+                    <p className="font-medium text-sm">{formatDateTime(closing.startTime)}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="size-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Cierre</span>
+                    </div>
+                    <p className="font-medium text-sm">{formatDateTime(closing.endTime)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Duración: {formatTurnDuration(closing.startTime, closing.endTime)}
+                    </p>
+                  </div>
                   <div className="p-3 border rounded-lg bg-muted/30">
                     <div className="flex items-center gap-2 mb-1">
                       <User className="size-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Cajero</span>
+                      <span className="text-sm text-muted-foreground">Abrió</span>
                     </div>
-                    <p className="font-medium">{closing.user}</p>
+                    <p className="font-medium">{closing.openedByUsername ?? "Sin registrar"}</p>
+                    {closing.openedByRole ? (
+                      <Badge variant="secondary" className="mt-1 text-xs">
+                        {closing.openedByRole}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2 mb-1">
+                      <User className="size-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Cerró</span>
+                    </div>
+                    <p className="font-medium">{closing.closedByUsername ?? closing.user}</p>
                     <Badge variant="secondary" className="mt-1 text-xs">
-                      {closing.userRole}
+                      {closing.closedByRole ?? closing.userRole}
                     </Badge>
                   </div>
                 </div>
@@ -170,10 +218,17 @@ export function ClosingDetailModal({
 
               <div>
                 <h3 className="text-lg font-semibold mb-3">Resumen Financiero</h3>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {closing.legacyArqueoCorrected ? (
+                  <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                    Cierre anterior al arqueo corregido: el efectivo esperado y la diferencia se
+                    recalculan con solo ventas en efectivo y movimientos de cajón. El contado
+                    físico registrado al cerrar no cambia.
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                   <Card className="bg-muted/50">
                     <CardHeader className="p-4 pb-2">
-                      <CardDescription className="text-xs">Saldo Esperado</CardDescription>
+                      <CardDescription className="text-xs">Efectivo Esperado</CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
                       <p className="text-2xl font-bold">${closing.expectedAmount.toFixed(2)}</p>
@@ -182,10 +237,29 @@ export function ClosingDetailModal({
 
                   <Card className="bg-muted/50">
                     <CardHeader className="p-4 pb-2">
-                      <CardDescription className="text-xs">Saldo Contado</CardDescription>
+                      <CardDescription className="text-xs">Efectivo Contado</CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
                       <p className="text-2xl font-bold">${closing.countedAmount.toFixed(2)}</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className={hasDifference ? "bg-amber-50 border-amber-200" : "bg-muted/50"}>
+                    <CardHeader className="p-4 pb-2">
+                      <CardDescription className="text-xs">Diferencia</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                      <p
+                        className={`text-2xl font-bold ${
+                          !hasDifference
+                            ? "text-green-700"
+                            : closing.difference > 0
+                              ? "text-blue-700"
+                              : "text-red-700"
+                        }`}
+                      >
+                        {closing.difference > 0 ? "+" : ""}${closing.difference.toFixed(2)}
+                      </p>
                     </CardContent>
                   </Card>
 
@@ -208,6 +282,118 @@ export function ClosingDetailModal({
                       <p className="text-2xl font-bold text-blue-700">{closing.transactionsCount}</p>
                     </CardContent>
                   </Card>
+                </div>
+              </div>
+
+              {hasDifference ? (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                      <AlertCircle className="size-5 text-amber-600" />
+                      Explicación de la diferencia
+                    </h3>
+                    <Card className="bg-amber-50/50 border-amber-200">
+                      <CardContent className="p-4 space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Saldo inicial</span>
+                          <span>${closing.initialBalance.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>+ Ventas en efectivo</span>
+                          <span>${closing.salesByMethod.cash.toFixed(2)}</span>
+                        </div>
+                        {cashIncome > 0 ? (
+                          <div className="flex justify-between text-green-800">
+                            <span>+ Ingresos manuales (efectivo)</span>
+                            <span>${cashIncome.toFixed(2)}</span>
+                          </div>
+                        ) : null}
+                        {cashExpense > 0 ? (
+                          <div className="flex justify-between text-red-800">
+                            <span>− Egresos manuales (efectivo)</span>
+                            <span>${cashExpense.toFixed(2)}</span>
+                          </div>
+                        ) : null}
+                        <Separator />
+                        <div className="flex justify-between font-semibold">
+                          <span>= Efectivo esperado en cajón</span>
+                          <span>${closing.expectedAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Efectivo contado</span>
+                          <span>${closing.countedAmount.toFixed(2)}</span>
+                        </div>
+                        <div
+                          className={`flex justify-between font-bold ${
+                            closing.difference > 0 ? "text-blue-700" : "text-red-700"
+                          }`}
+                        >
+                          <span>Diferencia</span>
+                          <span>
+                            {closing.difference > 0 ? "+" : ""}${closing.difference.toFixed(2)}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </>
+              ) : null}
+
+              <Separator />
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Movimientos de Caja</h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[160px]">Fecha y hora</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead className="w-[100px]">Tipo</TableHead>
+                        <TableHead className="w-[120px]">Operador</TableHead>
+                        <TableHead className="text-right w-[100px]">Monto</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {closing.movements.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            No hay movimientos manuales en este turno
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        closing.movements.map((movement) => {
+                          const isIncome = movement.type === "income";
+                          return (
+                            <TableRow key={movement.id}>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {formatDateTime(movement.createdAt)}
+                              </TableCell>
+                              <TableCell>{movement.description}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  {isIncome ? (
+                                    <TrendingUp className="size-4 text-green-600" />
+                                  ) : (
+                                    <TrendingDown className="size-4 text-red-600" />
+                                  )}
+                                  {isIncome ? "Ingreso" : "Egreso"}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {movement.operatorUsername ?? "—"}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {isIncome ? "+" : "−"}$
+                                {Math.abs(movement.amount).toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
 
@@ -262,6 +448,11 @@ export function ClosingDetailModal({
 
               <div>
                 <h3 className="text-lg font-semibold mb-3">Log de Transacciones</h3>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Si un ticket muestra &quot;Ajuste histórico&quot;, hubo descuento o recargo manual
+                  en el carrito (ya no disponible en ventas nuevas). El total cobrado puede diferir
+                  de la suma de ítems.
+                </p>
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
@@ -304,6 +495,12 @@ export function ClosingDetailModal({
                             <TableCell>
                               <div className="text-sm text-muted-foreground">
                                 ${transaction.subtotal.toFixed(2)}
+                                {transaction.hasLegacyTicketAdjustment ||
+                                Math.abs(transaction.amount - transaction.subtotal) >= 0.01 ? (
+                                  <Badge variant="outline" className="ml-1 text-xs text-amber-700">
+                                    Ajuste histórico
+                                  </Badge>
+                                ) : null}
                               </div>
                             </TableCell>
                             <TableCell className="text-right font-semibold">

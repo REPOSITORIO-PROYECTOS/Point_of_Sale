@@ -31,7 +31,7 @@ import { StartCashSessionDto } from './dto/start-cash-session.dto';
 import { CashMovementEntity } from './cash-movement.entity';
 
 import {
-  computeExpectedSessionBalance,
+  computeExpectedCashInDrawer,
   computeSessionMovementTotals,
   type SessionMovementTotals,
 } from './cash-movement-totals';
@@ -76,11 +76,21 @@ export type CashClosingStatus = 'perfect' | 'surplus' | 'shortage';
 
 
 
+export type SessionOperator = {
+  user: string;
+  userId?: string;
+  userRole: string;
+};
+
 export type CashClosingSummary = {
 
   id: string;
 
   date: string;
+
+  startTime: string;
+
+  endTime: string;
 
   user: string;
 
@@ -88,7 +98,20 @@ export type CashClosingSummary = {
 
   userRole: string;
 
+  openedByUsername?: string;
+
+  openedByRole?: string;
+
+  closedByUsername?: string;
+
+  closedByRole?: string;
+
+  initialBalance: number;
+
   expectedAmount: number;
+
+  /** true si el arqueo guardado difiere del recalculado (cierres previos al fix de efectivo) */
+  legacyArqueoCorrected?: boolean;
 
   countedAmount: number;
 
@@ -126,6 +149,9 @@ export type CashClosingDetail = CashClosingSummary & {
 
     amount: number;
 
+    /** Venta con descuento/recargo manual ya no disponible en el POS */
+    hasLegacyTicketAdjustment?: boolean;
+
     cashier: string;
 
     cashierRole: string;
@@ -145,6 +171,8 @@ export type CashClosingDetail = CashClosingSummary & {
     paymentMethod: string;
 
     createdAt: string;
+
+    operatorUsername?: string;
 
   }>;
 
@@ -326,9 +354,10 @@ export class CashService {
 
     for (const session of openSessions) {
       const movementTotals = await this.getMovementTotalsForSession(session.id);
-      const expectedBalance = computeExpectedSessionBalance(
+      const cashSales = parsePaymentBreakdown(session.salesByPaymentMethod).cash;
+      const expectedBalance = computeExpectedCashInDrawer(
         session.initialBalance,
-        session.totalSales,
+        cashSales,
         movementTotals,
       );
 
@@ -399,18 +428,12 @@ export class CashService {
 
 
     const movementTotals = await this.getMovementTotalsForSession(session.id);
-
-    const expectedBalance = computeExpectedSessionBalance(
-
+    const cashSales = parsePaymentBreakdown(session.salesByPaymentMethod).cash;
+    const expectedBalance = computeExpectedCashInDrawer(
       session.initialBalance,
-
-      session.totalSales,
-
+      cashSales,
       movementTotals,
-
     );
-
-
 
     session.endTime = new Date();
 
@@ -515,9 +538,7 @@ export class CashService {
 
     const saleCounts = await this.getSaleCountsBySession(sessionIds);
 
-    const cashierMap = await this.resolveCashiersForSessions(sessions);
-
-
+    const operatorMap = await this.resolveSessionOperators(sessions);
 
     const movementTotalsBySession = await this.getMovementTotalsBySessions(sessionIds);
 
@@ -531,7 +552,7 @@ export class CashService {
 
         saleCounts.get(session.id) ?? 0,
 
-        cashierMap.get(session.id),
+        operatorMap.get(session.id),
 
         movementTotalsBySession.get(session.id),
 
@@ -578,14 +599,15 @@ export class CashService {
     }
 
     const sessionIds = sessions.map((session) => session.id);
-    const [saleCounts, cashierMap] = await Promise.all([
+    const [saleCounts, operatorMap] = await Promise.all([
       this.getSaleCountsBySession(sessionIds),
-      this.resolveCashiersForSessions(sessions),
+      this.resolveSessionOperators(sessions),
     ]);
 
     return sessions.map((session) => {
       const response = toSessionResponse(session);
-      const cashier = cashierMap.get(session.id);
+      const operators = operatorMap.get(session.id);
+      const closed = operators?.closed ?? operators?.opened;
 
       return {
         id: response.id,
@@ -597,8 +619,8 @@ export class CashService {
         totalSales: response.totalSales,
         salesByPaymentMethod: response.salesByPaymentMethod,
         isOpen: false,
-        ...(cashier?.user ? { closedByUsername: cashier.user } : {}),
-        ...(cashier?.userRole ? { closedByRole: cashier.userRole } : {}),
+        ...(closed?.user ? { closedByUsername: closed.user } : {}),
+        ...(closed?.userRole ? { closedByRole: closed.userRole } : {}),
         transactionsCount: saleCounts.get(session.id) ?? 0,
       };
     });
@@ -620,11 +642,11 @@ export class CashService {
 
 
 
-    const [saleCounts, cashierMap, sales, usersById, movements, movementTotals] = await Promise.all([
+    const [saleCounts, operatorMap, sales, usersById, movements, movementTotals] = await Promise.all([
 
       this.getSaleCountsBySession([session.id]),
 
-      this.resolveCashiersForSessions([session]),
+      this.resolveSessionOperators([session]),
 
       this.saleRepository.find({
 
@@ -656,11 +678,22 @@ export class CashService {
 
       saleCounts.get(session.id) ?? 0,
 
-      cashierMap.get(session.id),
+      operatorMap.get(session.id),
 
       movementTotals,
 
     );
+
+    const movementUserIds = [
+      ...new Set(
+        movements.map((movement) => movement.userId).filter((value): value is string => Boolean(value)),
+      ),
+    ];
+    const movementUsers =
+      movementUserIds.length > 0
+        ? await this.userRepository.findBy({ id: In(movementUserIds) })
+        : [];
+    const movementUsersById = new Map(movementUsers.map((user) => [user.id, user]));
 
 
 
@@ -736,9 +769,13 @@ export class CashService {
 
             : {}),
 
-          subtotal: sale.total,
+          subtotal: computeItemsSubtotal(items),
 
           amount: sale.total,
+
+          ...(Math.abs(sale.total - computeItemsSubtotal(items)) >= 0.01
+            ? { hasLegacyTicketAdjustment: true }
+            : {}),
 
           cashier: user?.username ?? summary.user,
 
@@ -748,7 +785,14 @@ export class CashService {
 
       }),
 
-      movements: movements.map((movement) => toClosingMovement(movement)),
+      movements: movements.map((movement) => {
+        const mapped = toClosingMovement(movement);
+        const operator = movement.userId ? movementUsersById.get(movement.userId) : undefined;
+        return {
+          ...mapped,
+          ...(operator ? { operatorUsername: operator.username } : {}),
+        };
+      }),
 
     };
 
@@ -932,13 +976,13 @@ export class CashService {
 
 
 
-  private async resolveCashiersForSessions(
+  private async resolveSessionOperators(
 
     sessions: CashSessionEntity[],
 
-  ): Promise<Map<string, { user: string; userId?: string; userRole: string }>> {
+  ): Promise<Map<string, { opened?: SessionOperator; closed?: SessionOperator }>> {
 
-    const result = new Map<string, { user: string; userId?: string; userRole: string }>();
+    const result = new Map<string, { opened?: SessionOperator; closed?: SessionOperator }>();
 
     const userIds = [
 
@@ -946,7 +990,7 @@ export class CashService {
 
         sessions
 
-          .map((session) => session.closedByUserId ?? session.openedByUserId)
+          .flatMap((session) => [session.openedByUserId, session.closedByUserId])
 
           .filter((value): value is string => Boolean(value)),
 
@@ -970,7 +1014,7 @@ export class CashService {
 
 
 
-    const fallbackUsers = new Map<string, UserEntity>();
+    const fallbackBySession = new Map<string, SessionOperator>();
 
     if (sessionsWithoutUser.length > 0) {
 
@@ -997,21 +1041,16 @@ export class CashService {
       }
 
       const fallbackUserIds = [...new Set([...bestBySession.values()].map((entry) => entry.userId))];
-      if (fallbackUserIds.length > 0) {
-        const loaded = await this.userRepository.findBy({ id: In(fallbackUserIds) });
-        for (const user of loaded) {
-          fallbackUsers.set(user.id, user);
-        }
-      }
+      const fallbackUsers =
+        fallbackUserIds.length > 0
+          ? await this.userRepository.findBy({ id: In(fallbackUserIds) })
+          : [];
+      const fallbackUsersById = new Map(fallbackUsers.map((user) => [user.id, user]));
 
       for (const [sessionId, entry] of bestBySession) {
-        const user = fallbackUsers.get(entry.userId);
+        const user = fallbackUsersById.get(entry.userId);
         if (user) {
-          result.set(sessionId, {
-            user: user.username,
-            userId: user.id,
-            userRole: formatRoleLabel(user.role),
-          });
+          fallbackBySession.set(sessionId, toSessionOperator(user));
         }
       }
 
@@ -1021,33 +1060,60 @@ export class CashService {
 
     for (const session of sessions) {
 
-      if (result.has(session.id)) {
+      const openedUser = session.openedByUserId ? usersById.get(session.openedByUserId) : undefined;
 
-        continue;
+      const closedUser = session.closedByUserId ? usersById.get(session.closedByUserId) : undefined;
 
-      }
-
-
-
-      const userId = session.closedByUserId ?? session.openedByUserId;
-
-      const user = userId ? usersById.get(userId) : undefined;
+      const fallback = fallbackBySession.get(session.id);
 
 
 
       result.set(session.id, {
 
-        user: user?.username ?? 'Sin asignar',
+        ...(openedUser ? { opened: toSessionOperator(openedUser) } : {}),
 
-        ...(user ? { userId: user.id } : {}),
-
-        userRole: user ? formatRoleLabel(user.role) : 'Cajero',
+        ...(closedUser ? { closed: toSessionOperator(closedUser) } : fallback ? { closed: fallback } : {}),
 
       });
 
     }
 
 
+
+    return result;
+
+  }
+
+
+
+  /** @deprecated Use resolveSessionOperators — kept for filter dropdown compatibility */
+  private async resolveCashiersForSessions(
+
+    sessions: CashSessionEntity[],
+
+  ): Promise<Map<string, { user: string; userId?: string; userRole: string }>> {
+
+    const operators = await this.resolveSessionOperators(sessions);
+
+    const result = new Map<string, { user: string; userId?: string; userRole: string }>();
+
+    for (const session of sessions) {
+
+      const entry = operators.get(session.id);
+
+      const primary = entry?.closed ?? entry?.opened;
+
+      if (primary) {
+
+        result.set(session.id, primary);
+
+      } else {
+
+        result.set(session.id, { user: 'Sin asignar', userRole: 'Cajero' });
+
+      }
+
+    }
 
     return result;
 
@@ -1247,23 +1313,34 @@ function toClosingSummary(
 
   transactionsCount: number,
 
-  cashier?: { user: string; userId?: string; userRole: string },
+  operators?: { opened?: SessionOperator; closed?: SessionOperator },
 
   movementTotals: SessionMovementTotals = emptyMovementTotals(),
 
 ): CashClosingSummary {
 
-  const expectedAmount =
+  const cashSales = parsePaymentBreakdown(entity.salesByPaymentMethod).cash;
 
-    entity.finalBalance ??
+  const recalculatedExpected = computeExpectedCashInDrawer(
+    entity.initialBalance,
+    cashSales,
+    movementTotals,
+  );
 
-    computeExpectedSessionBalance(entity.initialBalance, entity.totalSales ?? 0, movementTotals);
+  const storedExpected = entity.finalBalance;
 
-  const countedAmount = entity.countedAmount ?? expectedAmount;
+  const expectedAmount = recalculatedExpected;
+
+  const legacyArqueoCorrected =
+    storedExpected != null && Math.abs(storedExpected - recalculatedExpected) >= 0.01;
+
+  const countedAmount = entity.countedAmount ?? recalculatedExpected;
 
   const difference = countedAmount - expectedAmount;
 
   const status = resolveClosingStatus(difference);
+
+  const primary = operators?.closed ?? operators?.opened;
 
 
 
@@ -1273,13 +1350,33 @@ function toClosingSummary(
 
     date: entity.endTime!.toISOString(),
 
-    user: cashier?.user ?? 'Sin asignar',
+    startTime: entity.startTime.toISOString(),
 
-    ...(cashier?.userId ? { userId: cashier.userId } : {}),
+    endTime: entity.endTime!.toISOString(),
 
-    userRole: cashier?.userRole ?? 'Cajero',
+    user: primary?.user ?? 'Sin asignar',
+
+    ...(primary?.userId ? { userId: primary.userId } : {}),
+
+    userRole: primary?.userRole ?? 'Cajero',
+
+    ...(operators?.opened
+
+      ? { openedByUsername: operators.opened.user, openedByRole: operators.opened.userRole }
+
+      : {}),
+
+    ...(operators?.closed
+
+      ? { closedByUsername: operators.closed.user, closedByRole: operators.closed.userRole }
+
+      : {}),
+
+    initialBalance: entity.initialBalance ?? 0,
 
     expectedAmount,
+
+    ...(legacyArqueoCorrected ? { legacyArqueoCorrected: true } : {}),
 
     countedAmount,
 
@@ -1334,6 +1431,34 @@ function formatRoleLabel(role: UserRole | string): string {
 
 
   return labels[role] ?? role;
+
+}
+
+
+
+function toSessionOperator(user: UserEntity): SessionOperator {
+
+  return {
+
+    user: user.username,
+
+    userId: user.id,
+
+    userRole: formatRoleLabel(user.role),
+
+  };
+
+}
+
+
+
+function computeItemsSubtotal(
+
+  items: Array<{ price: number; quantity: number }>,
+
+): number {
+
+  return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
 }
 

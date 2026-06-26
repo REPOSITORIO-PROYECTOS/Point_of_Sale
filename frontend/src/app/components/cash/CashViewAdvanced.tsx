@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { CashSession } from "../../../lib/wails-bridge";
 import { PosAPI } from "../../../lib/pos-api";
-import { getExpectedSessionBalance } from "../../../lib/cash-expected";
+import { getExpectedCashInDrawer } from "../../../lib/cash-expected";
 import { getSalesByPaymentMethod, isCashSessionOpen, CASH_DATA_UPDATED_EVENT } from "../../../lib/cash-session";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import {
@@ -112,12 +112,12 @@ export function CashViewAdvanced() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Saldo Esperado
+                    Efectivo esperado en cajón
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-3xl font-bold">
-                    ${getExpectedSessionBalance(session).toFixed(2)}
+                    ${getExpectedCashInDrawer(session).toFixed(2)}
                   </p>
                 </CardContent>
               </Card>

@@ -35,7 +35,6 @@ import {
   Search,
   Calendar as CalendarIcon,
   ChevronRight,
-  User,
   AlertCircle,
   CheckCircle,
   TrendingUp,
@@ -315,7 +314,9 @@ export function AuditView() {
                   <div>
                     <CardTitle>Historial de Cierres de Caja</CardTitle>
                     <CardDescription>
-                      {isLoading ? "Cargando cierres..." : `${total} cierre(s) encontrado(s)`}
+                      {isLoading
+                        ? "Cargando cierres..."
+                        : `${total} cierre(s) encontrado(s). Los cierres anteriores al arqueo corregido pueden mostrar diferencias recalculadas; los descuentos/recargos del carrito ya no están disponibles en ventas nuevas.`}
                     </CardDescription>
                   </div>
                   <Button
@@ -341,31 +342,34 @@ export function AuditView() {
                     </div>
                   )}
 
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-lg overflow-hidden overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Fecha y Hora</TableHead>
-                          <TableHead>Cajero</TableHead>
-                          <TableHead className="text-right">Monto Esperado</TableHead>
-                          <TableHead className="text-right">Monto Contado</TableHead>
+                          <TableHead>Apertura</TableHead>
+                          <TableHead>Cierre</TableHead>
+                          <TableHead>Abrió</TableHead>
+                          <TableHead>Cerró</TableHead>
+                          <TableHead className="text-right">Esperado</TableHead>
+                          <TableHead className="text-right">Contado</TableHead>
                           <TableHead className="text-right">Diferencia</TableHead>
                           <TableHead>Estado</TableHead>
-                          <TableHead className="text-center">Ventas</TableHead>
+                          <TableHead className="text-right">Total ventas</TableHead>
+                          <TableHead className="text-center">Tickets</TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {isLoading ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                            <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
                               <Loader2 className="size-5 animate-spin inline-block mr-2" />
                               Cargando historial...
                             </TableCell>
                           </TableRow>
                         ) : closings.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                            <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
                               {hasActiveFilters
                                 ? "No se encontraron cierres de caja con los filtros aplicados"
                                 : "No hay cierres de caja registrados. Cerrá la caja desde el Mostrador para que aparezcan aquí."}
@@ -378,24 +382,21 @@ export function AuditView() {
                               className="cursor-pointer hover:bg-muted/50"
                               onClick={() => void handleViewDetails(closing)}
                             >
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <CalendarIcon className="size-4 text-muted-foreground" />
-                                  <div>
-                                    <div className="font-medium">
-                                      {format(new Date(closing.date), "dd/MM/yyyy", { locale: es })}
-                                    </div>
-                                    <div className="text-sm text-muted-foreground">
-                                      {format(new Date(closing.date), "HH:mm")}
-                                    </div>
-                                  </div>
-                                </div>
+                              <TableCell className="text-sm whitespace-nowrap">
+                                {format(new Date(closing.startTime ?? closing.date), "dd/MM/yy HH:mm", {
+                                  locale: es,
+                                })}
                               </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <User className="size-4 text-muted-foreground" />
-                                  {closing.user}
-                                </div>
+                              <TableCell className="text-sm whitespace-nowrap">
+                                {format(new Date(closing.endTime ?? closing.date), "dd/MM/yy HH:mm", {
+                                  locale: es,
+                                })}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {closing.openedByUsername ?? "—"}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {closing.closedByUsername ?? closing.user}
                               </TableCell>
                               <TableCell className="text-right font-medium">
                                 ${closing.expectedAmount.toFixed(2)}
@@ -411,12 +412,17 @@ export function AuditView() {
                               </TableCell>
                               <TableCell>
                                 {getStatusBadge(closing.status, closing.difference)}
+                                {closing.legacyArqueoCorrected ? (
+                                  <p className="text-[10px] text-amber-700 mt-1 leading-tight">
+                                    Arqueo recalculado
+                                  </p>
+                                ) : null}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                ${closing.totalSales.toFixed(2)}
                               </TableCell>
                               <TableCell className="text-center">
-                                <div className="text-sm">
-                                  <div className="font-medium">{closing.transactionsCount}</div>
-                                  <div className="text-muted-foreground">tickets</div>
-                                </div>
+                                {closing.transactionsCount}
                               </TableCell>
                               <TableCell>
                                 <Button variant="ghost" size="icon">

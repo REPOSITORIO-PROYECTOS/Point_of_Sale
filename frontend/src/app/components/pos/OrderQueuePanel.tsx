@@ -1,5 +1,4 @@
 import { CartItem } from "../../../lib/wails-bridge";
-import { Adjustment } from "./AdjustmentsPanel";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { ScrollArea } from "../ui/scroll-area";
@@ -19,7 +18,6 @@ import { useState } from "react";
 export interface HeldOrder {
   id: string;
   items: CartItem[];
-  adjustments: Adjustment[];
   total: number;
   timestamp: string;
   customerName?: string;

@@ -55,6 +55,7 @@ export function computeSessionMovementTotals(
   };
 }
 
+/** Balance contable total (todos los medios de pago). No usar para arqueo del cajón. */
 export function computeExpectedSessionBalance(
   initialBalance: number,
   totalSales: number,

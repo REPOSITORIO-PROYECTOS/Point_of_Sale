@@ -212,6 +212,102 @@ test('cash session and sale flow', async (t) => {
   assert.ok((list.body as Array<Record<string, unknown>>).some((sale) => sale.id === saleId));
 });
 
+test('cash close expected balance uses cash sales only', async (t) => {
+  if (skipIfOffline(t)) return;
+
+  const stamp = Date.now();
+  const productId = `smoke-close-prod-${stamp}`;
+
+  await authedRequest('/products', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: productId,
+      name: 'Producto cierre mixto',
+      price: 50,
+      categories: ['Otros'],
+      stock: 20,
+      unit: 'unidad',
+    }),
+  });
+
+  const sessionState = await authedRequest('/cash/session');
+  const currentSession = sessionState.body as Record<string, unknown> | null;
+
+  if (!currentSession || currentSession.endTime) {
+    const started = await authedRequest('/cash/session/start', {
+      method: 'POST',
+      body: JSON.stringify({ initialBalance: 500 }),
+    });
+    assert.equal(started.response.status, 201);
+  }
+
+  const sessionBeforeClose = await authedRequest('/cash/session');
+  const sessionBody = sessionBeforeClose.body as Record<string, unknown>;
+  const initialBalance = Number(sessionBody.initialBalance ?? 500);
+  const cashSalesBefore = Number(
+    (sessionBody.salesByPaymentMethod as Record<string, number> | undefined)?.cash ?? 0,
+  );
+
+  const cashSaleId = `smoke-close-cash-${stamp}`;
+  const cashSale = await authedRequest('/sales', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: cashSaleId,
+      items: [{ id: productId, name: 'Producto cierre mixto', price: 50, quantity: 2 }],
+      total: 100,
+      payments: [{ type: 'cash', amount: 100, label: 'Efectivo' }],
+      timestamp: new Date().toISOString(),
+    }),
+  });
+  assert.equal(cashSale.response.status, 201);
+
+  const cardSaleId = `smoke-close-card-${stamp}`;
+  const cardSale = await authedRequest('/sales', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: cardSaleId,
+      items: [{ id: productId, name: 'Producto cierre mixto', price: 50, quantity: 1 }],
+      total: 50,
+      payments: [{ type: 'card', amount: 50, label: 'Tarjeta' }],
+      timestamp: new Date().toISOString(),
+    }),
+  });
+  assert.equal(cardSale.response.status, 201);
+
+  const movement = await authedRequest('/cash', {
+    method: 'POST',
+    body: JSON.stringify({ description: 'Ingreso smoke', amount: 25, type: 'income', paymentMethod: 'cash' }),
+  });
+  assert.equal(movement.response.status, 201);
+
+  const expectedCash = initialBalance + cashSalesBefore + 100 + 25;
+  const closed = await authedRequest('/cash/session/close', {
+    method: 'POST',
+    body: JSON.stringify({ countedAmount: expectedCash, expectedBalance: expectedCash }),
+  });
+  assert.equal(closed.response.status, 201);
+
+  const closedSession = closed.body as Record<string, unknown>;
+  assert.equal(Number(closedSession.finalBalance), expectedCash);
+  assert.equal(Number(closedSession.countedAmount), expectedCash);
+
+  const closings = await authedRequest('/cash/closings?page=1&pageSize=5');
+  assert.equal(closings.response.status, 200);
+  const items = (closings.body as { items: Array<Record<string, unknown>> }).items;
+  const latest = items[0];
+  assert.ok(latest);
+  assert.equal(Number(latest.expectedAmount), expectedCash);
+  assert.equal(Number(latest.countedAmount), expectedCash);
+  assert.equal(latest.status, 'perfect');
+  assert.equal(Number(latest.totalSales), Number(sessionBody.totalSales ?? 0) + 150);
+
+  const reopened = await authedRequest('/cash/session/start', {
+    method: 'POST',
+    body: JSON.stringify({ initialBalance: 1000 }),
+  });
+  assert.equal(reopened.response.status, 201);
+});
+
 test('cash GET and POST', async (t) => {
   if (skipIfOffline(t)) return;
   const listBefore = await authedRequest('/cash');

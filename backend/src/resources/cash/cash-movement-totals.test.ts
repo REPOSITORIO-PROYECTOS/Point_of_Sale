@@ -47,3 +47,15 @@ test('computeExpectedCashInDrawer only applies cash movements', () => {
 
   assert.equal(computeExpectedCashInDrawer(1000, 800, totals), 1900);
 });
+
+test('computeExpectedCashInDrawer ignores non-cash sales in drawer arqueo', () => {
+  const totals = computeSessionMovementTotals([
+    movement({ description: 'Cambio', amount: 20, type: 'income', paymentMethod: 'cash' }),
+  ]);
+
+  const expectedCash = computeExpectedCashInDrawer(1000, 100, totals);
+  assert.equal(expectedCash, 1120);
+
+  const wrongAllSales = 1000 + 150 + totals.netTotal;
+  assert.notEqual(expectedCash, wrongAllSales);
+});

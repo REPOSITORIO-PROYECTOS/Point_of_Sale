@@ -1,5 +1,4 @@
 import { CartItem } from "../../../lib/wails-bridge";
-import { Adjustment, AdjustmentsPanel } from "./AdjustmentsPanel";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Separator } from "../ui/separator";
@@ -7,33 +6,24 @@ import { Plus, Minus, Trash2, ShoppingCart as CartIcon, Weight } from "lucide-re
 
 interface ShoppingCartEnhancedProps {
   items: CartItem[];
-  adjustments: Adjustment[];
   onUpdateQuantity: (productId: string, delta: number) => void;
   onRemoveItem: (productId: string) => void;
-  onAddAdjustment: (adjustment: Omit<Adjustment, "id">) => void;
-  onRemoveAdjustment: (id: string) => void;
   onCheckout: () => void;
   onCancel: () => void;
   onHold: () => void;
-  subtotal: number;
   total: number;
 }
 
 export function ShoppingCartEnhanced({
   items,
-  adjustments,
   onUpdateQuantity,
   onRemoveItem,
-  onAddAdjustment,
-  onRemoveAdjustment,
   onCheckout,
   onCancel,
   onHold,
-  subtotal,
   total,
 }: ShoppingCartEnhancedProps) {
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-  const adjustmentsTotal = total - subtotal;
 
   return (
     <div className="flex flex-col h-full bg-muted/30">
@@ -121,41 +111,9 @@ export function ShoppingCartEnhanced({
       </div>
 
       <div className="border-t bg-background p-4 space-y-3">
-        <AdjustmentsPanel
-          adjustments={adjustments}
-          onAddAdjustment={onAddAdjustment}
-          onRemoveAdjustment={onRemoveAdjustment}
-        />
-
-        <Separator />
-
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Subtotal</span>
-            <span className="font-medium">${subtotal.toFixed(2)}</span>
-          </div>
-
-          {adjustmentsTotal !== 0 && (
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">
-                Ajustes
-              </span>
-              <span
-                className={`font-medium ${
-                  adjustmentsTotal > 0 ? "text-orange-600" : "text-green-600"
-                }`}
-              >
-                {adjustmentsTotal > 0 ? "+" : ""}${adjustmentsTotal.toFixed(2)}
-              </span>
-            </div>
-          )}
-
-          <Separator />
-
-          <div className="flex justify-between items-center text-lg">
-            <span className="font-semibold">Total</span>
-            <span className="text-3xl font-bold">${total.toFixed(2)}</span>
-          </div>
+        <div className="flex justify-between items-center text-lg">
+          <span className="font-semibold">Total</span>
+          <span className="text-3xl font-bold">${total.toFixed(2)}</span>
         </div>
 
         <Separator />
@@ -165,7 +123,7 @@ export function ShoppingCartEnhanced({
             variant="outline"
             className="h-12"
             onClick={onCancel}
-            disabled={items.length === 0 && adjustments.length === 0}
+            disabled={items.length === 0}
           >
             Cancelar
           </Button>

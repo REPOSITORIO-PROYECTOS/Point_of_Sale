@@ -105,10 +105,19 @@ export type CashClosingStatus = "perfect" | "surplus" | "shortage";
 export type CashClosingSummary = {
   id: string;
   date: string;
+  startTime: string;
+  endTime: string;
   user: string;
   userId?: string;
   userRole: string;
+  openedByUsername?: string;
+  openedByRole?: string;
+  closedByUsername?: string;
+  closedByRole?: string;
+  initialBalance: number;
   expectedAmount: number;
+  /** Cierre guardado con arqueo antiguo; el esperado se recalcula solo con efectivo */
+  legacyArqueoCorrected?: boolean;
   countedAmount: number;
   difference: number;
   status: CashClosingStatus;
@@ -123,6 +132,16 @@ export type CashClosingSummary = {
   movementTotals?: CashSession["movementTotals"];
 };
 
+export type CashClosingMovement = {
+  id: number;
+  description: string;
+  amount: number;
+  type: "income" | "expense";
+  paymentMethod: string;
+  createdAt: string;
+  operatorUsername?: string;
+};
+
 export type CashClosingDetail = CashClosingSummary & {
   sales: Array<{
     id: string;
@@ -132,9 +151,11 @@ export type CashClosingDetail = CashClosingSummary & {
     paymentDetails?: Array<{ method: string; amount: number }>;
     subtotal: number;
     amount: number;
+    hasLegacyTicketAdjustment?: boolean;
     cashier: string;
     cashierRole: string;
   }>;
+  movements: CashClosingMovement[];
   businessData: {
     name: string;
     rut: string;

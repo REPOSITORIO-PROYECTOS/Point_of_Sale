@@ -33,7 +33,6 @@ import {
 } from "../ui/select";
 import { DollarSign, CreditCard, Smartphone, Wallet, X, Plus, Calculator, FileText, Receipt, FileEdit, Eye } from "lucide-react";
 import { toast } from "sonner";
-import type { Adjustment } from "./AdjustmentsPanel";
 
 export type VoucherType = "factura" | "comprobante" | "presupuesto";
 
@@ -42,7 +41,6 @@ interface CheckoutModalEnhancedProps {
   onOpenChange: (open: boolean) => void;
   items: CartItem[];
   subtotal: number;
-  adjustments?: Adjustment[];
   afipBillingDefaults?: AfipBillingDefaults;
   onConfirm: (
     payments: PaymentMethod[],
@@ -57,7 +55,6 @@ export function CheckoutModalEnhanced({
   onOpenChange,
   items,
   subtotal,
-  adjustments = [],
   afipBillingDefaults = DEFAULT_AFIP_BILLING_DEFAULTS,
   onConfirm,
   onPreviewTicket,

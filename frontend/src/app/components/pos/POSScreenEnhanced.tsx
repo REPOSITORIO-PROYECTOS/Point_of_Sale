@@ -26,7 +26,6 @@ import {
 } from "../../../lib/afip-fiscal";
 import { AFIP_CONDICION_IVA_OPTIONS } from "../../../lib/afip-fiscal";
 import { OrderQueuePanel, HeldOrder } from "./OrderQueuePanel";
-import { Adjustment } from "./AdjustmentsPanel";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -97,7 +96,6 @@ export function POSScreenEnhanced({
   const { user } = useAuth();
   const { settings: businessSettings } = useBusinessSettings();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [cashSession, setCashSession] = useState<CashSession | null>(null);
@@ -209,49 +207,8 @@ export function POSScreenEnhanced({
     toast.success("Artículo eliminado del carrito");
   };
 
-  const handleAddAdjustment = (adjustment: Omit<Adjustment, "id">) => {
-    const newAdjustment: Adjustment = {
-      ...adjustment,
-      id: Date.now().toString(),
-    };
-    setAdjustments((prev) => [...prev, newAdjustment]);
-    toast.success(
-      adjustment.type === "charge"
-        ? `Recargo aplicado: ${adjustment.label}`
-        : `Descuento aplicado: ${adjustment.label}`
-    );
-  };
-
-  const handleRemoveAdjustment = (id: string) => {
-    setAdjustments((prev) => prev.filter((adj) => adj.id !== id));
-    toast.success("Ajuste eliminado");
-  };
-
-  const calculateSubtotal = () => {
-    return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  };
-
-  const calculateAdjustmentsTotal = () => {
-    const subtotal = calculateSubtotal();
-    let total = 0;
-
-    adjustments.forEach((adj) => {
-      const amount = adj.isPercentage
-        ? (subtotal * adj.amount) / 100
-        : adj.amount;
-
-      if (adj.type === "charge") {
-        total += amount;
-      } else {
-        total -= amount;
-      }
-    });
-
-    return total;
-  };
-
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateAdjustmentsTotal();
+    return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   };
 
   const handleCheckout = async (
@@ -265,7 +222,6 @@ export function POSScreenEnhanced({
       const total = calculateTotal();
 
       const ticketId = Date.now().toString();
-      const subtotal = calculateSubtotal();
       const receptorLabel =
         afipBuyer && afipBuyer.mode === "custom"
           ? formatAfipBuyerSummary(afipBuyer)
@@ -282,8 +238,7 @@ export function POSScreenEnhanced({
         businessName: businessSettings.businessName,
         voucherType,
         ticketId,
-        subtotal,
-        adjustments,
+        subtotal: total,
         payments,
         emisor: {
           razonSocial: businessSettings.businessName ?? "Mi Negocio",
@@ -354,7 +309,6 @@ export function POSScreenEnhanced({
       );
 
       setCartItems([]);
-      setAdjustments([]);
       setCheckoutOpen(false);
     } catch (error) {
       console.error("Checkout failed:", error);
@@ -363,9 +317,8 @@ export function POSScreenEnhanced({
   };
 
   const handleCancel = () => {
-    if (cartItems.length === 0 && adjustments.length === 0) return;
+    if (cartItems.length === 0) return;
     setCartItems([]);
-    setAdjustments([]);
     toast.success("Pedido cancelado");
   };
 
@@ -375,20 +328,17 @@ export function POSScreenEnhanced({
     const newOrder: HeldOrder = {
       id: Date.now().toString(),
       items: [...cartItems],
-      adjustments: [...adjustments],
       total: calculateTotal(),
       timestamp: new Date().toISOString(),
     };
 
     onHeldOrdersChange([...heldOrders, newOrder]);
     setCartItems([]);
-    setAdjustments([]);
     toast.success("Pedido pausado y guardado en la cola");
   };
 
   const handleResumeOrder = (order: HeldOrder) => {
     setCartItems(order.items);
-    setAdjustments(order.adjustments);
     onHeldOrdersChange(heldOrders.filter((o) => o.id !== order.id));
     setQueueOpen(false);
     toast.success("Pedido retomado");
@@ -435,7 +385,6 @@ export function POSScreenEnhanced({
     setCloseCashDialogOpen(false);
     setCountedAmount("");
     setCartItems([]);
-    setAdjustments([]);
     setCheckoutOpen(false);
     setMovementDialogOpen(false);
     setMovementAmount("");
@@ -594,15 +543,11 @@ export function POSScreenEnhanced({
         <div className="w-[400px]">
           <ShoppingCartEnhanced
             items={cartItems}
-            adjustments={adjustments}
             onUpdateQuantity={handleUpdateQuantity}
             onRemoveItem={handleRemoveItem}
-            onAddAdjustment={handleAddAdjustment}
-            onRemoveAdjustment={handleRemoveAdjustment}
             onCheckout={() => setCheckoutOpen(true)}
             onCancel={handleCancel}
             onHold={handleHold}
-            subtotal={calculateSubtotal()}
             total={calculateTotal()}
           />
         </div>
