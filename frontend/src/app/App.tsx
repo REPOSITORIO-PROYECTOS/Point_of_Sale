@@ -35,6 +35,7 @@ import { BusinessSettingsProvider } from "../lib/business-settings-provider";
 
 import { LicenseExpiryBanner, LicenseGate } from "../lib/license-context";
 import { AppUpdateProvider } from "../lib/app-update-provider";
+import { ReceiptPreviewProvider } from "../lib/receipt-preview-provider";
 
 import { HeldOrder } from "./components/pos/OrderQueuePanel";
 
@@ -209,7 +210,11 @@ export default function App() {
 
             <AppUpdateProvider>
 
-              <AppContent />
+              <ReceiptPreviewProvider>
+
+                <AppContent />
+
+              </ReceiptPreviewProvider>
 
             </AppUpdateProvider>
 

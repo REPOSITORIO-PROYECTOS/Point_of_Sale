@@ -29,8 +29,18 @@ test('desktop package exposes compiled entrypoint', () => {
 test('preload exposes print bridge contract', () => {
   const preloadSource = fs.readFileSync(path.join(srcDir, 'preload.ts'), 'utf8');
   assert.match(preloadSource, /printReceipt/);
+  assert.match(preloadSource, /generateReceiptPdf/);
   assert.match(preloadSource, /checkForUpdates/);
   assert.match(preloadSource, /contextBridge/);
+});
+
+test('print pipeline supports escpos, text and html modes', () => {
+  const mainSource = fs.readFileSync(path.join(srcDir, 'main.ts'), 'utf8');
+  const escposSource = fs.readFileSync(path.join(srcDir, 'escpos-print.ts'), 'utf8');
+  assert.match(mainSource, /printRawTextDocument/);
+  assert.match(mainSource, /generate-receipt-pdf/);
+  assert.match(escposSource, /resolvePrintMode/);
+  assert.ok(fs.existsSync(path.join(srcDir, 'raw-text-print.ts')), 'missing raw-text-print.ts');
 });
 
 test('auto-updater supports public GitHub feed without token', () => {

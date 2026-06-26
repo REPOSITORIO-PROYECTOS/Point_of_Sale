@@ -10,8 +10,6 @@ import {
   buildReceiptHtml,
   buildEgresoHtml,
   buildIngresoHtml,
-  openReceiptPreview,
-  openReceiptTextPreview,
   type ReceiptAdjustment,
   type ReceiptLineItem,
   type ReceiptPaymentLine,
@@ -21,6 +19,7 @@ import {
 } from "./receipt-template";
 import { resolveReceiptLogoUrl } from "./theme-logo";
 
+import type { ReceiptPreviewState } from "./receipt-preview-types";
 import type { ReceiptAfip, ReceiptEmisor, ReceiptReceptor } from "./receipt-template";
 
 export type PrintReceiptPayload = {
@@ -44,6 +43,14 @@ export type PrintReceiptPayload = {
   movement?: ReceiptPrintDocument["movement"];
   timestamp?: Date | string;
 };
+
+type BrowserPrintPreviewHandler = (preview: ReceiptPreviewState) => void;
+
+let browserPrintPreviewHandler: BrowserPrintPreviewHandler | null = null;
+
+export function setBrowserPrintPreviewHandler(handler: BrowserPrintPreviewHandler | null): void {
+  browserPrintPreviewHandler = handler;
+}
 
 function isWailsEnvironment(): boolean {
   return typeof window !== "undefined" && !!window.go?.main?.App?.PrintReceipt;
@@ -95,29 +102,6 @@ export function buildPrintReceiptHtml(payload: PrintReceiptPayload): string {
   return buildReceiptHtml(payload.items, payload.total, options);
 }
 
-export async function printThermalHtml(
-  html: string,
-  receiptWidthMm: ReceiptWidthMm = 80,
-  previewOnly = false,
-): Promise<void> {
-  if (previewOnly) {
-    openReceiptPreview(html, receiptWidthMm);
-    return;
-  }
-
-  if (isWailsEnvironment()) {
-    const data = JSON.stringify({ html, widthMm: receiptWidthMm });
-    await window.go!.main!.App!.PrintReceipt(data);
-    return;
-  }
-
-  if (isElectronEnvironment()) {
-    throw new Error("Use printReceipt() con documento ESC/POS en Electron");
-  }
-
-  printReceiptInBrowser(html, receiptWidthMm);
-}
-
 export function buildPrintReceiptDocument(payload: PrintReceiptPayload): ReceiptPrintDocument {
   return buildReceiptPrintDocument({
     widthMm: payload.receiptWidthMm,
@@ -141,13 +125,55 @@ export function buildPrintReceiptDocument(payload: PrintReceiptPayload): Receipt
   });
 }
 
+export function buildReceiptPreviewState(
+  payload: PrintReceiptPayload,
+  title?: string,
+): ReceiptPreviewState {
+  const widthMm = payload.receiptWidthMm ?? 80;
+  return {
+    html: buildPrintReceiptHtml(payload),
+    text: renderReceiptPrintText(buildPrintReceiptDocument(payload)),
+    widthMm,
+    printPayload: payload,
+    title,
+  };
+}
+
+export async function printThermalHtml(
+  html: string,
+  receiptWidthMm: ReceiptWidthMm = 80,
+  previewOnly = false,
+): Promise<void> {
+  if (previewOnly) {
+    browserPrintPreviewHandler?.({
+      html,
+      text: "",
+      widthMm: receiptWidthMm,
+      title: "Vista previa del ticket",
+    });
+    return;
+  }
+
+  if (isWailsEnvironment()) {
+    const data = JSON.stringify({ html, widthMm: receiptWidthMm });
+    await window.go!.main!.App!.PrintReceipt(data);
+    return;
+  }
+
+  if (isElectronEnvironment()) {
+    throw new Error("Use printReceipt() con documento ESC/POS en Electron");
+  }
+
+  printReceiptInBrowser(html, receiptWidthMm);
+}
+
 export async function printReceipt(payload: PrintReceiptPayload): Promise<void> {
   const widthMm = payload.receiptWidthMm ?? 80;
   const html = buildPrintReceiptHtml(payload);
   const document = buildPrintReceiptDocument(payload);
 
   if (payload.previewOnly) {
-    openReceiptPreview(html, widthMm);
+    browserPrintPreviewHandler?.(buildReceiptPreviewState(payload));
     return;
   }
 
@@ -181,16 +207,13 @@ export async function printReceipt(payload: PrintReceiptPayload): Promise<void> 
   }
 
   console.info("[print] navegador — abriendo diálogo HTML (sin ESC/POS)\n", renderReceiptPrintText(document));
-  printReceiptInBrowser(html, widthMm);
+  printReceiptInBrowser(html, widthMm, buildReceiptPreviewState(payload));
 }
 
 export function previewReceipt(payload: PrintReceiptPayload): void {
-  const widthMm = payload.receiptWidthMm ?? 80;
-  openReceiptPreview(buildPrintReceiptHtml(payload), widthMm);
+  browserPrintPreviewHandler?.(buildReceiptPreviewState(payload));
 }
 
 export function previewReceiptText(payload: PrintReceiptPayload): void {
-  const document = buildPrintReceiptDocument(payload);
-  const widthMm = payload.receiptWidthMm ?? 80;
-  openReceiptTextPreview(renderReceiptPrintText(document), widthMm);
+  browserPrintPreviewHandler?.(buildReceiptPreviewState(payload, "Vista previa — modo texto"));
 }

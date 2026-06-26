@@ -31,7 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { DollarSign, CreditCard, Smartphone, Wallet, X, Plus, Calculator, FileText, Receipt, FileEdit, Eye } from "lucide-react";
+import { DollarSign, CreditCard, Smartphone, Wallet, X, Plus, Calculator, FileText, Receipt, FileEdit, Eye, Printer } from "lucide-react";
+import { Switch } from "../ui/switch";
 import { toast } from "sonner";
 
 export type VoucherType = "factura" | "comprobante" | "presupuesto";
@@ -46,6 +47,7 @@ interface CheckoutModalEnhancedProps {
     payments: PaymentMethod[],
     voucherType: VoucherType,
     afipBuyer?: AfipCheckoutBuyer,
+    options?: { printTicket: boolean },
   ) => void;
   onPreviewTicket?: (voucherType: VoucherType) => void;
 }
@@ -70,6 +72,7 @@ export function CheckoutModalEnhanced({
   const [customDocumento, setCustomDocumento] = useState("");
   const [customIdCondicionIva, setCustomIdCondicionIva] = useState(1);
   const [customTipoAfip, setCustomTipoAfip] = useState(afipBillingDefaults.tipoAfip);
+  const [printTicket, setPrintTicket] = useState(true);
 
   useEffect(() => {
     setCustomTipoAfip(resolveTipoAfipForBuyer(customIdCondicionIva, afipBillingDefaults.tipoAfip));
@@ -204,7 +207,7 @@ export function CheckoutModalEnhanced({
       );
     }
 
-    onConfirm(effectivePayments, voucherType, afipBuyer);
+    onConfirm(effectivePayments, voucherType, afipBuyer, { printTicket });
     setPayments([]);
     setAmount("");
     setCashReceived("");
@@ -212,6 +215,7 @@ export function CheckoutModalEnhanced({
     setVoucherType("comprobante");
     setBuyerMode("consumidor_final");
     setCustomDocumento("");
+    setPrintTicket(true);
     onOpenChange(false);
   };
 
@@ -223,6 +227,7 @@ export function CheckoutModalEnhanced({
     setVoucherType("comprobante");
     setBuyerMode("consumidor_final");
     setCustomDocumento("");
+    setPrintTicket(true);
     onOpenChange(false);
   };
 
@@ -659,13 +664,25 @@ export function CheckoutModalEnhanced({
                   Vista previa del ticket
                 </Button>
               ) : null}
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="flex items-start gap-3">
+                  <Printer className="size-4 mt-0.5 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Imprimir ticket</p>
+                    <p className="text-xs text-muted-foreground">
+                      Si falla la impresora, la venta se registra igual
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={printTicket} onCheckedChange={setPrintTicket} />
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
               <Button onClick={() => handleConfirm()} disabled={remaining > 0.01}>
-                Confirmar e imprimir (F8)
+                {printTicket ? "Confirmar e imprimir (F8)" : "Confirmar venta (F8)"}
               </Button>
             </DialogFooter>
           </>

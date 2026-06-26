@@ -295,9 +295,21 @@ export async function printEscposDocument(
   await executePrintJob(printer, interfaceId, printerType);
 }
 
+export function resolvePrintMode(
+  options?: PrinterPrintOptions,
+): 'escpos' | 'text' | 'html' {
+  const raw = (options?.printMode ?? process.env.POS_PRINT_MODE ?? 'escpos').toLowerCase();
+  if (raw === 'html') return 'html';
+  if (raw === 'text') return 'text';
+  return 'escpos';
+}
+
 export function shouldUseEscposPrint(options?: PrinterPrintOptions): boolean {
-  const mode = options?.printMode ?? process.env.POS_PRINT_MODE ?? 'escpos';
-  return mode.toLowerCase() !== 'html';
+  return resolvePrintMode(options) === 'escpos';
+}
+
+export function shouldUseTextPrint(options?: PrinterPrintOptions): boolean {
+  return resolvePrintMode(options) === 'text';
 }
 
 export function shouldAllowHtmlFallback(options?: PrinterPrintOptions): boolean {

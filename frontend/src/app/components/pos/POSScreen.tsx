@@ -58,13 +58,22 @@ export function POSScreen() {
         timestamp: new Date().toISOString(),
       };
 
-      await WailsAPI.printReceipt(cartItems, total, {
-        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
-        logoUrl: themeConfig.logoUrl,
-      });
       await PosAPI.createSale(transaction);
 
-      toast.success("Transacción completada exitosamente");
+      const printResult = await WailsAPI.tryPrintReceipt(cartItems, total, {
+        receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
+        logoUrl: themeConfig.logoUrl,
+        ticketId: transaction.id,
+      });
+
+      if (!printResult.ok) {
+        toast.warning("Venta registrada, pero no se pudo imprimir el ticket", {
+          description: printResult.error,
+        });
+      } else {
+        toast.success("Transacción completada exitosamente");
+      }
+
       setCartItems([]);
     } catch (error) {
       console.error("Checkout failed:", error);

@@ -1,11 +1,11 @@
 {
   "name": "point-of-sale-desktop",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "description": "Electron shell for Point of Sale",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node ../scripts/sync-shared-receipt-print.cjs && tsc -p tsconfig.json",
     "dev": "npm run build && cross-env ELECTRON_RENDERER_URL=http://localhost:58173 electron .",
     "test:smoke": "tsx --test src/bootstrap.smoke.test.ts src/updater-config.test.ts",
     "dist:win": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.yml",

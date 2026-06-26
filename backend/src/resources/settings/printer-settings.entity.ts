@@ -9,7 +9,7 @@ export class PrinterSettingsEntity {
   printerName?: string | null;
 
   @Column({ type: 'text', default: 'escpos' })
-  printMode!: 'escpos' | 'html';
+  printMode!: 'escpos' | 'text' | 'html';
 
   @Column({ type: 'integer', default: 0 })
   printSilent!: number;

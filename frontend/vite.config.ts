@@ -38,6 +38,7 @@ export default defineConfig({
     alias: {
       // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
+      '@pos-shared': path.resolve(__dirname, '../shared'),
     },
   },
 

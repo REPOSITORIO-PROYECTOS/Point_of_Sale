@@ -120,47 +120,66 @@ function requireWailsApp() {
 }
 
 /** Capa de hardware local: impresión y cajón. Datos de negocio → PosAPI. */
+function buildPrintReceiptPayload(
+  cartItems: CartItem[],
+  total: number,
+  printOptions: PrintReceiptOptions = {},
+): PrintReceiptPayload {
+  return {
+    items: cartItems.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      unit: item.unit,
+    })),
+    total,
+    subtotal: printOptions.subtotal,
+    adjustments: printOptions.adjustments,
+    payments: printOptions.payments?.map((payment) => ({
+      type: payment.type,
+      amount: payment.amount,
+      label: payment.label,
+    })),
+    ticketId: printOptions.ticketId,
+    voucherType: printOptions.voucherType,
+    businessName: printOptions.businessName,
+    logoUrl: printOptions.logoUrl,
+    receiptWidthMm: printOptions.receiptWidthMm,
+    afipCae: printOptions.afipCae,
+    emisor: printOptions.emisor,
+    receptor: printOptions.receptor,
+    afip: printOptions.afip,
+    mostrarDesgloseIva: printOptions.mostrarDesgloseIva,
+    observaciones: printOptions.observaciones,
+    previewOnly: printOptions.previewOnly,
+  };
+}
+
 export const WailsAPI = {
+  async tryPrintReceipt(
+    cartItems: CartItem[],
+    total: number,
+    printOptions: PrintReceiptOptions = {},
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      await dispatchPrintReceipt(buildPrintReceiptPayload(cartItems, total, printOptions));
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo imprimir el ticket";
+      console.error("Print receipt failed:", error);
+      return { ok: false, error: message };
+    }
+  },
+
   async printReceipt(
     cartItems: CartItem[],
     total: number,
     printOptions: PrintReceiptOptions = {},
   ): Promise<void> {
-    const payload: PrintReceiptPayload = {
-      items: cartItems.map((item) => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        unit: item.unit,
-      })),
-      total,
-      subtotal: printOptions.subtotal,
-      adjustments: printOptions.adjustments,
-      payments: printOptions.payments?.map((payment) => ({
-        type: payment.type,
-        amount: payment.amount,
-        label: payment.label,
-      })),
-      ticketId: printOptions.ticketId,
-      voucherType: printOptions.voucherType,
-      businessName: printOptions.businessName,
-      logoUrl: printOptions.logoUrl,
-      receiptWidthMm: printOptions.receiptWidthMm,
-      afipCae: printOptions.afipCae,
-      emisor: printOptions.emisor,
-      receptor: printOptions.receptor,
-      afip: printOptions.afip,
-      mostrarDesgloseIva: printOptions.mostrarDesgloseIva,
-      observaciones: printOptions.observaciones,
-      previewOnly: printOptions.previewOnly,
-    };
-
-    try {
-      await dispatchPrintReceipt(payload);
-    } catch (error) {
+    const result = await WailsAPI.tryPrintReceipt(cartItems, total, printOptions);
+    if (!result.ok) {
       toast.error("No se pudo imprimir el ticket");
-      console.error("Print receipt failed:", error);
-      throw error;
+      throw new Error(result.error);
     }
   },
 

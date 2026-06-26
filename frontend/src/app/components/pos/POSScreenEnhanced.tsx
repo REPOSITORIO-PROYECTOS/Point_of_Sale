@@ -215,8 +215,11 @@ export function POSScreenEnhanced({
     payments: PaymentMethod[],
     voucherType: VoucherType,
     afipBuyer?: AfipCheckoutBuyer,
+    options?: { printTicket?: boolean },
   ) => {
     if (cartItems.length === 0) return;
+
+    const shouldPrintTicket = options?.printTicket ?? true;
 
     try {
       const total = calculateTotal();
@@ -232,7 +235,7 @@ export function POSScreenEnhanced({
           ? buildAfipFacturaPayload(total, afipBuyer, afipBillingDefaults)
           : null;
 
-      await WailsAPI.printReceipt(cartItems, total, {
+      const printOptions = {
         receiptWidthMm: themeConfig.receiptWidthMm ?? 80,
         logoUrl: themeConfig.logoUrl,
         businessName: businessSettings.businessName,
@@ -267,7 +270,8 @@ export function POSScreenEnhanced({
               }
             : undefined,
         mostrarDesgloseIva: voucherType === "factura",
-      });
+      };
+      const itemsForPrint = [...cartItems];
 
       const transaction: Transaction = {
         id: ticketId,
@@ -295,17 +299,40 @@ export function POSScreenEnhanced({
         }
       }
 
-      // Mensaje según tipo de comprobante
       const voucherLabels = {
         factura: "Factura",
         comprobante: "Comprobante",
         presupuesto: "Presupuesto",
       };
 
+      if (shouldPrintTicket) {
+        const printResult = await WailsAPI.tryPrintReceipt(itemsForPrint, total, printOptions);
+        if (!printResult.ok) {
+          toast.warning("Venta registrada, pero no se pudo imprimir el ticket", {
+            description: printResult.error,
+            duration: 10_000,
+            action: {
+              label: "Reintentar",
+              onClick: () => {
+                void WailsAPI.tryPrintReceipt(itemsForPrint, total, printOptions).then((retry) => {
+                  if (retry.ok) {
+                    toast.success("Ticket impreso");
+                  } else {
+                    toast.error(retry.error);
+                  }
+                });
+              },
+            },
+          });
+        }
+      }
+
       toast.success(
         voucherType === "presupuesto"
           ? `${voucherLabels[voucherType]} generado (sin descuento de stock)`
-          : `${voucherLabels[voucherType]} generado exitosamente`
+          : shouldPrintTicket
+            ? `${voucherLabels[voucherType]} generado exitosamente`
+            : `${voucherLabels[voucherType]} registrado sin imprimir ticket`,
       );
 
       setCartItems([]);

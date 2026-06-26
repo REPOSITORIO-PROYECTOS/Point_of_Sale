@@ -32,7 +32,7 @@ export type BusinessSettingsResponse = {
 
 export type PrinterSettingsResponse = {
   printerName?: string | null;
-  printMode: 'escpos' | 'html';
+  printMode: 'escpos' | 'text' | 'html';
   printSilent: boolean;
   printerType: 'epson' | 'star' | 'tanca' | 'daruma' | 'brother' | 'custom';
   fallbackHtml: boolean;
@@ -198,9 +198,13 @@ export class SettingsService {
       ? (printerType as (typeof allowedTypes)[number])
       : 'epson';
 
+    const printMode = row?.printMode ?? 'escpos';
+    const normalizedMode =
+      printMode === 'html' ? 'html' : printMode === 'text' ? 'text' : 'escpos';
+
     return {
       printerName: row?.printerName ?? null,
-      printMode: row?.printMode === 'html' ? 'html' : 'escpos',
+      printMode: normalizedMode,
       printSilent: row ? Boolean(row.printSilent) : true,
       printerType: normalizedType,
       fallbackHtml: row?.fallbackHtml !== 0,

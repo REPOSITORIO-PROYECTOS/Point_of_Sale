@@ -72,9 +72,11 @@ export type ReceiptPrintDocument = {
 
 export type PrinterType = 'epson' | 'star' | 'tanca' | 'daruma' | 'brother' | 'custom';
 
+export type PrintMode = 'escpos' | 'text' | 'html';
+
 export type PrinterPrintOptions = {
   printerName?: string | null;
-  printMode?: 'escpos' | 'html';
+  printMode?: PrintMode;
   printSilent?: boolean;
   printerType?: PrinterType;
   fallbackHtml?: boolean;

@@ -51,6 +51,8 @@ contextBridge.exposeInMainWorld('desktop', {
     };
   },
   printReceipt: (payload: ElectronPrintPayload) => ipcRenderer.invoke('print-receipt', payload),
+  generateReceiptPdf: (payload: { html: string; widthMm: ReceiptWidthMm }) =>
+    ipcRenderer.invoke('generate-receipt-pdf', payload) as Promise<Uint8Array>,
   listPrinters: () => ipcRenderer.invoke('list-printers'),
 });
 
@@ -68,6 +70,7 @@ declare global {
       installUpdate?: () => Promise<void>;
       onUpdateStatus?: (callback: (event: AppUpdateEvent) => void) => () => void;
       printReceipt?: (payload: ElectronPrintPayload) => Promise<void>;
+      generateReceiptPdf?: (payload: { html: string; widthMm: ReceiptWidthMm }) => Promise<Uint8Array>;
       listPrinters?: () => Promise<Array<{ name: string; isDefault: boolean; status?: number }>>;
     };
   }

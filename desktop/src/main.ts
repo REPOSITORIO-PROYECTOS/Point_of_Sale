@@ -8,17 +8,19 @@ import { resolveFrontendUrl } from './paths';
 import {
   printEscposDocument,
   resolvePrintDeviceName,
+  resolvePrintMode,
   resolvePrintSilent,
   shouldAllowHtmlFallback,
-  shouldUseEscposPrint,
 } from './escpos-print';
+import { printRawTextDocument } from './raw-text-print';
 import {
   THERMAL_PAGE_WIDTH_MICRONS,
   cssPixelsToMicrons,
   thermalBrowserWindowWidth,
   type ReceiptWidthMm,
 } from './thermal-print';
-import type { ElectronPrintPayload, PrinterPrintOptions } from './receipt-print-types';
+import type { ElectronPrintPayload, PrinterPrintOptions, ReceiptPrintDocument } from './receipt-print-types';
+import { buildMinimalReceiptHtml, renderReceiptPrintText } from './receipt-print-text';
 import { setupAutoUpdater } from './auto-updater';
 
 type SystemPrinter = {
@@ -77,6 +79,39 @@ function resolvePrintBaseUrl(isDev: boolean, isPackaged: boolean): string {
   return `file://${devDist}/`;
 }
 
+type LoadedPrintWindow = {
+  printWindow: BrowserWindow;
+  contentHeightPx: number;
+};
+
+async function loadReceiptInHiddenWindow(
+  html: string,
+  widthMm: ReceiptWidthMm,
+): Promise<LoadedPrintWindow> {
+  const printWindow = new BrowserWindow({
+    show: false,
+    width: thermalBrowserWindowWidth(widthMm),
+    height: 720,
+    webPreferences: {
+      sandbox: true,
+    },
+  });
+
+  const baseURLForDataURL = resolvePrintBaseUrl(isDev, app.isPackaged);
+
+  await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`, {
+    baseURLForDataURL,
+  });
+
+  const contentHeightPx = (await printWindow.webContents.executeJavaScript(
+    `new Promise((resolve) => {
+      requestAnimationFrame(() => resolve(document.documentElement.scrollHeight));
+    })`,
+  )) as number;
+
+  return { printWindow, contentHeightPx };
+}
+
 /**
  * Impresión térmica vía driver del sistema (58/80 mm).
  * POS_PRINT_SILENT=true → sin diálogo (impresora por defecto).
@@ -87,26 +122,7 @@ async function printReceiptHtml(payload: {
   widthMm: ReceiptWidthMm;
   printer?: PrinterPrintOptions;
 }) {
-  const printWindow = new BrowserWindow({
-    show: false,
-    width: thermalBrowserWindowWidth(payload.widthMm),
-    height: 720,
-    webPreferences: {
-      sandbox: true,
-    },
-  });
-
-  const baseURLForDataURL = resolvePrintBaseUrl(isDev, app.isPackaged);
-
-  await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.html)}`, {
-    baseURLForDataURL,
-  });
-
-  const contentHeightPx = (await printWindow.webContents.executeJavaScript(
-    `new Promise((resolve) => {
-      requestAnimationFrame(() => resolve(document.documentElement.scrollHeight));
-    })`,
-  )) as number;
+  const { printWindow, contentHeightPx } = await loadReceiptInHiddenWindow(payload.html, payload.widthMm);
 
   const silent = resolvePrintSilent(payload.printer);
   const deviceName = resolvePrintDeviceName(payload.printer);
@@ -135,6 +151,102 @@ async function printReceiptHtml(payload: {
       },
     );
   });
+}
+
+async function generateReceiptPdfBuffer(payload: {
+  html: string;
+  widthMm: ReceiptWidthMm;
+}): Promise<Buffer> {
+  const { printWindow, contentHeightPx } = await loadReceiptInHiddenWindow(payload.html, payload.widthMm);
+
+  try {
+    const pageWidth = THERMAL_PAGE_WIDTH_MICRONS[payload.widthMm];
+    const pageHeight = Math.max(50_000, cssPixelsToMicrons(contentHeightPx));
+
+    const pdf = await printWindow.webContents.printToPDF({
+      printBackground: true,
+      margins: { marginType: 'none' },
+      pageSize: {
+        width: pageWidth / 1000,
+        height: pageHeight / 1000,
+      },
+    });
+
+    return Buffer.from(pdf);
+  } finally {
+    printWindow.close();
+  }
+}
+
+async function printByMode(
+  mode: ReturnType<typeof resolvePrintMode>,
+  payload: ElectronPrintPayload,
+  printerOptions: PrinterPrintOptions,
+): Promise<void> {
+  if (mode === 'escpos' && payload.document) {
+    await printEscposDocument(payload.document, printerOptions);
+    return;
+  }
+
+  if (mode === 'text' && payload.document) {
+    await printRawTextDocument(payload.document, printerOptions);
+    return;
+  }
+
+  if (!payload.html) {
+    throw new Error('Impresión requiere documento o HTML de respaldo');
+  }
+
+  await printReceiptHtml({ html: payload.html, widthMm: payload.widthMm, printer: printerOptions });
+}
+
+async function runPrintWithFallback(
+  payload: ElectronPrintPayload,
+  printerOptions: PrinterPrintOptions,
+): Promise<void> {
+  const mode = resolvePrintMode(printerOptions);
+  const document = payload.document;
+  const allowFallback = shouldAllowHtmlFallback(printerOptions);
+
+  try {
+    await printByMode(mode, payload, printerOptions);
+    return;
+  } catch (primaryError) {
+    if (!allowFallback) {
+      throw primaryError;
+    }
+
+    console.warn(`[print] modo ${mode} falló:`, primaryError);
+
+    if (mode === 'escpos' && document) {
+      try {
+        console.info('[print] reintentando con texto plano');
+        await printRawTextDocument(document, printerOptions);
+        return;
+      } catch (textError) {
+        console.warn('[print] texto plano falló:', textError);
+      }
+    }
+
+    if (document) {
+      const minimalHtml = buildMinimalReceiptHtml(renderReceiptPrintText(document), payload.widthMm);
+      try {
+        console.info('[print] reintentando con HTML mínimo (texto)');
+        await printReceiptHtml({ html: minimalHtml, widthMm: payload.widthMm, printer: printerOptions });
+        return;
+      } catch (minimalError) {
+        console.warn('[print] HTML mínimo falló:', minimalError);
+      }
+    }
+
+    if (payload.html) {
+      console.info('[print] reintentando con HTML completo');
+      await printReceiptHtml({ html: payload.html, widthMm: payload.widthMm, printer: printerOptions });
+      return;
+    }
+
+    throw primaryError;
+  }
 }
 
 const isDev = !app.isPackaged;
@@ -196,38 +308,31 @@ async function bootstrap() {
   Menu.setApplicationMenu(null);
 
   ipcMain.handle('print-receipt', async (_event, payload: ElectronPrintPayload) => {
+    const startedAt = Date.now();
     const printerOptions = await resolveEffectivePrinterOptions(payload.printer);
-    const preferEscpos = shouldUseEscposPrint(printerOptions) && payload.document;
-    const mode = preferEscpos ? 'escpos' : 'html';
+    const mode = resolvePrintMode(printerOptions);
     const printerName = printerOptions.printerName ?? '(predeterminada)';
 
     console.info(
       `[print] inicio mode=${mode} width=${payload.widthMm}mm printer=${printerName} type=${printerOptions.printerType ?? 'epson'} silent=${printerOptions.printSilent ?? true}`,
     );
 
-    if (preferEscpos) {
-      try {
-        await printEscposDocument(payload.document!, printerOptions);
-        return;
-      } catch (error) {
-        const allowHtmlFallback = shouldAllowHtmlFallback(printerOptions);
-        console.warn('[print] ESC/POS falló:', error);
-        if (allowHtmlFallback && payload.html) {
-          console.info('[print] reintentando con HTML/driver del sistema');
-          await printReceiptHtml({ html: payload.html, widthMm: payload.widthMm, printer: printerOptions });
-          return;
-        }
-        throw error;
-      }
+    try {
+      await runPrintWithFallback(payload, printerOptions);
+      console.info(`[print] fin OK ${Date.now() - startedAt}ms`);
+    } catch (error) {
+      console.error(`[print] fin ERROR ${Date.now() - startedAt}ms`, error);
+      throw error;
     }
-
-    if (!payload.html) {
-      throw new Error('Impresión requiere documento ESC/POS o HTML de respaldo');
-    }
-
-    console.info('[print] modo HTML/driver del sistema');
-    await printReceiptHtml({ html: payload.html, widthMm: payload.widthMm, printer: printerOptions });
   });
+
+  ipcMain.handle(
+    'generate-receipt-pdf',
+    async (_event, payload: { html: string; widthMm: ReceiptWidthMm }) => {
+      const buffer = await generateReceiptPdfBuffer(payload);
+      return Uint8Array.from(buffer);
+    },
+  );
 
   ipcMain.handle('list-printers', async () => {
     const printers = await getSystemPrinters();

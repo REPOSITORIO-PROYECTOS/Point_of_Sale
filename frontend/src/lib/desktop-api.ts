@@ -1,6 +1,7 @@
 import type { ReceiptPrintDocument } from "./receipt-print-document";
 import type { PrinterPrintOptions, SystemPrinterInfo } from "./printer-settings";
 import { thermalPreviewWindowWidth } from "./thermal-print";
+import type { ReceiptPreviewState } from "./receipt-preview-types";
 
 export type ReceiptWidthMm = 55 | 80;
 
@@ -43,6 +44,15 @@ export async function printReceiptElectron(payload: ElectronPrintPayload): Promi
   await window.desktop!.printReceipt!(payload);
 }
 
+export async function generateReceiptPdf(html: string, widthMm: ReceiptWidthMm): Promise<Blob> {
+  if (!isElectronEnvironment() || !window.desktop?.generateReceiptPdf) {
+    throw new Error("Generación de PDF solo disponible en la app de escritorio");
+  }
+
+  const bytes = await window.desktop.generateReceiptPdf({ html, widthMm });
+  return new Blob([bytes], { type: "application/pdf" });
+}
+
 export async function listSystemPrinters(): Promise<SystemPrinterInfo[]> {
   if (!isElectronEnvironment() || !window.desktop?.listPrinters) {
     return [];
@@ -51,11 +61,22 @@ export async function listSystemPrinters(): Promise<SystemPrinterInfo[]> {
   return window.desktop.listPrinters();
 }
 
-export function printReceiptInBrowser(html: string, widthMm: ReceiptWidthMm = 80): void {
+export function printReceiptInBrowser(
+  html: string,
+  widthMm: ReceiptWidthMm = 80,
+  previewFallback?: ReceiptPreviewState,
+): void {
   const windowWidth = thermalPreviewWindowWidth(widthMm);
   const printWindow = window.open("", "_blank", `width=${windowWidth},height=720`);
+
   if (!printWindow) {
-    throw new Error("No se pudo abrir ventana de impresión");
+    if (previewFallback) {
+      window.dispatchEvent(
+        new CustomEvent("pos:open-receipt-preview", { detail: previewFallback }),
+      );
+      return;
+    }
+    throw new Error("No se pudo abrir ventana de impresión. Permití ventanas emergentes o usá la vista previa.");
   }
 
   printWindow.document.open();
@@ -91,6 +112,7 @@ declare global {
       installUpdate?: () => Promise<void>;
       onUpdateStatus?: (callback: (event: AppUpdateEvent) => void) => () => void;
       printReceipt?: (payload: ElectronPrintPayload) => Promise<void>;
+      generateReceiptPdf?: (payload: { html: string; widthMm: ReceiptWidthMm }) => Promise<Uint8Array>;
       listPrinters?: () => Promise<SystemPrinterInfo[]>;
     };
   }

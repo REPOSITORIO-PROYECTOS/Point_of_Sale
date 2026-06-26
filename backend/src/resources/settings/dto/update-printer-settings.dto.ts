@@ -9,8 +9,8 @@ export class UpdatePrinterSettingsDto {
   printerName?: string | null;
 
   @IsOptional()
-  @IsIn(['escpos', 'html'])
-  printMode?: 'escpos' | 'html';
+  @IsIn(['escpos', 'text', 'html'])
+  printMode?: 'escpos' | 'text' | 'html';
 
   @IsOptional()
   @IsBoolean()
